@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1F4E78">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Recepción QC">
+<title>Recepción de Materiales · QC-F-002</title>
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+:root{--azul:#1F4E78;--gris:#f3f5f8;--borde:#cfd6df;--ok:#2e7d32;--err:#c62828}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--gris);color:#222;font-size:16px}
+header{background:var(--azul);color:#fff;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;gap:8px;position:sticky;top:0;z-index:5;flex-wrap:wrap}
+header h1{font-size:1.05rem;margin:0}
+main{max-width:1150px;margin:auto;padding:12px}
+section{background:#fff;border:1px solid var(--borde);border-radius:10px;padding:14px;margin-bottom:14px}
+h2{font-size:1rem;margin:0 0 10px;color:var(--azul)}
+.grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+label{display:block;font-size:.8rem;font-weight:600;margin-bottom:3px;color:#444}
+input,select,textarea{width:100%;padding:11px;border:1px solid var(--borde);border-radius:8px;font-size:16px;background:#fff;font-family:inherit}
+input[readonly]{background:#eef2f7;font-weight:700}
+textarea{min-height:56px;resize:vertical}
+button{border:0;border-radius:8px;padding:12px 16px;font-size:15px;font-weight:600;cursor:pointer;min-height:46px}
+button:disabled{opacity:.5}
+.bp{background:var(--azul);color:#fff}.bs{background:#e3e8ef;color:#222}.bd{background:#fde8e8;color:var(--err)}.bok{background:var(--ok);color:#fff}
+.acciones{display:flex;flex-wrap:wrap;gap:10px}
+.mat{border:1px solid var(--borde);border-left:5px solid var(--azul);border-radius:8px;padding:12px;margin-bottom:12px;background:#fafbfd}
+.mat-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-weight:700;color:var(--azul)}
+.mat-h button{min-height:36px;padding:6px 12px}
+.cat{grid-column:1/-1;background:#eaf2fb;border-radius:8px;padding:10px;display:grid;gap:8px;grid-template-columns:minmax(150px,220px) 1fr}
+.cat .small{grid-column:1/-1}
+@media(max-width:600px){.cat{grid-template-columns:1fr}}
+.peso{font-weight:700;color:var(--azul)}
+.firmas{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.firma canvas{width:100%;height:150px;border:2px dashed var(--borde);border-radius:8px;background:#fff;touch-action:none;display:block}
+.firma .fila{display:flex;justify-content:space-between;align-items:center;margin-top:4px}
+.firma .fila button{min-height:34px;padding:4px 12px}
+#estado{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:#333;color:#fff;padding:12px 18px;border-radius:8px;display:none;max-width:92%;z-index:10;text-align:center}
+.pill{font-size:.8rem;background:#ffffff26;padding:5px 10px;border-radius:12px}
+.small{font-size:.8rem;color:#666;margin-top:4px}
+.err{border-color:var(--err)!important;background:#fff6f6}
+@media(max-width:600px){.acciones button{flex:1 1 100%}}
+</style>
+</head>
+<body>
+<header>
+ <h1>Recepción de Materiales · QC-F-002</h1>
+ <div><span id="usuario" class="pill">Sin sesión</span> <button id="btnLogin" class="bs">Ingresar</button></div>
+</header>
+<main>
+<section>
+ <h2>1. Datos del reporte</h2>
+ <div class="grid">
+  <div><label>Reporte No.</label><input id="ReporteID" readonly placeholder="Se asigna al guardar"></div>
+  <div><label>Fecha *</label><input id="Fecha" type="date"></div>
+  <div><label>Cliente *</label><input id="Cliente" list="lClientes" autocomplete="off"></div>
+  <div><label>Proyecto *</label><input id="Proyecto" list="lProyectos" autocomplete="off"></div>
+  <div><label>Lugar de recepción *</label><input id="LugarRecepcion" list="lLugares" autocomplete="off"></div>
+  <div><label>Elaboró *</label><input id="Elaboro"></div>
+  <div><label>Cargo (elaboró)</label><input id="CargoElaboro"></div>
+  <div><label>Aprobó</label><input id="Aprobo"></div>
+  <div><label>Cargo (aprobó)</label><input id="CargoAprobo"></div>
+  <div><label>Interventoría</label><input id="Interventoria"></div>
+  <div><label>Cliente que recibe</label><input id="ClienteRecibe"></div>
+ </div>
+</section>
+<section>
+ <h2>2. Materiales recibidos <span class="small" id="pesoReporte"></span></h2>
+ <div id="materiales"></div>
+ <button class="bp" id="btnAgregar">+ Agregar material</button>
+</section>
+<section>
+ <h2>3. Firmas</h2>
+ <div class="firmas" id="firmas"></div>
+</section>
+<section>
+ <div class="acciones">
+  <button class="bok" id="btnGuardar">Guardar en Excel (OneDrive)</button>
+  <button class="bs" id="btnDescargar">Descargar copia .xlsx</button>
+  <button class="bd" id="btnNuevo">Nuevo reporte</button>
+ </div>
+ <p class="small">El borrador (incluidas las firmas) se guarda solo en este equipo. Los certificados adjuntos se deben volver a adjuntar si cierra la app antes de guardar.</p>
+</section>
+</main>
+<datalist id="lClientes"></datalist><datalist id="lProyectos"></datalist><datalist id="lLugares"></datalist>
+<datalist id="lProveedores"></datalist><datalist id="lCategorias"></datalist><datalist id="lMateriales"></datalist>
+<datalist id="lNormas"></datalist><datalist id="lSCH"></datalist><datalist id="lUnidades"></datalist>
+<div id="dlCatalogo"></div>
+<div id="estado"></div>
+
+<script>
+/* ======== CONFIGURACIÓN (cambiar) ======== */
+const CONFIG = {
+  clientId: "PEGAR_AQUI_ID_DE_APLICACION",
+  tenantId: "PEGAR_AQUI_ID_DE_DIRECTORIO",
+  archivo: "/Recepciones/Maestro_Recepciones.xlsx",
+  carpetaCert: "/Recepciones/Certificados",
+  carpetaFirmas: "/Recepciones/Firmas",
+  anchoLamina_m: 1.22,   // ancho de lámina por defecto (1220 mm)
+  largoLamina_mm: 2440,  // largo de lámina por defecto
+  largoTramo_mm: 6000    // largo de tramo por defecto (tubos, perfiles, barras)
+};
+/* ========================================= */
+const GRAPH = "https://graph.microsoft.com/v1.0";
+const SCOPES = ["User.Read", "Files.ReadWrite"];
+const WB = () => `${GRAPH}/me/drive/root:${encodeURI(CONFIG.archivo)}:/workbook`;
+const $ = id => document.getElementById(id);
+const HDR = ["Fecha","Cliente","Proyecto","LugarRecepcion","Elaboro","CargoElaboro","Aprobo","CargoAprobo","Interventoria","ClienteRecibe"];
+const FIRMAS = [["FirmaElaboro","Elaboró"],["FirmaAprobo","Aprobó"],["FirmaInterventoria","Interventoría"],["FirmaCliente","Cliente"]];
+const CAMPOS = [
+ ["MTR_No","MTR No.","text"],["FechaRecepcion","Fecha recepción","date"],["Proveedor","Proveedor","text","lProveedores"],
+ ["OrdenCompra","Orden de compra","text"],["Colada","N.º de colada","text"],["Categoria","Categoría","text","lCategorias"],
+ ["Descripcion","Descripción del material *","text"],["Material","Material","text","lMateriales"],["Norma","Norma","text","lNormas"],
+ ["Cantidad","Cantidad *","number"],["Unidad","Unidad *","text","lUnidades"],["Dimension_mm","Longitud / dimensión (mm)","number"],
+ ["Diametro","Diámetro / medida","text"],["Espesor_SCH","Espesor / SCH / clase","text","lSCH"],["Peso_kg_m","Peso (kg/m)","number"],
+ ["Requerimiento","Requerimiento","text"],["Resultado","Resultado *","select"],["Observaciones","Observaciones","textarea"]
+];
+const LISTAS_DL = {tblClientes:"lClientes",tblProyectos:"lProyectos",tblLugares:"lLugares",tblProveedores:"lProveedores",
+ tblCategorias:"lCategorias",tblMateriales:"lMateriales",tblNormas:"lNormas",tblSCH:"lSCH",tblUnidades:"lUnidades"};
+let LISTAS = {}, TUBERIA = [], CATALOGO = [], CAT = [], CATS = [], mats = [], archivos = {}, firmas = {};
+
+/* ---------- utilidades ---------- */
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pad = n => String(n).padStart(4, "0");
+const uid = () => Math.random().toString(36).slice(2, 10);
+const num = v => { if (v === "" || v == null) return ""; const n = Number(String(v).replace(",", ".")); return isNaN(n) ? "" : n; };
+const txt = v => { v = String(v ?? "").trim(); return /^[=+@]/.test(v) ? "'" + v : v; };
+const fmt = (n, d = 2) => Number(n).toLocaleString("es-CO", { minimumFractionDigits: d, maximumFractionDigits: d });
+const fix3 = v => (v === "" || v == null || isNaN(Number(v))) ? "" : Number(v).toFixed(3);
+const ahoraTxt = () => { const d = new Date(), z = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}`; };
+function aviso(m, ok, ms = 3500) { const e = $("estado"); e.textContent = m;
+  e.style.background = ok === true ? "#2e7d32" : ok === false ? "#c62828" : "#333";
+  e.style.display = "block"; clearTimeout(aviso.t); if (ms) aviso.t = setTimeout(() => e.style.display = "none", ms); }
+const pesoTotal = m => { const p = num(m.Peso_kg_m), l = num(m.Dimension_mm), c = num(m.Cantidad);
+  return (p === "" || l === "" || c === "") ? null : p * l / 1000 * c; };
+/* Si hay Material se decide solo por él (la Norma puede venir de una selección anterior); si no, por la Norma */
+const RE_INOX = /inox|\bss\b|304|316|a312|a270|a240|a403|a182|a276|a554/i;
+const esInox = m => RE_INOX.test((m.Material || "").trim() ? m.Material : (m.Norma || ""));
+
+/* ---------- inicio de sesión Microsoft ---------- */
+const CONFIGURADO = !/PEGAR_AQUI/.test(CONFIG.clientId + CONFIG.tenantId);
+let app = null;
+try {
+  if (typeof msal === "undefined") throw new Error("No cargó la librería de Microsoft (¿sin internet?)");
+  if (CONFIGURADO) app = new msal.PublicClientApplication({
+    auth: { clientId: CONFIG.clientId, authority: "https://login.microsoftonline.com/" + CONFIG.tenantId,
+            redirectUri: location.origin + location.pathname },
+    cache: { cacheLocation: "localStorage" }
+  });
+} catch (e) { setTimeout(() => aviso(e.message, false, 6000), 300); }
+const cuenta = () => app ? app.getAllAccounts()[0] : null;
+async function token() {
+  const acc = cuenta(); if (!acc) throw new Error("Primero presione Ingresar");
+  try { return (await app.acquireTokenSilent({ scopes: SCOPES, account: acc })).accessToken; }
+  catch (e) { await app.acquireTokenRedirect({ scopes: SCOPES }); throw new Error("Renovando sesión, vuelva a intentar"); }
+}
+async function g(url, opt = {}, binario) {
+  const t = await token();
+  const headers = Object.assign({ Authorization: "Bearer " + t }, binario ? {} : { "Content-Type": "application/json" }, opt.headers || {});
+  const r = await fetch(url, { ...opt, headers });
+  if (!r.ok) { const tx = await r.text(); throw new Error(r.status + " " + tx.slice(0, 180)); }
+  return r.status === 204 ? null : r.json();
+}
+function mostrarUsuario() {
+  const a = cuenta(); $("usuario").textContent = a ? a.username : "Sin sesión";
+  $("btnLogin").textContent = a ? "Salir" : "Ingresar";
+}
+$("btnLogin").onclick = () => {
+  if (!app) { aviso(CONFIGURADO ? "Librería de Microsoft no disponible" : "Falta configurar clientId y tenantId en CONFIG", false, 6000); return; }
+  cuenta() ? app.logoutRedirect() : app.loginRedirect({ scopes: SCOPES });
+};
+
+/* ---------- listas y catálogos desde Excel ---------- */
+function armarCatalogo() {
+  /* tblTuberia: Tipo, NPS, OD_mm, Cedula, Espesor_mm, Peso_CS, Peso_SS, Clave */
+  CAT = TUBERIA.filter(r => r[7]).map(r => ({ k: r[7], cat: /A270/.test(r[0]) ? "Tubería sanitaria" : "Tubería", src: "T", r }));
+  /* tblCatalogo: Categoria, Tipo, Designacion, A, B, e, Calc, NormaCS, NormaSS, Rating, PesoTabla, Area, PesoCS, PesoSS, Unidad, Clave */
+  CATALOGO.filter(r => r[15]).forEach(r => CAT.push({ k: r[15], cat: r[0], src: "C", r }));
+  CATS = [...new Set(CAT.map(x => x.cat))];
+  const opt = arr => arr.map(x => `<option value="${esc(x.k)}"></option>`).join("");
+  $("dlCatalogo").innerHTML = `<datalist id="dlc_all">${opt(CAT)}</datalist>` +
+    CATS.map((c, i) => `<datalist id="dlc_${i}">${opt(CAT.filter(x => x.cat === c))}</datalist>`).join("");
+}
+function pintarListas() {
+  for (const [t, dl] of Object.entries(LISTAS_DL))
+    $(dl).innerHTML = (LISTAS[t] || []).map(r => `<option value="${esc(r[0])}">`).join("");
+  armarCatalogo();
+}
+async function cargarListas() {
+  for (const t of Object.keys(LISTAS_DL)) {
+    const r = await g(`${WB()}/tables/${t}/dataBodyRange?$select=values`);
+    LISTAS[t] = (r.values || []).filter(x => String(x[0]).trim() !== "");
+  }
+  TUBERIA = ((await g(`${WB()}/tables/tblTuberia/dataBodyRange?$select=values`)).values || []);
+  CATALOGO = ((await g(`${WB()}/tables/tblCatalogo/dataBodyRange?$select=values`)).values || []);
+  try {
+    localStorage.setItem("qc_listas", JSON.stringify(LISTAS));
+    localStorage.setItem("qc_tuberia", JSON.stringify(TUBERIA));
+    localStorage.setItem("qc_catalogo", JSON.stringify(CATALOGO));
+  } catch (e) {}
+  pintarListas();
+  /* no redibujar mientras el usuario escribe en un material */
+  const a = document.activeElement;
+  if (!(a && a.closest && a.closest("#materiales"))) render();
+}
+$("Proyecto").addEventListener("change", () => {
+  const p = (LISTAS.tblProyectos || []).find(r => r[0] === $("Proyecto").value);
+  if (p && !$("Cliente").value) $("Cliente").value = p[1];
+});
+
+/* ---------- aplicar un ítem del catálogo al material ---------- */
+function aplicarCatalogo(m) {
+  const it = CAT.find(x => x.k === m._ref); if (!it) return false;
+  const inox = esInox(m), r = it.r;
+  if (it.src === "T") {
+    m.Categoria = it.cat;
+    m.Diametro = `${r[1]} (OD ${fmt(r[2], 1)} mm)`;
+    m.Espesor_SCH = `${r[3]} · ${fmt(r[4])} mm`;
+    m.Peso_kg_m = fix3(inox ? r[6] : r[5]);
+    m.Unidad = "tramo"; if (!m.Dimension_mm) m.Dimension_mm = CONFIG.largoTramo_mm;
+    if (!m.Descripcion || m._auto) { m.Descripcion = `Tubo ${r[1]} ${r[3]} ${m.Material || ""}`.trim(); m._auto = true; }
+    m._hint = r[0];
+    return true;
+  }
+  const [cat, tipo, desig, , , esp, calc, nCS, nSS, rating, , , pCS, pSS] = r;
+  m.Categoria = cat;
+  let norma = inox ? nSS : nCS; if (!norma || norma === "-" || norma === "N/A") norma = inox ? nCS : nSS;
+  if (norma && norma !== "-" && norma !== "N/A") m.Norma = norma;
+  if (!m.Descripcion || m._auto) { m.Descripcion = `${tipo} ${desig} ${m.Material || ""}`.trim(); m._auto = true; }
+  m.Diametro = desig;
+  m.Espesor_SCH = esp !== "" && esp != null ? `${fmt(esp)} mm` : "";
+  const p = inox && pSS !== "" ? pSS : pCS;
+  if (calc === "LAM") {
+    m.Peso_kg_m = p === "" ? "" : fix3(Number(p) * CONFIG.anchoLamina_m);
+    m.Diametro = `${desig} · ancho ${Math.round(CONFIG.anchoLamina_m * 1000)} mm`;
+    m.Unidad = "lámina"; m.Dimension_mm = m.Dimension_mm || CONFIG.largoLamina_mm;
+  } else if (calc) {
+    m.Peso_kg_m = fix3(p);
+    m.Unidad = "tramo"; m.Dimension_mm = m.Dimension_mm || CONFIG.largoTramo_mm;
+  } else {
+    m.Peso_kg_m = ""; m.Unidad = "und";
+  }
+  m._hint = [rating, calc === "LAM" ? `Peso lámina = ${fmt(p)} kg/m² × ancho` : ""].filter(Boolean).join(" · ");
+  return true;
+}
+
+/* ---------- materiales ---------- */
+function nuevoMat() {
+  const ant = mats[mats.length - 1] || {};
+  mats.push({ u: uid(), FechaRecepcion: ant.FechaRecepcion || $("Fecha").value || "", Proveedor: ant.Proveedor || "",
+    Requerimiento: ant.Requerimiento || $("Proyecto").value || "", Material: ant.Material || "", Unidad: "und",
+    Resultado: "ACEPTADO", _catf: ant._catf || "" });
+  render(); guardarBorrador();
+}
+function campo(m, k, l, t, dl) {
+  const v = esc(m[k]);
+  if (t === "select") return `<div><label>${l}</label><select data-k="${k}">${["ACEPTADO","RECHAZADO","CONDICIONAL"]
+     .map(o => `<option${m[k] === o ? " selected" : ""}>${o}</option>`).join("")}</select></div>`;
+  if (t === "textarea") return `<div><label>${l}</label><textarea data-k="${k}">${v}</textarea></div>`;
+  return `<div><label>${l}</label><input data-k="${k}" type="${t}" ${t === "number" ? 'inputmode="decimal" step="any"' : ""} ${dl ? `list="${dl}"` : ""} value="${v}" autocomplete="off"></div>`;
+}
+function textoPeso(m) { const p = pesoTotal(m); return p == null ? "Peso total: —" : `Peso total: ${fmt(p)} kg`; }
+function totalReporte() {
+  const t = mats.reduce((s, m) => s + (pesoTotal(m) || 0), 0);
+  $("pesoReporte").textContent = t ? `· Peso total del reporte: ${fmt(t)} kg` : "";
+}
+function render() {
+  $("materiales").innerHTML = mats.map((m, i) => {
+    const ci = CATS.indexOf(m._catf), lista = ci >= 0 ? "dlc_" + ci : "dlc_all";
+    return `
+   <div class="mat" data-u="${m.u}">
+    <div class="mat-h"><span>Material ${i + 1}</span><button class="bd" data-del="${m.u}">Quitar</button></div>
+    <div class="grid">
+     <div class="cat">
+      <div><label>🔎 Filtrar catálogo</label>
+       <select data-catf="1"><option value="">Todas las categorías</option>${CATS.map(c => `<option${c === m._catf ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></div>
+      <div><label>Buscar en catálogo (tubería, accesorios, bridas, vigas, perfiles, láminas…)</label>
+       <input data-ref="1" list="${lista}" value="${esc(m._ref)}" placeholder='Ej: 2" · 40   ·   IPE 200   ·   Codo 90°   ·   Cal. 18' autocomplete="off"></div>
+      <div class="small">${m._hint ? "ℹ️ " + esc(m._hint) : "Elija primero el Material (inox o carbono) para que tome la norma y el peso correctos."}</div>
+     </div>
+     ${CAMPOS.map(c => campo(m, ...c)).join("")}
+     <div><label>Certificado de calidad (PDF o foto)</label>
+      <input type="file" accept="application/pdf,image/*" data-file="${m.u}">
+      <div class="small">${archivos[m.u] ? "📎 " + esc(archivos[m.u].name) : m.certNombre ? "Antes: " + esc(m.certNombre) + " (adjúntelo de nuevo)" : "Sin archivo"}</div>
+     </div>
+     <div><label>&nbsp;</label><div class="peso" data-peso="${m.u}">${textoPeso(m)}</div></div>
+    </div>
+   </div>`; }).join("") || '<p class="small">Aún no hay materiales. Presione "+ Agregar material".</p>';
+  totalReporte();
+}
+$("materiales").addEventListener("input", e => {
+  const box = e.target.closest(".mat"); if (!box) return;
+  const m = mats.find(x => x.u === box.dataset.u);
+  if (e.target.dataset.ref) {
+    m._ref = e.target.value;
+    if (aplicarCatalogo(m)) { render(); aviso("Datos del catálogo aplicados", true, 1500); }
+    guardarBorrador(); return;
+  }
+  const k = e.target.dataset.k; if (!k) return;
+  m[k] = e.target.value; e.target.classList.remove("err");
+  if (k === "Descripcion") m._auto = false;
+  box.querySelector(`[data-peso="${m.u}"]`).textContent = textoPeso(m); totalReporte(); guardarBorrador();
+});
+$("materiales").addEventListener("change", e => {
+  const box = e.target.closest(".mat"); if (!box) return;
+  const m = mats.find(x => x.u === box.dataset.u);
+  if (e.target.dataset.catf) { m._catf = e.target.value; render(); guardarBorrador(); return; }
+  if (e.target.dataset.k === "Material" && m._ref && aplicarCatalogo(m)) { render(); guardarBorrador(); return; }
+  const u = e.target.dataset.file; if (!u) return;
+  const f = e.target.files[0]; if (!f) return;
+  archivos[u] = f; m.certNombre = f.name; render(); guardarBorrador();
+});
+$("materiales").addEventListener("click", e => {
+  const u = e.target.dataset.del; if (!u) return;
+  if (confirm("¿Quitar este material?")) { mats = mats.filter(x => x.u !== u); delete archivos[u]; render(); guardarBorrador(); }
+});
+$("btnAgregar").onclick = nuevoMat;
+
+/* ---------- firmas en pantalla ---------- */
+function crearFirmas() {
+  $("firmas").innerHTML = FIRMAS.map(([k, l]) => `
+   <div class="firma"><label>Firma ${l}</label><canvas id="c_${k}"></canvas>
+    <div class="fila"><span class="small">Firme con el dedo o el mouse</span><button class="bs" data-limpiar="${k}">Borrar</button></div></div>`).join("");
+  FIRMAS.forEach(([k]) => prepararCanvas(k));
+}
+function prepararCanvas(k) {
+  const c = $("c_" + k), ctx = c.getContext("2d"), dpr = window.devicePixelRatio || 1;
+  const r = c.getBoundingClientRect(); c.width = r.width * dpr; c.height = r.height * dpr;
+  ctx.scale(dpr, dpr); ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = "#0b2a6f";
+  if (firmas[k]) { const im = new Image(); im.onload = () => ctx.drawImage(im, 0, 0, r.width, r.height); im.src = firmas[k]; }
+  let dib = false, ult = null;
+  const pos = e => { const b = c.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
+  c.addEventListener("pointerdown", e => { dib = true; ult = pos(e); c.setPointerCapture(e.pointerId);
+    ctx.beginPath(); ctx.moveTo(...ult); ctx.lineTo(ult[0] + .1, ult[1] + .1); ctx.stroke(); });
+  c.addEventListener("pointermove", e => { if (!dib) return; const p = pos(e);
+    ctx.beginPath(); ctx.moveTo(...ult); ctx.lineTo(...p); ctx.stroke(); ult = p; });
+  const fin = () => { if (!dib) return; dib = false; firmas[k] = c.toDataURL("image/png"); guardarBorrador(); };
+  c.addEventListener("pointerup", fin); c.addEventListener("pointercancel", fin); c.addEventListener("pointerleave", fin);
+}
+$("firmas").addEventListener("click", e => {
+  const k = e.target.dataset.limpiar; if (!k) return;
+  const c = $("c_" + k); c.getContext("2d").clearRect(0, 0, c.width, c.height); delete firmas[k]; guardarBorrador();
+});
+/* solo redibujar si cambió el ancho (en móvil "resize" también salta al abrir el teclado o mover la barra) */
+let tRes, anchoPrev = window.innerWidth;
+window.addEventListener("resize", () => { clearTimeout(tRes);
+  tRes = setTimeout(() => { if (window.innerWidth !== anchoPrev) { anchoPrev = window.innerWidth; crearFirmas(); } }, 300); });
+const dataUrlABlob = d => { const [h, b] = d.split(","), bin = atob(b), a = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return new Blob([a], { type: h.match(/:(.*?);/)[1] }); };
+
+/* ---------- borrador local ---------- */
+const leerHdr = () => Object.fromEntries(HDR.map(k => [k, $(k).value.trim()]));
+function guardarBorrador() {
+  try { localStorage.setItem("qc_borrador", JSON.stringify({ h: leerHdr(), id: $("ReporteID").value, mats, firmas })); }
+  catch (e) { aviso("Memoria del equipo llena: guarde el reporte pronto", false); }
+}
+function cargarBorrador() {
+  let b = null;
+  try { b = JSON.parse(localStorage.getItem("qc_borrador") || "null"); } catch (e) {}
+  if (b) { HDR.forEach(k => $(k).value = (b.h || {})[k] || ""); $("ReporteID").value = b.id || ""; mats = b.mats || []; firmas = b.firmas || {}; }
+  if (!$("Fecha").value) $("Fecha").value = new Date().toISOString().slice(0, 10);
+  if (!mats.length) nuevoMat(); else render();
+  crearFirmas();
+}
+HDR.forEach(k => $(k).addEventListener("input", guardarBorrador));
+$("btnNuevo").onclick = () => {
+  if (!confirm("¿Empezar un reporte nuevo? Se borrará el borrador actual.")) return;
+  localStorage.removeItem("qc_borrador"); const keep = { Elaboro: $("Elaboro").value, CargoElaboro: $("CargoElaboro").value };
+  HDR.forEach(k => $(k).value = keep[k] || ""); $("ReporteID").value = ""; mats = []; archivos = {}; firmas = {}; cargarBorrador();
+};
+
+/* ---------- validación ---------- */
+function validar() {
+  let ok = true; document.querySelectorAll(".err").forEach(x => x.classList.remove("err"));
+  ["Fecha","Cliente","Proyecto","LugarRecepcion","Elaboro"].forEach(k => { if (!$(k).value.trim()) { $(k).classList.add("err"); ok = false; } });
+  if (!mats.length) { aviso("Agregue al menos un material", false); return false; }
+  mats.forEach(m => ["Descripcion","Cantidad","Unidad"].forEach(k => {
+    const v = String(m[k] ?? "").trim();
+    if (v === "" || (k === "Cantidad" && !(num(v) > 0))) { ok = false;
+      const el = document.querySelector(`.mat[data-u="${m.u}"] [data-k="${k}"]`); el && el.classList.add("err"); }
+  }));
+  if (!ok) { aviso("Complete los campos marcados en rojo", false); return false; }
+  if (!firmas.FirmaElaboro && !confirm("El reporte no tiene la firma de quien elaboró. ¿Guardar de todas formas?")) return false;
+  return true;
+}
+
+/* ---------- Graph: escritura en Excel y OneDrive ---------- */
+async function maxId(tabla, col) {
+  const r = await g(`${WB()}/tables/${tabla}/columns/${col}/dataBodyRange?$select=values`);
+  let max = 0; (r.values || []).forEach(([v]) => { const m = String(v).match(/(\d+)\s*$/); if (m) max = Math.max(max, +m[1]); });
+  return max;
+}
+const addRows = (t, values) => g(`${WB()}/tables/${t}/rows/add`, { method: "POST", body: JSON.stringify({ index: null, values }) });
+async function subir(file, ruta, nombreBase) {
+  const nombre = (nombreBase || file.name).replace(/[\\/:*?"<>|#%&]/g, "_");
+  const url = `${GRAPH}/me/drive/root:${encodeURI(`${ruta}/${nombre}`)}:`;
+  if (file.size < 4 * 1024 * 1024)
+    return g(url + "/content?@microsoft.graph.conflictBehavior=rename",
+      { method: "PUT", body: file, headers: { "Content-Type": file.type || "application/octet-stream" } }, true);
+  const s = await g(url + "/createUploadSession", { method: "POST",
+      body: JSON.stringify({ item: { "@microsoft.graph.conflictBehavior": "rename" } }) });
+  const CH = 320 * 1024 * 10; let ini = 0, item = null;
+  while (ini < file.size) {
+    const fin = Math.min(ini + CH, file.size);
+    const r = await fetch(s.uploadUrl, { method: "PUT", headers: { "Content-Range": `bytes ${ini}-${fin - 1}/${file.size}` }, body: file.slice(ini, fin) });
+    if (!r.ok) throw new Error("No se pudo subir " + nombre);
+    if (r.status === 200 || r.status === 201) item = await r.json();
+    ini = fin;
+  }
+  return item;
+}
+async function actualizarListas(h) {
+  const tiene = (t, v) => (LISTAS[t] || []).some(r => String(r[0]).toLowerCase() === v.toLowerCase());
+  if (h.Cliente && !tiene("tblClientes", h.Cliente)) await addRows("tblClientes", [[txt(h.Cliente)]]);
+  if (h.Proyecto && !tiene("tblProyectos", h.Proyecto)) await addRows("tblProyectos", [[txt(h.Proyecto), txt(h.Cliente)]]);
+  if (h.LugarRecepcion && !tiene("tblLugares", h.LugarRecepcion)) await addRows("tblLugares", [[txt(h.LugarRecepcion)]]);
+  const provs = [...new Set(mats.map(m => (m.Proveedor || "").trim()).filter(p => p && p !== "N/A" && !tiene("tblProveedores", p)))];
+  if (provs.length) await addRows("tblProveedores", provs.map(p => [txt(p)]));
+}
+const F_PESO = '=IF(OR([@Peso_kg_m]="",[@Dimension_mm]=""),"",[@Peso_kg_m]*[@Dimension_mm]/1000*[@Cantidad])';
+$("btnGuardar").onclick = async () => {
+  if (!cuenta()) { aviso("Primero presione Ingresar", false); return; }
+  if ($("ReporteID").value && !confirm(`Este reporte ya se guardó como ${$("ReporteID").value}. ¿Guardarlo otra vez como reporte nuevo?`)) return;
+  if (!validar()) return;
+  const btn = $("btnGuardar"); btn.disabled = true;
+  try {
+    aviso("Asignando número de reporte…", null, 0);
+    const id = "REP-" + pad(await maxId("tblReportes", "ReporteID") + 1);
+    let nc = await maxId("tblCertificados", "CertificadoID");
+    const ahora = ahoraTxt(), h = leerHdr(), certRows = [], cache = {};
+    for (const m of mats) {
+      m._cert = ""; const f = archivos[m.u]; if (!f) continue;
+      const key = f.name + "|" + f.size;
+      if (!cache[key]) {
+        aviso("Subiendo certificado " + f.name + "…", null, 0);
+        const it = await subir(f, `${CONFIG.carpetaCert}/${id}`); cache[key] = "CERT-" + pad(++nc);
+        certRows.push([cache[key], id, txt(m.Proveedor), txt(m.Colada), txt(m.Norma), it.name, it.webUrl, ahora]);
+      }
+      m._cert = cache[key];
+    }
+    const urlFirma = {};
+    for (const [k, l] of FIRMAS) {
+      if (!firmas[k]) { urlFirma[k] = ""; continue; }
+      aviso("Subiendo firma " + l + "…", null, 0);
+      const it = await subir(dataUrlABlob(firmas[k]), `${CONFIG.carpetaFirmas}/${id}`, `${k}.png`);
+      urlFirma[k] = it.webUrl;
+    }
+    aviso("Guardando en Excel…", null, 0);
+    if (certRows.length) await addRows("tblCertificados", certRows);
+    await addRows("tblDetalle", mats.map((m, i) => [id, i + 1, txt(m.MTR_No), m.FechaRecepcion || "", txt(m.Proveedor), txt(m.OrdenCompra),
+      txt(m.Colada), txt(m.Categoria), txt(m.Descripcion), txt(m.Material), txt(m.Norma), num(m.Cantidad), txt(m.Unidad),
+      num(m.Dimension_mm), txt(m.Diametro), txt(m.Espesor_SCH), txt(m.Requerimiento), m.Resultado || "ACEPTADO", m._cert,
+      txt(m.Observaciones), num(m.Peso_kg_m), F_PESO]));
+    await addRows("tblReportes", [[id, h.Fecha, txt(h.Cliente), txt(h.Proyecto), txt(h.LugarRecepcion), txt(h.Elaboro), txt(h.CargoElaboro),
+      txt(h.Aprobo), txt(h.CargoAprobo), txt(h.Interventoria), txt(h.ClienteRecibe), "REGISTRADO", cuenta().username, ahora,
+      urlFirma.FirmaElaboro, urlFirma.FirmaAprobo, urlFirma.FirmaInterventoria, urlFirma.FirmaCliente]]);
+    $("ReporteID").value = id; guardarBorrador();
+    aviso("✔ Reporte " + id + " guardado en Excel", true, 6000);
+    try { await actualizarListas(h); await cargarListas(); } catch (e) { /* el reporte ya quedó guardado */ }
+  } catch (e) {
+    aviso("✖ No se pudo guardar: " + e.message + " — el borrador sigue en el equipo. Revise el Excel antes de reintentar.", false, 10000);
+  } finally { btn.disabled = false; }
+};
+
+/* ---------- copia local .xlsx ---------- */
+$("btnDescargar").onclick = () => {
+  if (typeof XLSX === "undefined") { aviso("Librería Excel no disponible (¿sin internet?)", false); return; }
+  const h = leerHdr(), id = $("ReporteID").value || "BORRADOR";
+  const enc = ["Ítem","MTR No.","Fecha recepción","Proveedor","Orden de compra","N.º colada","Categoría","Descripción del material","Material","Norma",
+    "Cantidad","Unidad","Longitud (mm)","Diámetro / medida","Espesor / SCH / clase","Peso (kg/m)","Peso total (kg)","Requerimiento","Resultado","Certificado","Observaciones"];
+  const aoa = [["FORMATO DE RECEPCIÓN DE MATERIALES — QC-F-002"], [],
+    ["Reporte No.", id, "Fecha", h.Fecha, "Cliente", h.Cliente, "Proyecto", h.Proyecto],
+    ["Lugar", h.LugarRecepcion, "Elaboró", h.Elaboro, "Aprobó", h.Aprobo, "Interventoría", h.Interventoria],
+    ["Firmas", ...FIRMAS.map(([k, l]) => `${l}: ${firmas[k] ? "firmado" : "sin firma"}`)], [], enc,
+    ...mats.map((m, i) => [i + 1, m.MTR_No, m.FechaRecepcion, m.Proveedor, m.OrdenCompra, m.Colada, m.Categoria, m.Descripcion, m.Material,
+      m.Norma, num(m.Cantidad), m.Unidad, num(m.Dimension_mm), m.Diametro, m.Espesor_SCH, num(m.Peso_kg_m), pesoTotal(m) ?? "",
+      m.Requerimiento, m.Resultado, archivos[m.u]?.name || m.certNombre || "", m.Observaciones])];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"] = [6,12,14,20,15,20,18,44,14,30,10,8,14,26,24,12,14,30,13,30,32].map(w => ({ wch: w }));
+  ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 20 } }];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Recepcion");
+  XLSX.writeFile(wb, `Recepcion_${id}.xlsx`);
+};
+
+/* ---------- arranque ---------- */
+(async () => {
+  try { if (app) { if (app.initialize) await app.initialize(); await app.handleRedirectPromise(); } } catch (e) { aviso(e.message, false); }
+  mostrarUsuario();
+  try {
+    LISTAS = JSON.parse(localStorage.getItem("qc_listas") || "{}");
+    TUBERIA = JSON.parse(localStorage.getItem("qc_tuberia") || "[]");
+    CATALOGO = JSON.parse(localStorage.getItem("qc_catalogo") || "[]");
+  } catch (e) {}
+  pintarListas();
+  cargarBorrador();
+  if (cuenta()) cargarListas().catch(e => aviso("No se pudieron leer las listas: " + e.message, false, 6000));
+})();
+</script>
+</body>
+</html>
