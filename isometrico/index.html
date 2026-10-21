@@ -244,7 +244,8 @@ button{cursor:pointer}
         <div class="sec">
           <h3>1. Control y trazado</h3>
           <div class="rejilla" id="herr-control"></div>
-          <div class="fila-opc"><span>Paso de grilla (m)</span><input id="grid-scale" type="number" step="0.05" min="0.01" value="0.5" inputmode="decimal"></div>
+          <div class="fila-opc"><span>Unidad de cotas</span><select id="sel-unidad" class="sel" style="min-height:30px;padding:3px 6px;color:var(--cian)"><option value="mm">Milímetros (mm)</option><option value="m">Metros (m)</option></select></div>
+          <div class="fila-opc"><span>Paso de grilla (<b id="lbl-unidad-paso">mm</b>)</span><input id="grid-scale" type="number" step="any" min="0.001" value="500" inputmode="decimal"></div>
           <label class="fila-opc"><span>Confirmar longitud al trazar</span><input type="checkbox" id="chk-manual-len" checked></label>
         </div>
 
@@ -278,7 +279,7 @@ button{cursor:pointer}
 
       <div class="hud">
         <div><span>Eje isométrico:</span><b id="hud-angle">—</b></div>
-        <div><span>Longitud tramo:</span><b id="hud-length" style="color:var(--verde)">0.00 m</b></div>
+        <div><span>Longitud tramo:</span><b id="hud-length" style="color:var(--verde)">0 mm</b></div>
         <div><span>Imantación:</span><b id="hud-snap" style="color:var(--cian)">GRILLA ISO</b></div>
         <div><span>Componentes:</span><b id="hud-count" style="color:var(--s200)">0</b></div>
       </div>
@@ -336,7 +337,7 @@ button{cursor:pointer}
 
           <!-- 2. LIENZO CAD (SVG VECTORIAL) -->
           <div class="dibujo" id="zona-dibujo">
-            <span class="etq-dibujo">ISOMÉTRICO — SIN ESCALA (COTAS EN METROS)</span>
+            <span class="etq-dibujo" id="etq-dibujo">ISOMÉTRICO — SIN ESCALA (COTAS EN MILÍMETROS)</span>
             <svg id="iso-svg" xmlns="http://www.w3.org/2000/svg">
               <defs>
                 <pattern id="malla-iso" patternUnits="userSpaceOnUse"></pattern>
@@ -475,7 +476,8 @@ const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
-  escala: 0.5,          // metros por paso de grilla
+  escala: 0.5,          // metros por paso de grilla (valor interno siempre en metros)
+  unidad: 'mm',         // unidad de presentación de cotas y longitudes: 'mm' o 'm' 
   components: [],       // { id, category, type, nps, schedule, length, lengthManual, coords, rotation, npsRed }
   consumibles: [],      // { id, uni, desc, cant }
   ajustes: {}           // ajustes manuales de cantidad en el BOM, por clave de grupo
@@ -490,6 +492,13 @@ const svg = $('iso-svg'), vp = $('viewport'), hoja = $('a3-container'), envoltur
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const nuevoId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const r2 = n => Math.round(n * 100) / 100;
+const r3 = n => Math.round(n * 1000) / 1000;
+/* Conversión de unidades: internamente todo está en metros; se muestra en mm o m */
+const enMM = () => estado.unidad === 'mm';
+const aUnidad = m => enMM() ? Math.round(m * 1000) : r3(m);
+const deUnidad = v => enMM() ? v / 1000 : v;
+const txtUnidad = () => enMM() ? 'mm' : 'm';
+const fmtLong = m => enMM() ? `${Math.round(m * 1000)} mm` : `${f2(m)} m`;
 const f2 = n => Number(n).toFixed(2);
 const npsNum = s => { const t = String(s).replace('"', '').trim(); const m = t.match(/^(\d+)-(\d+)\/(\d+)$/);
   if (m) return +m[1] + m[2] / m[3]; const f = t.match(/^(\d+)\/(\d+)$/); return f ? f[1] / f[2] : parseFloat(t) || 0; };
@@ -640,7 +649,7 @@ function prepararLienzo() {
     <circle cx="${n.x}" cy="${n.y}" r="30" fill="none" stroke="#000" stroke-width="1"/>
     <text x="${n.x + u.x * 42}" y="${n.y + u.y * 42}" font-size="15" font-weight="900" text-anchor="middle" dominant-baseline="middle">N</text>`;
 }
-const longitudTubo = c => c.lengthManual ? Number(c.length) || 0 : r2((dirEntre(c.coords[0], c.coords[1])?.pasos || 0) * estado.escala);
+const longitudTubo = c => c.lengthManual ? Number(c.length) || 0 : r3((dirEntre(c.coords[0], c.coords[1])?.pasos || 0) * estado.escala);
 
 function renderLienzo() {
   let tubos = '', cotas = '', simbolos = '', nSold = 0;
@@ -654,7 +663,7 @@ function renderLienzo() {
         const m = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 }, a = normAng(di.ang);
         const rot = esVertical(a) ? -90 : (a === 30 || a === 210) ? -30 : 30;
         const off = esVertical(a) ? { x: -10, y: 0 } : { x: 0, y: -10 };
-        const txt = `${f2(longitudTubo(c))} m${c.lengthManual ? '*' : ''}`;
+        const txt = `${fmtLong(longitudTubo(c))}${c.lengthManual ? '*' : ''}`;
         cotas += `<text class="cota" text-anchor="middle" transform="translate(${(m.x + off.x).toFixed(1)} ${(m.y + off.y).toFixed(1)}) rotate(${rot})">${txt}</text>`;
       }
       continue;
@@ -713,7 +722,7 @@ function indicadorSnap(P, iman) {
 }
 function actualizarHUD(ang, pasos, iman, manual) {
   $('hud-angle').textContent = ang == null ? '—' : normAng(ang) + '°';
-  $('hud-length').textContent = f2(manual ?? (pasos || 0) * estado.escala) + ' m';
+  $('hud-length').textContent = fmtLong(manual ?? (pasos || 0) * estado.escala);
   $('hud-snap').textContent = iman ? 'NODO (IMÁN)' : 'GRILLA ISO';
 }
 function dibujarFantasma(pt, R) {
@@ -722,7 +731,7 @@ function dibujarFantasma(pt, R) {
   const r = bloqueoAxial(trazo.inicio, pt, R), A = aPantalla(trazo.inicio), B = aPantalla(r.fin);
   g.innerHTML = `<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="#f59e0b" stroke-width="3" stroke-dasharray="7 5" stroke-linecap="round"/>
     ${indicadorSnap(trazo.inicio, true)}${indicadorSnap(r.fin, r.iman)}
-    <text x="${B.x + 10}" y="${B.y - 10}" font-size="12" font-weight="800" fill="#b45309" paint-order="stroke" stroke="#fff" stroke-width="3">${f2(r.pasos * estado.escala)} m · ${r.ang}°</text>`;
+    <text x="${B.x + 10}" y="${B.y - 10}" font-size="12" font-weight="800" fill="#b45309" paint-order="stroke" stroke="#fff" stroke-width="3">${fmtLong(r.pasos * estado.escala)} · ${r.ang}°</text>`;
   actualizarHUD(r.ang, r.pasos, r.iman);
 }
 function previsualizarSimbolo(pt, R) {
@@ -762,6 +771,7 @@ function cargarLocal() {
 function aplicarProyecto(o) {
   Object.assign(estado.cabecera, o.cabecera || {});
   estado.escala = Number(o.escala) > 0 ? Number(o.escala) : 0.5;
+  estado.unidad = o.unidad === 'm' ? 'm' : 'mm';
   estado.components = (o.components || []).filter(c => TIPOS[c.type] && Array.isArray(c.coords));
   estado.consumibles = Array.isArray(o.consumibles) ? o.consumibles : [];
   estado.ajustes = o.ajustes && typeof o.ajustes === 'object' ? o.ajustes : {};
@@ -788,14 +798,14 @@ function pedirLongitud(id) {
   const pasos = dirEntre(c.coords[0], c.coords[1]).pasos;
   abrirModal({
     titulo: `Longitud real del tramo (${pasos} paso${pasos === 1 ? '' : 's'} de grilla)`,
-    html: `<label>Longitud en metros</label><input id="m-long" type="number" step="0.001" min="0" inputmode="decimal" value="${f2(longitudTubo(c))}">
-           <p>Deje el valor sugerido para usar la escala de la grilla (${estado.escala} m/paso). Escriba la cota medida en campo para fijarla.</p>`,
+    html: `<label>Longitud en ${enMM() ? 'milímetros (mm)' : 'metros (m)'}</label><input id="m-long" type="number" step="${enMM() ? 1 : 0.001}" min="0" inputmode="decimal" value="${aUnidad(longitudTubo(c))}">
+           <p>Deje el valor sugerido para usar la escala de la grilla (${fmtLong(estado.escala)} por paso). Escriba la cota medida en campo para fijarla.</p>`,
     alAbrir: () => { const i = $('m-long'); i.focus(); i.select(); },
     alAceptar: () => {
-      const v = parseFloat(String($('m-long').value).replace(',', '.'));
+      const v = deUnidad(parseFloat(String($('m-long').value).replace(',', '.')));
       if (!(v > 0)) { aviso('Escriba una longitud mayor que cero', 'error'); return false; }
-      const auto = r2(pasos * estado.escala);
-      c.lengthManual = Math.abs(v - auto) > 1e-9; c.length = c.lengthManual ? v : auto;
+      const auto = r3(pasos * estado.escala);
+      c.lengthManual = Math.abs(v - auto) > 5e-4; c.length = c.lengthManual ? r3(v) : auto;
       actualizarTodo();
     }
   });
@@ -948,8 +958,8 @@ function renderPanelSeleccion() {
     <label>Diámetro (NPS)</label><select data-p="nps">${opNps(c.nps)}</select>
     ${T.reduce ? `<label>Diámetro menor</label><select data-p="npsRed">${opNps(c.npsRed)}</select>` : ''}
     <label>Especificación</label><select data-p="schedule">${Object.keys(SPECS).map(s => `<option value="${esc(s)}"${s === c.schedule ? ' selected' : ''}>${esc(SPECS[s].corto)}</option>`).join('')}</select>
-    ${c.type === 'pipe' ? `<label>Longitud (m)${c.lengthManual ? ' · manual' : ' · por grilla'}</label>
-      <div style="display:flex;gap:5px"><input data-p="length" type="number" step="0.001" min="0" inputmode="decimal" value="${f2(longitudTubo(c))}">
+    ${c.type === 'pipe' ? `<label>Longitud (${txtUnidad()})${c.lengthManual ? ' · manual' : ' · por grilla'}</label>
+      <div style="display:flex;gap:5px"><input data-p="length" type="number" step="${enMM() ? 1 : 0.001}" min="0" inputmode="decimal" value="${aUnidad(longitudTubo(c))}">
       <button class="btn" data-acc="auto" title="Volver a la longitud por grilla">Grilla</button></div>` : ''}
     <div class="acc">${c.type !== 'pipe' && TIPOS[c.type].modo !== 'punto' ? '<button class="btn" data-acc="rotar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-rotate"/></svg>Rotar</button>' : ''}
       <button class="btn peligro" data-acc="borrar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-trash"/></svg>Borrar</button></div>`;
@@ -958,9 +968,9 @@ function renderPanelSeleccion() {
 $('panel-sel').addEventListener('change', e => {
   const k = e.target.dataset.p, c = estado.components.find(x => x.id === seleccion); if (!k || !c) return;
   if (k === 'length') {
-    const v = parseFloat(String(e.target.value).replace(',', '.'));
+    const v = deUnidad(parseFloat(String(e.target.value).replace(',', '.')));
     if (!(v > 0)) { aviso('Longitud no válida', 'error'); renderPanelSeleccion(); return; }
-    commit(() => { c.length = v; c.lengthManual = true; });
+    commit(() => { c.length = r3(v); c.lengthManual = true; });
   } else commit(() => { c[k] = e.target.value; });
 });
 $('panel-sel').addEventListener('click', e => {
@@ -1151,16 +1161,24 @@ document.addEventListener('keydown', e => {
 /* ---------- 16. Rótulo (cabecera) reactivo ---------- */
 function pintarCabecera() {
   document.querySelectorAll('[data-h]').forEach(i => { i.value = estado.cabecera[i.dataset.h] ?? ''; });
-  $('grid-scale').value = estado.escala;
-  $('txt-escala').value = `S/E · 1 paso de grilla = ${estado.escala} m`;
+  $('sel-unidad').value = estado.unidad;
+  $('lbl-unidad-paso').textContent = txtUnidad();
+  $('grid-scale').step = enMM() ? '50' : '0.05';
+  $('grid-scale').value = aUnidad(estado.escala);
+  $('txt-escala').value = `S/E · 1 paso de grilla = ${fmtLong(estado.escala)}`;
+  $('etq-dibujo').textContent = `ISOMÉTRICO — SIN ESCALA (COTAS EN ${enMM() ? 'MILÍMETROS' : 'METROS'})`;
 }
 document.querySelectorAll('[data-h]').forEach(i => i.addEventListener('input', () => { estado.cabecera[i.dataset.h] = i.value; guardarLocal(); }));
 $('spec-nps').addEventListener('change', () => { estado.cabecera.nps = $('spec-nps').value; pintarCabecera(); guardarLocal(); });
 $('spec-mat').addEventListener('change', () => { estado.cabecera.spec = $('spec-mat').value; pintarCabecera(); guardarLocal(); });
+$('sel-unidad').addEventListener('change', () => {
+  estado.unidad = $('sel-unidad').value === 'm' ? 'm' : 'mm';
+  pintarCabecera(); actualizarTodo();
+});
 $('grid-scale').addEventListener('change', () => {
-  const v = parseFloat(String($('grid-scale').value).replace(',', '.'));
-  if (!(v > 0)) { aviso('Paso de grilla no válido', 'error'); $('grid-scale').value = estado.escala; return; }
-  estado.escala = v;
+  const v = deUnidad(parseFloat(String($('grid-scale').value).replace(',', '.')));
+  if (!(v > 0)) { aviso('Paso de grilla no válido', 'error'); $('grid-scale').value = aUnidad(estado.escala); return; }
+  estado.escala = r3(v);
   for (const c of tuberias()) if (!c.lengthManual) c.length = longitudTubo(c);
   pintarCabecera(); actualizarTodo();
 });
@@ -1216,15 +1234,15 @@ function exportToExcel() {
     [],
     ['CLIENTE', cab.cliente], ['PROYECTO', cab.proyecto], ['DIBUJO / LÍNEA N°', cab.linea], ['FECHA', cab.fecha],
     ['CONSECUTIVO', cab.consecutivo], ['DIÁMETRO NOMINAL (NPS)', cab.nps], ['ESPECIFICACIÓN', cab.spec],
-    ['ESCALA', `1 paso de grilla = ${estado.escala} m`], ['FLUIDO / SERVICIO', cab.servicio],
+    ['ESCALA', `1 paso de grilla = ${fmtLong(estado.escala)}`], ['FLUIDO / SERVICIO', cab.servicio],
     ['ELABORÓ', cab.elaboro, 'REVISÓ', cab.reviso, 'APROBÓ', cab.aprobo], ['NOTAS', cab.notas],
     [],
     ['ITEM', 'UNI', 'DESCRIPCIÓN TÉCNICA', 'CANTIDAD'],
     ...filasBOM
   ];
-  const detalle = [['ID', 'CATEGORÍA', 'TIPO', 'NPS', 'NPS MENOR', 'ESPECIFICACIÓN', 'LONGITUD (m)', 'LONG. MANUAL', 'COORDENADAS RED [p,q]', 'ROTACIÓN (°)', 'DESCRIPCIÓN']]
+  const detalle = [['ID', 'CATEGORÍA', 'TIPO', 'NPS', 'NPS MENOR', 'ESPECIFICACIÓN', 'LONGITUD (' + txtUnidad() + ')', 'LONG. MANUAL', 'COORDENADAS RED [p,q]', 'ROTACIÓN (°)', 'DESCRIPCIÓN']]
     .concat(estado.components.map(c => [c.id, c.category, TIPOS[c.type].corto, c.nps, c.npsRed || '', c.schedule,
-      c.type === 'pipe' ? longitudTubo(c) : '', c.type === 'pipe' ? (c.lengthManual ? 'SÍ' : 'NO') : '',
+      c.type === 'pipe' ? aUnidad(longitudTubo(c)) : '', c.type === 'pipe' ? (c.lengthManual ? 'SÍ' : 'NO') : '',
       c.coords.map(P => `[${P[0]},${P[1]}]`).join(' → '), c.rotation, descripcion(c)]));
   if (typeof XLSX === 'undefined') {
     /* respaldo sin librería: CSV compatible con Excel (separador ;) */

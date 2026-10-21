@@ -14,6 +14,7 @@ Funciona con dedo, lápiz o ratón, en Android, iPhone/iPad y PC, también sin i
 ## Uso rápido
 
 - **Tubería**: arrastre desde un punto, o toque el inicio y luego cada vértice (cadena); toque el mismo punto o *Terminar* para cortar. El tramo se bloquea a los ejes 30°/90°/150°/210°/270°/330° y se imanta a nodos (círculo verde = nodo existente, naranja = grilla).
+- **Unidades**: las cotas, la longitud de cada tramo y el paso de grilla se muestran en **milímetros** por defecto (500 mm por paso). En *1. Control y trazado → Unidad de cotas* puede cambiar a metros. El BOM mantiene la tubería en metros lineales (ML).
 - **Accesorios y válvulas**: elija el símbolo y toque sobre la tubería; se alinea solo con el eje del tramo. Codos y tees orientan sus brazos con las tuberías conectadas.
 - **Tocar**: seleccione un componente para cambiar diámetro, especificación, longitud real, rotarlo o borrarlo.
 - **Zoom**: pellizco con dos dedos, Ctrl+rueda o botones. *Lienzo* acerca al área de dibujo.
