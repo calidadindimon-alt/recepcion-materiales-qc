@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0f172a"/>
+  <g stroke="#1e3a5f" stroke-width="6">
+    <path d="M0 384 L512 88 M0 236 L256 88 M128 512 L512 290 M256 0v512 M128 0v512 M384 0v512"/>
+  </g>
+  <path d="M96 352 L256 260 V120 L416 212" fill="none" stroke="#f59e0b" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="96" cy="352" r="22" fill="#fff" stroke="#0f172a" stroke-width="8"/>
+  <circle cx="256" cy="260" r="22" fill="#dc2626" stroke="#fff" stroke-width="8"/>
+  <circle cx="256" cy="120" r="22" fill="#dc2626" stroke="#fff" stroke-width="8"/>
+  <circle cx="416" cy="212" r="22" fill="#fff" stroke="#0f172a" stroke-width="8"/>
+  <text x="256" y="462" font-family="Arial,Helvetica,sans-serif" font-size="64" font-weight="900" fill="#fff" text-anchor="middle">INDIMON</text>
+</svg>

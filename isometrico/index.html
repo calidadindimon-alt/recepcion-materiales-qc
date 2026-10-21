@@ -1,0 +1,1377 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="INDIMON CAD">
+<meta name="description" content="CAD táctil para bocetos isométricos de tubería y listado de materiales, formato DP-F-009 INDIMON S.A.S.">
+<title>INDIMON CAD · DP-F-009 Bocetos Isométricos</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<!-- SheetJS (exportación .xlsx): copia local para trabajo sin internet; si falta, se intenta el CDN -->
+<script src="vendor/xlsx.full.min.js" onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';document.head.appendChild(s)"></script>
+<style>
+/* =====================================================================
+   ESTILOS DE LA APLICACIÓN (barra, panel lateral, ventanas) — sin CDN
+   ===================================================================== */
+:root{
+  --s950:#020617;--s900:#0f172a;--s800:#1e293b;--s700:#334155;--s600:#475569;--s400:#94a3b8;--s300:#cbd5e1;--s200:#e2e8f0;
+  --ambar:#f59e0b;--ambar2:#fbbf24;--cian:#22d3ee;--verde:#34d399;--rojo:#ef4444;--azul:#2563eb;
+  --mono:ui-monospace,"SFMono-Regular","JetBrains Mono",Menlo,Consolas,monospace;
+  --safe-b:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--s900);color:var(--s200);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,Inter,Arial,sans-serif;overscroll-behavior:none}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.app{display:flex;flex-direction:column;height:100%;height:100dvh}
+
+/* ---------- Barra superior ---------- */
+.barra{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;
+  padding-top:max(6px,env(safe-area-inset-top));background:var(--s950);border-bottom:1px solid var(--s800);z-index:30}
+.grupo{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.marca{background:#dc2626;color:#fff;font-weight:900;letter-spacing:.06em;font-size:13px;padding:5px 9px;border-radius:6px;white-space:nowrap}
+.marca-sub{font:600 11px var(--mono);color:var(--s400);white-space:nowrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:36px;min-width:36px;padding:5px 9px;
+  background:var(--s800);border:1px solid var(--s700);border-radius:7px;font-size:12px;font-weight:700;color:var(--s200);white-space:nowrap}
+.btn:hover{background:var(--s700)} .btn:active{transform:translateY(1px)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.verde{background:#047857;border-color:#059669;color:#fff} .btn.azul{background:var(--azul);border-color:#3b82f6;color:#fff}
+.btn.ambar{background:#d97706;border-color:var(--ambar);color:#0f172a} .btn.peligro{color:#fca5a5}
+.sel{background:var(--s800);border:1px solid var(--s700);border-radius:7px;font:700 12px var(--mono);padding:7px 6px;min-height:36px}
+#spec-nps{color:var(--ambar2)} #spec-mat{color:var(--verde);max-width:190px}
+.solo-pc{display:inline-flex} .solo-movil{display:none!important}
+.txt-btn{display:inline}
+
+/* ---------- Área de trabajo ---------- */
+.trabajo{flex:1;display:flex;min-height:0;position:relative}
+.lateral{width:258px;flex-shrink:0;background:var(--s950);border-right:1px solid var(--s800);overflow-y:auto;display:flex;flex-direction:column;justify-content:space-between;z-index:40}
+.lateral .sec{padding:10px 10px 4px}
+.lateral h3{margin:0 0 6px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--s400)}
+.rejilla{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.rejilla.dos{grid-template-columns:repeat(2,1fr)}
+.herr{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:58px;padding:5px 3px;background:var(--s900);
+  border:1px solid var(--s800);border-radius:8px;font-size:10.5px;font-weight:600;color:var(--s200);text-align:center;line-height:1.15}
+.herr svg.sim{width:30px;height:30px}
+.herr.activa{border-color:var(--ambar);background:rgba(245,158,11,.15);color:#fde68a}
+.fila-opc{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:6px;background:var(--s900);border:1px solid var(--s800);border-radius:7px;padding:6px 8px;font-size:12px}
+.fila-opc input[type=number]{width:70px;background:var(--s800);border:1px solid var(--s700);border-radius:5px;color:var(--cian);font:700 13px var(--mono);text-align:center;padding:3px}
+.fila-opc input[type=checkbox]{width:18px;height:18px;accent-color:var(--ambar)}
+.btn.ancho{width:100%;margin-top:5px;justify-content:flex-start}
+.hud{padding:8px 10px;background:var(--s900);border-top:1px solid var(--s800);font:11px var(--mono);color:var(--s400)}
+.hud div{display:flex;justify-content:space-between;margin:2px 0}
+.hud b{color:var(--ambar2)}
+.velo{display:none}
+
+#viewport{flex:1;overflow:auto;background:#334155;padding:16px;position:relative;-webkit-overflow-scrolling:touch}
+#a3-wrapper{margin:0 auto;position:relative}
+
+/* Barra inferior de estado / accesos rápidos */
+.estado{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(10px + var(--safe-b));z-index:25;display:flex;align-items:center;gap:6px;
+  background:rgba(2,6,23,.92);border:1px solid var(--s700);border-radius:12px;padding:5px 6px;max-width:calc(100% - 16px);box-shadow:0 8px 30px rgba(0,0,0,.4)}
+.estado .pista{font-size:12px;color:var(--s300);padding:0 6px;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.estado .rapida.activa{border-color:var(--ambar);color:#fde68a}
+
+/* Panel de propiedades del componente seleccionado */
+#panel-sel{position:absolute;right:12px;top:12px;z-index:26;width:250px;background:rgba(2,6,23,.96);border:1px solid #3b82f6;border-radius:12px;padding:10px;font-size:12px;box-shadow:0 8px 30px rgba(0,0,0,.45)}
+#panel-sel h4{margin:0 0 8px;font-size:12px;color:#93c5fd;text-transform:uppercase;letter-spacing:.05em;display:flex;justify-content:space-between;align-items:center}
+#panel-sel label{display:block;margin:6px 0 2px;color:var(--s400);font-size:10.5px;font-weight:700;text-transform:uppercase}
+#panel-sel select,#panel-sel input{width:100%;background:var(--s800);border:1px solid var(--s700);border-radius:6px;padding:7px;font:600 13px var(--mono)}
+#panel-sel .acc{display:flex;gap:5px;margin-top:9px}
+#panel-sel .acc .btn{flex:1}
+
+/* Avisos y ventanas modales */
+#aviso{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top));transform:translateX(-50%);z-index:90;background:var(--s800);border:1px solid var(--s600);color:#fff;
+  padding:9px 14px;border-radius:9px;font-size:13px;font-weight:600;display:none;max-width:92vw;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.4)}
+.modal{position:fixed;inset:0;background:rgba(2,6,23,.7);z-index:80;display:flex;align-items:center;justify-content:center;padding:14px}
+.modal[hidden]{display:none}
+.modal-card{width:100%;max-width:440px;max-height:90vh;overflow:auto;background:var(--s900);border:1px solid var(--s700);border-radius:14px;padding:16px}
+.modal-card h3{margin:0 0 10px;font-size:15px;color:var(--ambar2)}
+.modal-card label{display:block;font-size:11px;font-weight:700;color:var(--s400);text-transform:uppercase;margin:9px 0 3px}
+.modal-card input,.modal-card select{width:100%;background:var(--s800);border:1px solid var(--s700);border-radius:7px;padding:10px;font-size:16px}
+.modal-card p,.modal-card li{font-size:13px;color:var(--s300);line-height:1.45}
+.modal-acc{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+
+/* =====================================================================
+   HOJA OFICIAL A3 HORIZONTAL (420 × 297 mm  →  1400 × 990 px)
+   ===================================================================== */
+.a3-sheet{width:1400px;height:990px;background:#fff;color:#000;border:2.5px solid #000;display:flex;flex-direction:column;
+  transform-origin:0 0;box-shadow:0 20px 60px rgba(0,0,0,.55);position:absolute;left:0;top:0;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;font-family:Arial,Helvetica,sans-serif;user-select:none;-webkit-user-select:none}
+.a3-sheet input,.a3-sheet select{user-select:text;-webkit-user-select:text}
+.rotulo{border-bottom:2px solid #000;flex-shrink:0}
+.r1{display:grid;grid-template-columns:340px 1fr 330px;height:72px;border-bottom:1px solid #000}
+.celda-logo{display:flex;align-items:center;gap:8px;padding:0 10px;border-right:1px solid #000}
+.logo-txt{font-size:25px;font-weight:900;letter-spacing:-.02em;line-height:1}
+.logo-txt .g{color:#94a3b8}.logo-txt .r{color:#dc2626}
+.lema{font-size:9px;font-style:italic;font-weight:700;color:#334155;margin-top:2px}
+.nit{font-size:9.5px;font-weight:700;margin-top:2px}
+.celda-titulo{display:flex;flex-direction:column;align-items:center;justify-content:center;border-right:1px solid #000;text-align:center}
+.celda-titulo .t1{font-size:11px;font-weight:700;letter-spacing:.12em}
+.celda-titulo .t2{font-size:25px;font-weight:900;letter-spacing:.04em}
+.celda-cod{display:grid;grid-template-columns:110px 1fr;grid-template-rows:repeat(3,1fr);font-size:11px}
+.celda-cod>div{border-bottom:1px solid #000;display:flex;align-items:center;padding:0 7px;font-weight:700}
+.celda-cod>div:nth-child(odd){border-right:1px solid #000;background:#f1f5f9}
+.celda-cod>div:nth-last-child(-n+2){border-bottom:0}
+.celda-cod input{width:34px;border:0;background:transparent;font:700 11px Arial;text-align:center;outline:none}
+.r2,.r3{display:grid;border-bottom:1px solid #000}
+.r2{grid-template-columns:3fr 3fr 2fr 1.3fr 1.4fr;height:44px}
+.r3{grid-template-columns:1.25fr 3fr 1.9fr 2.6fr;height:40px;border-bottom:0}
+.campo{display:flex;flex-direction:column;border-right:1px solid #000;min-width:0}
+.campo:last-child{border-right:0}
+.campo label{font-size:8.5px;font-weight:800;letter-spacing:.05em;padding:3px 6px 0;color:#1e293b;text-transform:uppercase}
+.tech-input{flex:1;width:100%;min-width:0;border:0;outline:none;background:transparent;padding:0 6px;font:700 13px Arial;color:#0f172a}
+.tech-input:focus{background:rgba(254,240,138,.55)}
+.dibujo{flex:1;position:relative;border-bottom:2px solid #000;overflow:hidden;min-height:0}
+#iso-svg{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
+#iso-svg.modo-pan{cursor:grab} #iso-svg.modo-sel{cursor:default}
+.etq-dibujo{position:absolute;left:8px;top:6px;font:800 10px Arial;letter-spacing:.1em;color:#64748b;pointer-events:none}
+.bom{height:238px;display:flex;flex-direction:column;border-bottom:2px solid #000;flex-shrink:0}
+.bom-titulo{height:22px;display:flex;align-items:center;justify-content:center;background:#e2e8f0;border-bottom:1px solid #000;font-size:11px;font-weight:900;letter-spacing:.1em}
+.bom-cols{flex:1;display:grid;grid-template-columns:1fr 1fr;min-height:0}
+.bom-cols>div{overflow:hidden}
+.bom-cols>div:first-child{border-right:2px solid #000}
+.bom table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10.5px}
+.bom th{background:#f1f5f9;font-size:9.5px;font-weight:800;height:18px;border:1px solid #000;border-top:0}
+.bom td{border:1px solid #000;padding:0 4px;height:var(--fila,17px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bom tr>*:first-child{border-left:0}.bom tr>*:last-child{border-right:0}
+.bom td.c{text-align:center;font-weight:700}
+.bom td.r{text-align:right;font:700 11px var(--mono);padding:0}
+.bom td input,.bom td select{width:100%;height:100%;border:0;outline:none;background:transparent;font:inherit;color:inherit;padding:0 4px}
+.bom td.r input{text-align:right}
+.bom td input:focus{background:rgba(254,240,138,.55)}
+.bom tr.ajustado td.r input{color:#b45309}
+.bom .quitar{border:0;background:none;color:#dc2626;font-weight:900;padding:0 3px;cursor:pointer}
+.pie{height:54px;display:grid;grid-template-columns:2.2fr 1fr 1fr 1fr;flex-shrink:0}
+.pie .campo label{padding-top:4px}
+.firma-linea{border-top:1px solid #000;margin:0 10px 4px;font-size:8px;text-align:center;color:#475569}
+
+/* Elementos del lienzo SVG */
+.cmp{cursor:pointer}
+.cmp .hit{stroke:transparent;fill:transparent;pointer-events:all}
+.cmp.selec{filter:drop-shadow(0 0 3px rgba(37,99,235,.95))}
+.cmp.selec .tubo{stroke:#1d4ed8}
+.s{fill:none;stroke:#000;stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round}
+.sb{fill:#fff;stroke:#000;stroke-width:1.6;stroke-linejoin:round}
+.sn{fill:#000;stroke:#000;stroke-width:1.2}
+.cota{font:700 10.5px Arial;fill:#0f172a;paint-order:stroke;stroke:#fff;stroke-width:3px}
+
+/* ---------- Adaptación a tableta y móvil ---------- */
+@media (max-width:1023px){
+  .lateral{position:fixed;top:0;bottom:0;left:0;transform:translateX(-100%);transition:transform .2s;padding-top:env(safe-area-inset-top);padding-bottom:var(--safe-b)}
+  .lateral.abierta{transform:none;box-shadow:12px 0 40px rgba(0,0,0,.5)}
+  .velo{display:block;position:fixed;inset:0;background:rgba(2,6,23,.55);z-index:35}
+  .velo[hidden]{display:none}
+  .solo-movil{display:inline-flex!important}
+  .sec.solo-movil{display:flex!important}
+  #panel-sel{left:8px;right:8px;top:auto;bottom:calc(68px + var(--safe-b));width:auto}
+}
+@media (max-width:760px){
+  .solo-pc,.marca-sub{display:none!important}
+  .txt-btn{display:none}
+  #viewport{padding:8px}
+  #spec-mat{max-width:128px}
+  .estado .pista{max-width:150px}
+}
+
+/* =====================================================================
+   IMPRESIÓN / PDF — A3 horizontal exacto, sin controles
+   ===================================================================== */
+@media print{
+  @page{size:A3 landscape;margin:0}
+  html,body{width:420mm;height:297mm;overflow:hidden!important;background:#fff!important}
+  .no-print,.velo{display:none!important}
+  .app,.trabajo{display:block;height:auto}
+  #viewport{overflow:visible!important;padding:0!important;background:#fff!important}
+  #a3-wrapper{width:420mm!important;height:297mm!important;margin:0!important;overflow:hidden}
+  .a3-sheet{transform:translate(4.6mm,4.4mm) scale(1.095)!important;box-shadow:none!important}
+  .tech-input:focus{background:transparent}
+  .capa-guia{display:none!important}
+  input[type=date]::-webkit-calendar-picker-indicator{display:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ==================== BARRA SUPERIOR ==================== -->
+  <header class="barra no-print">
+    <div class="grupo">
+      <button class="btn solo-movil" onclick="toggleSidebar()" aria-label="Abrir simbología"><svg class="ico" data-ico="menu"></svg><span class="txt-btn">Simbología</span></button>
+      <span class="marca">INDÍMON CAD</span>
+      <span class="marca-sub">DP-F-009</span>
+    </div>
+
+    <!-- Selectores técnicos: diámetro, especificación, rotación por defecto -->
+    <div class="grupo">
+      <select id="spec-nps" class="sel" title="Diámetro nominal (NPS) para los nuevos componentes"></select>
+      <select id="spec-mat" class="sel" title="Especificación de material para los nuevos componentes"></select>
+      <button class="btn" onclick="cycleSymbolRotation()" title="Rotación por defecto de símbolos sueltos (R)"><svg class="ico" data-ico="rotate"></svg><span id="rot-label" style="font-family:var(--mono)">30°</span></button>
+    </div>
+
+    <div class="grupo">
+      <button class="btn" onclick="undoAction()" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"><svg class="ico" data-ico="undo"></svg></button>
+      <button class="btn" onclick="redoAction()" title="Rehacer (Ctrl+Y)" aria-label="Rehacer"><svg class="ico" data-ico="redo"></svg></button>
+      <button class="btn peligro" onclick="deleteSelected()" title="Borrar seleccionado (Supr)" aria-label="Borrar seleccionado"><svg class="ico" data-ico="trash"></svg></button>
+      <button class="btn solo-pc" onclick="adjustZoom(1/1.2)" aria-label="Alejar"><svg class="ico" data-ico="zoomOut"></svg></button>
+      <button class="btn" id="zoom-indicator" onclick="fitSheetToScreen()" title="Ajustar hoja completa" style="font-family:var(--mono)">100%</button>
+      <button class="btn solo-pc" onclick="adjustZoom(1.2)" aria-label="Acercar"><svg class="ico" data-ico="zoomIn"></svg></button>
+      <button class="btn verde" onclick="exportToExcel()" title="Exportar listado de materiales a Excel"><svg class="ico" data-ico="sheet"></svg><span class="txt-btn">Excel</span></button>
+      <button class="btn azul" onclick="imprimirA3()" title="Imprimir o guardar PDF A3 horizontal"><svg class="ico" data-ico="printer"></svg><span class="txt-btn">PDF A3</span></button>
+      <button class="btn ambar" id="btn-instalar" onclick="instalarApp()" title="Instalar como aplicación" hidden><svg class="ico" data-ico="download"></svg><span class="txt-btn">Instalar</span></button>
+    </div>
+  </header>
+
+  <div class="trabajo">
+    <div class="velo no-print" id="velo" hidden onclick="toggleSidebar(false)"></div>
+
+    <!-- ==================== PANEL LATERAL DE HERRAMIENTAS ==================== -->
+    <aside id="tools-sidebar" class="lateral no-print">
+      <div>
+        <div class="sec solo-movil" style="justify-content:space-between;align-items:center;border-bottom:1px solid var(--s800);padding-bottom:8px">
+          <b style="font-size:12px;color:var(--ambar2)">HERRAMIENTAS PIPING</b>
+          <button class="btn" onclick="toggleSidebar(false)" aria-label="Cerrar"><svg class="ico" data-ico="x"></svg></button>
+        </div>
+
+        <div class="sec">
+          <h3>1. Control y trazado</h3>
+          <div class="rejilla" id="herr-control"></div>
+          <div class="fila-opc"><span>Paso de grilla (m)</span><input id="grid-scale" type="number" step="0.05" min="0.01" value="0.5" inputmode="decimal"></div>
+          <label class="fila-opc"><span>Confirmar longitud al trazar</span><input type="checkbox" id="chk-manual-len" checked></label>
+        </div>
+
+        <div class="sec">
+          <h3>2. Accesorios (fittings)</h3>
+          <div class="rejilla" id="herr-accesorios"></div>
+        </div>
+
+        <div class="sec">
+          <h3>3. Válvulas</h3>
+          <div class="rejilla" id="herr-valvulas"></div>
+        </div>
+
+        <div class="sec">
+          <h3>4. Juntas y BOM</h3>
+          <div class="rejilla dos" id="herr-juntas"></div>
+          <button class="btn ancho" onclick="openConsumableModal()"><svg class="ico" data-ico="plus"></svg>Añadir consumible al BOM</button>
+          <button class="btn ancho peligro" onclick="clearCanvas()"><svg class="ico" data-ico="trash"></svg>Limpiar todo el plano</button>
+        </div>
+
+        <div class="sec">
+          <h3>5. Archivo y aplicación</h3>
+          <button class="btn ancho" onclick="nuevoPlano()"><svg class="ico" data-ico="file"></svg>Nuevo plano</button>
+          <button class="btn ancho" onclick="document.getElementById('in-proyecto').click()"><svg class="ico" data-ico="folder"></svg>Abrir proyecto (.json)</button>
+          <button class="btn ancho" onclick="guardarProyecto()"><svg class="ico" data-ico="save"></svg>Guardar proyecto (.json)</button>
+          <button class="btn ancho" onclick="downloadSelfHtml()"><svg class="ico" data-ico="code"></svg>Descargar app (.html sin internet)</button>
+          <button class="btn ancho ambar" onclick="instalarApp(true)"><svg class="ico" data-ico="download"></svg>Instalar app (Android · iOS · PC)</button>
+          <input type="file" id="in-proyecto" accept=".json,application/json" hidden>
+        </div>
+      </div>
+
+      <div class="hud">
+        <div><span>Eje isométrico:</span><b id="hud-angle">—</b></div>
+        <div><span>Longitud tramo:</span><b id="hud-length" style="color:var(--verde)">0.00 m</b></div>
+        <div><span>Imantación:</span><b id="hud-snap" style="color:var(--cian)">GRILLA ISO</b></div>
+        <div><span>Componentes:</span><b id="hud-count" style="color:var(--s200)">0</b></div>
+      </div>
+    </aside>
+
+    <!-- ==================== VIEWPORT CON LA HOJA A3 ==================== -->
+    <main id="viewport">
+      <div id="a3-wrapper">
+        <div id="a3-container" class="a3-sheet">
+
+          <!-- 1. RÓTULO INSTITUCIONAL DP-F-009 -->
+          <div class="rotulo">
+            <div class="r1">
+              <div class="celda-logo">
+                <svg viewBox="0 0 64 64" width="56" height="56" aria-hidden="true">
+                  <circle cx="32" cy="32" r="29" fill="#f8fafc" stroke="#334155" stroke-width="2"/>
+                  <path d="M12 32 H52 M32 12 V52 M18 18 L46 46 M18 46 L46 18" stroke="#cbd5e1" stroke-width="1"/>
+                  <path d="M20 26 C20 17, 44 17, 44 26 Z" fill="#dc2626" stroke="#1e293b" stroke-width="1.8"/>
+                  <rect x="18" y="25" width="28" height="3" rx="1.5" fill="#b91c1c"/>
+                  <circle cx="32" cy="36" r="11" fill="#94a3b8" stroke="#1e293b" stroke-width="1.8"/>
+                  <circle cx="28" cy="34" r="2" fill="#0f172a"/><circle cx="36" cy="34" r="2" fill="#0f172a"/>
+                  <rect x="29" y="40" width="3" height="4.5" fill="#fff" stroke="#1e293b" stroke-width="1"/>
+                  <rect x="32" y="40" width="3" height="4.5" fill="#fff" stroke="#1e293b" stroke-width="1"/>
+                </svg>
+                <div>
+                  <div class="logo-txt"><span class="g">I</span>ND<span class="r">Í</span>M<span class="r">O</span>N <span style="font-size:13px">S.A.S.</span></div>
+                  <div class="lema">Una solución eficiente a su alcance</div>
+                  <div class="nit">NIT: 900602215-5</div>
+                </div>
+              </div>
+              <div class="celda-titulo">
+                <div class="t1">FORMATO · DISEÑO Y PROYECTOS</div>
+                <div class="t2">BOCETOS ISOMÉTRICOS</div>
+              </div>
+              <div class="celda-cod">
+                <div>CÓDIGO</div><div>DP-F-009</div>
+                <div>VERSIÓN</div><div>01</div>
+                <div>PÁGINA</div><div><input data-h="pagina" aria-label="Página">&nbsp;DE&nbsp;<input data-h="paginas" aria-label="Total de páginas"></div>
+              </div>
+            </div>
+            <div class="r2">
+              <div class="campo"><label>Cliente</label><input class="tech-input" data-h="cliente"></div>
+              <div class="campo"><label>Proyecto</label><input class="tech-input" data-h="proyecto"></div>
+              <div class="campo"><label>Dibujo / Línea N°</label><input class="tech-input" data-h="linea"></div>
+              <div class="campo"><label>Fecha</label><input class="tech-input" type="date" data-h="fecha"></div>
+              <div class="campo"><label>Consecutivo</label><input class="tech-input" data-h="consecutivo"></div>
+            </div>
+            <div class="r3">
+              <div class="campo"><label>Diámetro nominal (NPS)</label><input class="tech-input" data-h="nps"></div>
+              <div class="campo"><label>Especificación de material</label><input class="tech-input" data-h="spec"></div>
+              <div class="campo"><label>Escala</label><input class="tech-input" id="txt-escala" readonly tabindex="-1"></div>
+              <div class="campo"><label>Fluido / Servicio · Prueba</label><input class="tech-input" data-h="servicio"></div>
+            </div>
+          </div>
+
+          <!-- 2. LIENZO CAD (SVG VECTORIAL) -->
+          <div class="dibujo" id="zona-dibujo">
+            <span class="etq-dibujo">ISOMÉTRICO — SIN ESCALA (COTAS EN METROS)</span>
+            <svg id="iso-svg" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <pattern id="malla-iso" patternUnits="userSpaceOnUse"></pattern>
+              </defs>
+              <rect id="fondo-malla" x="0" y="0" width="100%" height="100%" fill="url(#malla-iso)"/>
+              <g id="capa-norte"></g>
+              <g id="capa-tuberia"></g>
+              <g id="capa-simbolos"></g>
+              <g id="capa-cotas"></g>
+              <g id="capa-guia" class="capa-guia"></g>
+            </svg>
+          </div>
+
+          <!-- 3. LISTADO DE MATERIALES (BOM) -->
+          <div class="bom">
+            <div class="bom-titulo">LISTADO DE MATERIALES (BOM)</div>
+            <div class="bom-cols" id="bom-cols"></div>
+          </div>
+
+          <!-- 4. PIE: NOTAS Y FIRMAS -->
+          <div class="pie">
+            <div class="campo"><label>Notas / Observaciones</label><input class="tech-input" data-h="notas"></div>
+            <div class="campo"><label>Elaboró</label><input class="tech-input" data-h="elaboro"><div class="firma-linea">Nombre y firma</div></div>
+            <div class="campo"><label>Revisó</label><input class="tech-input" data-h="reviso"><div class="firma-linea">Nombre y firma</div></div>
+            <div class="campo"><label>Aprobó</label><input class="tech-input" data-h="aprobo"><div class="firma-linea">Nombre y firma</div></div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Panel de propiedades del componente seleccionado -->
+    <div id="panel-sel" class="no-print" hidden></div>
+
+    <!-- Barra de estado + accesos rápidos (táctil) -->
+    <div class="estado no-print">
+      <button class="btn rapida solo-movil" data-rapida="pan" onclick="setActiveTool('pan')" aria-label="Mover hoja"><svg class="ico" data-ico="move"></svg></button>
+      <button class="btn rapida solo-movil" data-rapida="select" onclick="setActiveTool('select')" aria-label="Seleccionar"><svg class="ico" data-ico="pointer"></svg></button>
+      <button class="btn rapida solo-movil" data-rapida="pipe" onclick="setActiveTool('pipe')" aria-label="Tubería"><svg class="ico" data-ico="pipe"></svg></button>
+      <span class="pista" id="pista">Tubería: toque y arrastre</span>
+      <button class="btn ambar" id="btn-terminar" onclick="terminarTrazo()" hidden><svg class="ico" data-ico="check"></svg>Terminar</button>
+      <button class="btn" onclick="enfocarLienzo()" title="Acercar al área de dibujo"><svg class="ico" data-ico="target"></svg><span class="txt-btn">Lienzo</span></button>
+    </div>
+  </div>
+</div>
+
+<div id="aviso" class="no-print" role="status"></div>
+<div id="modal" class="modal no-print" hidden>
+  <form class="modal-card" id="modal-form" onsubmit="return false">
+    <h3 id="modal-titulo"></h3>
+    <div id="modal-cuerpo"></div>
+    <div class="modal-acc">
+      <button type="button" class="btn" id="modal-cancelar">Cancelar</button>
+      <button type="submit" class="btn ambar" id="modal-ok">Aceptar</button>
+    </div>
+  </form>
+</div>
+
+<script>
+'use strict';
+/* =========================================================================
+   INDIMON CAD · DP-F-009 — Motor isométrico, simbología piping y BOM
+   -------------------------------------------------------------------------
+   Modelo matemático: la malla isométrica es una red triangular generada por
+   dos vectores base de longitud igual al paso de grilla (PASO_PX):
+     U = paso·( cos30°, −sin30°)  → eje Norte-Sur  (30° / 210°)
+     V = paso·(−cos30°, −sin30°)  → eje Este-Oeste (150° / 330°)
+     U + V = paso·(0, −1)         → eje vertical / elevación (90° / 270°)
+   Todo punto del dibujo se guarda en coordenadas de red [p, q] (enteras o
+   medias), así las tuberías quedan exactamente sobre los ejes isométricos y
+   la longitud en pasos es exacta. La pantalla se obtiene con
+     pantalla = ORIGEN + p·U + q·V
+   ========================================================================= */
+
+/* ---------- 1. Constantes geométricas ---------- */
+const PASO_PX = 28;
+const C30 = Math.sqrt(3) / 2;
+const U = { x: C30 * PASO_PX, y: -0.5 * PASO_PX };
+const V = { x: -C30 * PASO_PX, y: -0.5 * PASO_PX };
+const DIRS = [
+  { ang: 30, d: [1, 0] }, { ang: 90, d: [1, 1] }, { ang: 150, d: [0, 1] },
+  { ang: 210, d: [-1, 0] }, { ang: 270, d: [-1, -1] }, { ang: 330, d: [0, -1] }
+];
+const ROTACIONES = [30, 90, 150, 210, 270, 330];
+const HOJA = { w: 1400, h: 990 };
+let ORIGEN = { x: 0, y: 0 }, LIENZO = { w: 0, h: 0 };
+
+/* ---------- 2. Catálogos técnicos ---------- */
+const NPS_LISTA = ['1/2"', '3/4"', '1"', '1-1/2"', '2"', '3"', '4"', '6"', '8"', '10"', '12"'];
+const SPECS = {
+  'SCH 40 ASTM A106 Gr.B':   { corto: 'SCH 40 A106 Gr.B',   sch: 'SCH 40',  tubo: 'ASTM A106 Gr.B SIN COSTURA, EXTREMOS BISELADOS', acc: 'ASTM A234 WPB, BW', brida: 'ASTM A105 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A216 WCB' },
+  'SCH 80 ASTM A106 Gr.B':   { corto: 'SCH 80 A106 Gr.B',   sch: 'SCH 80',  tubo: 'ASTM A106 Gr.B SIN COSTURA, EXTREMOS BISELADOS', acc: 'ASTM A234 WPB, BW', brida: 'ASTM A105 300# RF', val: 'CLASE 300 RF, CUERPO ASTM A216 WCB' },
+  'SCH 40S ASTM A312 TP304L':{ corto: 'SCH 40S Inox 304L',  sch: 'SCH 40S', tubo: 'ASTM A312 TP304L, EXTREMOS BISELADOS', acc: 'ASTM A403 WP304L, BW', brida: 'ASTM A182 F304L 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A351 CF3' },
+  'SCH 10S ASTM A312 TP316L':{ corto: 'SCH 10S Inox 316L',  sch: 'SCH 10S', tubo: 'ASTM A312 TP316L, EXTREMOS BISELADOS', acc: 'ASTM A403 WP316L, BW', brida: 'ASTM A182 F316L 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A351 CF3M' },
+  'SCH 40 ASTM A53 Galv':    { corto: 'SCH 40 Galvanizado', sch: 'SCH 40',  tubo: 'ASTM A53 Gr.B GALVANIZADO, ROSCADO NPT', acc: 'HIERRO MALEABLE GALV. 150#, ROSCADO NPT', brida: 'ROSCADA ASTM A105 GALV. 150# FF', val: 'ROSCADA NPT 600 WOG, BRONCE' }
+};
+/* modo: 'nodo' = se ubica en un nodo y orienta sus brazos con las tuberías conectadas;
+         'linea' = va sobre el eje de una tubería; 'extremo' = prefiere el final de un tramo;
+         'punto' = marca puntual (soldadura) */
+const TIPOS = {
+  pipe:        { cat: 'TUBERÍA',   mat: 'tubo',  nombre: 'TUBERÍA',                 corto: 'Tubería',     orden: 0 },
+  elbow90:     { cat: 'ACCESORIO', mat: 'acc',   nombre: 'CODO 90° RADIO LARGO',    corto: 'Codo 90° RL', orden: 1, modo: 'nodo' },
+  elbow45:     { cat: 'ACCESORIO', mat: 'acc',   nombre: 'CODO 45° RADIO LARGO',    corto: 'Codo 45°',    orden: 2, modo: 'nodo' },
+  tee:         { cat: 'ACCESORIO', mat: 'acc',   nombre: 'TEE RECTA',               corto: 'Tee recta',   orden: 3, modo: 'nodo' },
+  tee_red:     { cat: 'ACCESORIO', mat: 'acc',   nombre: 'TEE REDUCTORA',           corto: 'Tee reductora', orden: 4, modo: 'nodo', reduce: true },
+  reducer:     { cat: 'ACCESORIO', mat: 'acc',   nombre: 'REDUCCIÓN CONCÉNTRICA',   corto: 'Red. concéntrica', orden: 5, modo: 'linea', reduce: true },
+  reducer_ecc: { cat: 'ACCESORIO', mat: 'acc',   nombre: 'REDUCCIÓN EXCÉNTRICA',    corto: 'Red. excéntrica',  orden: 6, modo: 'linea', reduce: true },
+  cap:         { cat: 'ACCESORIO', mat: 'acc',   nombre: 'CAP (TAPÓN)',             corto: 'Cap / Tapón', orden: 7, modo: 'extremo' },
+  flange_wn:   { cat: 'BRIDA',     mat: 'brida', nombre: 'BRIDA WELDING NECK',      corto: 'Brida WN',    orden: 8, modo: 'extremo' },
+  flange_so:   { cat: 'BRIDA',     mat: 'brida', nombre: 'BRIDA SLIP-ON',           corto: 'Brida SO',    orden: 9, modo: 'extremo' },
+  v_gate:      { cat: 'VÁLVULA',   mat: 'val',   nombre: 'VÁLVULA DE COMPUERTA',    corto: 'V. Compuerta', orden: 10, modo: 'linea' },
+  v_globe:     { cat: 'VÁLVULA',   mat: 'val',   nombre: 'VÁLVULA DE GLOBO',        corto: 'V. Globo',    orden: 11, modo: 'linea' },
+  v_ball:      { cat: 'VÁLVULA',   mat: 'val',   nombre: 'VÁLVULA DE BOLA',         corto: 'V. Bola',     orden: 12, modo: 'linea' },
+  v_check:     { cat: 'VÁLVULA',   mat: 'val',   nombre: 'VÁLVULA CHEQUE (RETENCIÓN)', corto: 'V. Cheque', orden: 13, modo: 'linea' },
+  v_needle:    { cat: 'VÁLVULA',   mat: 'val',   nombre: 'VÁLVULA DE AGUJA',        corto: 'V. Aguja',    orden: 14, modo: 'linea' },
+  weld:        { cat: 'JUNTA',     mat: 'junta', nombre: 'JUNTA SOLDADA A TOPE',    corto: 'Soldadura (END)', orden: 20, modo: 'punto' }
+};
+const CONSUMIBLES = [
+  ['SOLDADURA E6010 Ø 1/8" (PASE DE RAÍZ)', 'KG'],
+  ['SOLDADURA E7018 Ø 1/8" (RELLENO Y PRESENTACIÓN)', 'KG'],
+  ['VARILLA TIG ER70S-2 Ø 3/32"', 'KG'],
+  ['VARILLA TIG ER308L Ø 3/32"', 'KG'],
+  ['VARILLA TIG ER316L Ø 3/32"', 'KG'],
+  ['GAS ARGÓN UAP (CILINDRO 9 m³)', 'UND'],
+  ['KIT TINTAS PENETRANTES (LIMPIADOR, PENETRANTE, REVELADOR)', 'GLB'],
+  ['DISCO DE CORTE 4-1/2"', 'UND'],
+  ['DISCO FLAP DE PULIR 4-1/2"', 'UND'],
+  ['EMPAQUE ESPIROMETÁLICO 150# RF', 'UND'],
+  ['ESPÁRRAGO ASTM A193 B7 CON 2 TUERCAS A194 2H', 'UND'],
+  ['CINTA TEFLÓN 3/4"', 'UND'],
+  ['PINTURA ANTICORROSIVA (PRIMER + ACABADO)', 'GLB']
+];
+const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG'];
+
+/* ---------- 3. Estado global único (single source of truth) ---------- */
+const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
+const estado = {
+  cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
+              servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
+  escala: 0.5,          // metros por paso de grilla
+  components: [],       // { id, category, type, nps, schedule, length, lengthManual, coords, rotation, npsRed }
+  consumibles: [],      // { id, uni, desc, cant }
+  ajustes: {}           // ajustes manuales de cantidad en el BOM, por clave de grupo
+};
+let historial = [], rehacerPila = [];
+let herramienta = 'pipe', rotacionActual = 30, seleccion = null, zoom = 1;
+let trazo = null;            // trazado de tubería en curso
+let ultimoBOM = [];
+
+const $ = id => document.getElementById(id);
+const svg = $('iso-svg'), vp = $('viewport'), hoja = $('a3-container'), envoltura = $('a3-wrapper');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nuevoId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const r2 = n => Math.round(n * 100) / 100;
+const f2 = n => Number(n).toFixed(2);
+const npsNum = s => { const t = String(s).replace('"', '').trim(); const m = t.match(/^(\d+)-(\d+)\/(\d+)$/);
+  if (m) return +m[1] + m[2] / m[3]; const f = t.match(/^(\d+)\/(\d+)$/); return f ? f[1] / f[2] : parseFloat(t) || 0; };
+const hoyISO = () => { const d = new Date(), z = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; };
+
+/* ---------- 4. Geometría isométrica ---------- */
+const aPantalla = ([p, q]) => ({ x: ORIGEN.x + p * U.x + q * V.x, y: ORIGEN.y + p * U.y + q * V.y });
+function aRed(x, y) {
+  const a = (x - ORIGEN.x) / (C30 * PASO_PX);   // p − q
+  const b = -(y - ORIGEN.y) / (0.5 * PASO_PX);  // p + q
+  return [(a + b) / 2, (b - a) / 2];
+}
+/* Nodo de la red triangular más cercano: está entre las 4 esquinas de la celda */
+function nodoMasCercano(x, y) {
+  const [p, q] = aRed(x, y); let mejor = null, dmin = Infinity;
+  for (const pp of [Math.floor(p), Math.ceil(p)]) for (const qq of [Math.floor(q), Math.ceil(q)]) {
+    const s = aPantalla([pp, qq]), d = Math.hypot(s.x - x, s.y - y);
+    if (d < dmin) { dmin = d; mejor = [pp, qq]; }
+  }
+  return mejor;
+}
+const igual = (A, B) => Math.abs(A[0] - B[0]) < 1e-6 && Math.abs(A[1] - B[1]) < 1e-6;
+const unitAng = ang => ({ x: Math.cos(ang * Math.PI / 180), y: -Math.sin(ang * Math.PI / 180) });
+const normAng = a => ((a % 360) + 360) % 360;
+const esVertical = ang => normAng(ang) === 90 || normAng(ang) === 270;
+/* Si B está sobre un eje isométrico desde A devuelve { ang, d, pasos }, si no null */
+function dirEntre(A, B) {
+  const dp = B[0] - A[0], dq = B[1] - A[1];
+  for (const D of DIRS) {
+    const [a, b] = D.d;
+    const n = a !== 0 ? dp / a : dq / b;
+    if (n <= 1e-6) continue;
+    if (Math.abs(dp - n * a) > 1e-6 || Math.abs(dq - n * b) > 1e-6) continue;
+    return { ang: D.ang, d: D.d, pasos: n };
+  }
+  return null;
+}
+/* Perpendicular por defecto: tramo horizontal → vertical; tramo vertical → eje N-S */
+const perpDefecto = ang => esVertical(ang) ? 30 : 90;
+
+/* ---------- 5. Imantación (snapping) ---------- */
+const tuberias = () => estado.components.filter(c => c.type === 'pipe');
+function puertos() {
+  const lista = [];
+  for (const c of estado.components) for (const P of c.coords) if (!lista.some(Q => igual(P, Q))) lista.push(P);
+  return lista;
+}
+function puertoCercano(pt, R) {
+  let mejor = null, dmin = R;
+  for (const P of puertos()) { const s = aPantalla(P), d = Math.hypot(s.x - pt.x, s.y - pt.y); if (d <= dmin) { dmin = d; mejor = P; } }
+  return mejor;
+}
+function snapInicio(pt, R) {
+  const P = puertoCercano(pt, R);
+  return P ? { P, iman: true } : { P: nodoMasCercano(pt.x, pt.y), iman: false };
+}
+/* Bloqueo axial: proyecta el vector inicio→cursor sobre el eje isométrico más cercano
+   (30/90/150/210/270/330°) y lo ajusta a un número entero de pasos de grilla */
+function bloqueoAxial(A, pt, R) {
+  const P = puertoCercano(pt, R);
+  if (P && !igual(P, A)) { const di = dirEntre(A, P); if (di) return { fin: P, ...di, iman: true }; }
+  const s = aPantalla(A), w = { x: pt.x - s.x, y: pt.y - s.y };
+  let mejor = DIRS[0], dmax = -Infinity;
+  for (const D of DIRS) { const u = unitAng(D.ang), dot = w.x * u.x + w.y * u.y; if (dot > dmax) { dmax = dot; mejor = D; } }
+  const n = Math.max(0, Math.round(dmax / PASO_PX));
+  return { fin: [A[0] + n * mejor.d[0], A[1] + n * mejor.d[1]], ang: mejor.ang, d: mejor.d, pasos: n, iman: false };
+}
+/* Tubería más cercana al cursor: posición en medios pasos y ángulo del eje */
+function tuberiaCercana(pt, R) {
+  let mejor = null, dmin = R;
+  for (const c of tuberias()) {
+    const A = aPantalla(c.coords[0]), B = aPantalla(c.coords[1]);
+    const dx = B.x - A.x, dy = B.y - A.y, L2 = dx * dx + dy * dy; if (!L2) continue;
+    const t = Math.max(0, Math.min(1, ((pt.x - A.x) * dx + (pt.y - A.y) * dy) / L2));
+    const d = Math.hypot(pt.x - (A.x + t * dx), pt.y - (A.y + t * dy));
+    if (d < dmin) { dmin = d; mejor = { c, t }; }
+  }
+  if (!mejor) return null;
+  const di = dirEntre(mejor.c.coords[0], mejor.c.coords[1]); if (!di) return null;
+  const k = Math.round(mejor.t * di.pasos * 2) / 2, A = mejor.c.coords[0];
+  return { c: mejor.c, k, pasos: di.pasos, ang: di.ang, P: [A[0] + k * di.d[0], A[1] + k * di.d[1]] };
+}
+/* Direcciones (ángulos) de las tuberías que salen de un nodo P */
+function brazos(P) {
+  const angs = [], add = a => { a = normAng(a); if (!angs.includes(a)) angs.push(a); };
+  for (const c of tuberias()) {
+    const [A, B] = c.coords;
+    if (igual(A, P)) { const d = dirEntre(A, B); d && add(d.ang); }
+    else if (igual(B, P)) { const d = dirEntre(B, A); d && add(d.ang); }
+    else { const d = dirEntre(A, P), tot = dirEntre(A, B); if (d && tot && d.ang === tot.ang && d.pasos < tot.pasos) { add(d.ang); add(d.ang + 180); } }
+  }
+  return angs;
+}
+const radioCaptura = e => ((e && e.pointerType === 'touch') ? 22 : 12) / zoom;
+function puntoSVG(e) {
+  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+  return pt.matrixTransform(svg.getScreenCTM().inverse());
+}
+
+/* ---------- 6. Simbología vectorial (coordenadas locales: x = eje del tubo) ---------- */
+const MONO_V = '<polygon points="-11,-7 -11,7 11,-7 11,7" class="sb"/>';
+const SIM = {
+  v_gate:   MONO_V + '<path d="M0 0V-13M-6 -13H6" class="s"/>',
+  v_globe:  MONO_V + '<circle r="4" class="sn"/><path d="M0 -4V-13M-6 -13H6" class="s"/>',
+  v_ball:   MONO_V + '<circle r="4.5" class="sb"/><path d="M0 -4.5V-12H9" class="s"/>',
+  v_check:  '<polygon points="-11,-7 -11,7 11,-7 11,7" class="sb"/><polygon points="11,-7 11,7 0,0" class="sn"/><path d="M-9 -12H7M3 -15L7 -12L3 -9" class="s"/>',
+  v_needle: MONO_V + '<path d="M0 0V-14M-5 -14H5" class="s"/><polygon points="-3.5,-5 3.5,-5 0,1" class="sn"/>',
+  reducer:     '<polygon points="-10,-7 10,-3.5 10,3.5 -10,7" class="sb"/>',
+  reducer_ecc: '<polygon points="-10,-7 10,-7 10,0 -10,7" class="sb"/>',
+  flange_wn: '<polygon points="-11,-2.5 -2,-6 -2,6 -11,2.5" class="sb"/><path d="M-2 -10V10M2 -10V10" class="s" style="stroke-width:2.2"/><circle cx="-11" r="2.2" class="sn"/>',
+  flange_so: '<path d="M-2 -10V10M2 -10V10" class="s" style="stroke-width:2.2"/><circle cx="-4.5" cy="-4" r="1.8" class="sn"/><circle cx="-4.5" cy="4" r="1.8" class="sn"/>',
+  cap: '<path d="M0 -7A7 7 0 0 1 0 7Z" class="sb"/><circle r="2.2" class="sn"/>'
+};
+/* Iconos del panel (vista frontal simple) */
+const ICONO_NODO = {
+  elbow90: '<path d="M-14 8 0 0 0 -16" class="s"/><circle cx="-14" cy="8" r="2.4" class="sn"/><circle cx="0" cy="-16" r="2.4" class="sn"/>',
+  elbow45: '<path d="M-14 8 0 0 10 -12" class="s"/><circle cx="-14" cy="8" r="2.4" class="sn"/><circle cx="10" cy="-12" r="2.4" class="sn"/>',
+  tee: '<path d="M-14 8 14 -8M0 0V-15" class="s"/><circle cx="-14" cy="8" r="2.4" class="sn"/><circle cx="14" cy="-8" r="2.4" class="sn"/><circle cx="0" cy="-15" r="2.4" class="sn"/>',
+  tee_red: '<path d="M-14 8 14 -8M0 0V-15" class="s"/><circle cx="-14" cy="8" r="2.4" class="sn"/><circle cx="14" cy="-8" r="2.4" class="sn"/><circle cx="0" cy="-15" r="1.6" class="sn"/><text x="5" y="-9" font-size="9" font-weight="700">R</text>',
+  weld: '<path d="M-15 0H15" class="s"/><circle r="4.5" class="sn"/>'
+};
+/* Matriz local→pantalla: eje x sobre el tubo; eje y vertical (o N-S si el tubo es vertical) → símbolo en 2.5D */
+function matrizSimbolo(ang, s) {
+  const e = unitAng(ang), n = esVertical(ang) ? { x: C30, y: 0.5 } : { x: 0, y: 1 };
+  return `matrix(${e.x.toFixed(4)},${e.y.toFixed(4)},${n.x.toFixed(4)},${n.y.toFixed(4)},${s.x.toFixed(2)},${s.y.toFixed(2)})`;
+}
+
+/* ---------- 7. Render del lienzo ---------- */
+function prepararLienzo() {
+  const z = $('zona-dibujo');
+  LIENZO = { w: z.clientWidth, h: z.clientHeight };
+  svg.setAttribute('viewBox', `0 0 ${LIENZO.w} ${LIENZO.h}`);
+  /* origen de la red cerca del centro-izquierda del área de dibujo */
+  ORIGEN = { x: Math.round(LIENZO.w * 0.45), y: Math.round(LIENZO.h * 0.62) };
+  /* malla isométrica paramétrica con <pattern>: celda 2·cos30·paso × paso */
+  const W = 2 * C30 * PASO_PX, H = PASO_PX, pat = $('malla-iso');
+  pat.setAttribute('width', W.toFixed(4)); pat.setAttribute('height', H);
+  pat.setAttribute('patternTransform', `translate(${ORIGEN.x} ${ORIGEN.y})`);
+  pat.innerHTML = `<g stroke="#b6e3f4" stroke-width="0.55" fill="none">
+      <line x1="0" y1="0" x2="0" y2="${H}"/><line x1="${W / 2}" y1="0" x2="${W / 2}" y2="${H}"/>
+      <line x1="0" y1="${H}" x2="${W}" y2="0"/><line x1="0" y1="0" x2="${W}" y2="${H}"/></g>
+    <circle cx="0" cy="0" r="0.9" fill="#7dd3fc"/><circle cx="${W / 2}" cy="${H / 2}" r="0.9" fill="#7dd3fc"/>`;
+  /* rosa de orientación: Norte sobre el eje de 30° */
+  const n = { x: LIENZO.w - 70, y: 60 }, u = unitAng(30);
+  $('capa-norte').innerHTML = `<g stroke="#000" stroke-width="1.6" fill="none">
+      <line x1="${n.x - u.x * 26}" y1="${n.y - u.y * 26}" x2="${n.x + u.x * 26}" y2="${n.y + u.y * 26}"/>
+      <polygon points="${n.x + u.x * 30},${n.y + u.y * 30} ${n.x + u.x * 18 + 0.5 * 5},${n.y + u.y * 18 + C30 * 5} ${n.x + u.x * 18 - 0.5 * 5},${n.y + u.y * 18 - C30 * 5}" fill="#000"/></g>
+    <circle cx="${n.x}" cy="${n.y}" r="30" fill="none" stroke="#000" stroke-width="1"/>
+    <text x="${n.x + u.x * 42}" y="${n.y + u.y * 42}" font-size="15" font-weight="900" text-anchor="middle" dominant-baseline="middle">N</text>`;
+}
+const longitudTubo = c => c.lengthManual ? Number(c.length) || 0 : r2((dirEntre(c.coords[0], c.coords[1])?.pasos || 0) * estado.escala);
+
+function renderLienzo() {
+  let tubos = '', cotas = '', simbolos = '', nSold = 0;
+  for (const c of estado.components) {
+    const sel = c.id === seleccion ? ' selec' : '';
+    if (c.type === 'pipe') {
+      const A = aPantalla(c.coords[0]), B = aPantalla(c.coords[1]), di = dirEntre(c.coords[0], c.coords[1]);
+      tubos += `<g class="cmp${sel}" data-id="${c.id}"><line class="hit" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke-width="14"/>
+        <line class="tubo" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="#000" stroke-width="3" stroke-linecap="round"/></g>`;
+      if (di) {
+        const m = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 }, a = normAng(di.ang);
+        const rot = esVertical(a) ? -90 : (a === 30 || a === 210) ? -30 : 30;
+        const off = esVertical(a) ? { x: -10, y: 0 } : { x: 0, y: -10 };
+        const txt = `${f2(longitudTubo(c))} m${c.lengthManual ? '*' : ''}`;
+        cotas += `<text class="cota" text-anchor="middle" transform="translate(${(m.x + off.x).toFixed(1)} ${(m.y + off.y).toFixed(1)}) rotate(${rot})">${txt}</text>`;
+      }
+      continue;
+    }
+    const P = aPantalla(c.coords[0]), T = TIPOS[c.type];
+    if (T.modo === 'nodo') { simbolos += simboloNodo(c, P, sel); continue; }
+    if (c.type === 'weld') {
+      nSold++;
+      simbolos += `<g class="cmp${sel}" data-id="${c.id}"><circle class="hit" cx="${P.x}" cy="${P.y}" r="11"/>
+        <circle cx="${P.x}" cy="${P.y}" r="4.2" fill="#000" stroke="#fff" stroke-width="1"/>
+        <text x="${P.x + 6}" y="${P.y - 6}" font-size="9.5" font-weight="700" fill="#b91c1c" paint-order="stroke" stroke="#fff" stroke-width="2.5">W${nSold}</text></g>`;
+      continue;
+    }
+    simbolos += `<g class="cmp${sel}" data-id="${c.id}" transform="${matrizSimbolo(c.rotation, P)}">
+      <rect class="hit" x="-14" y="-16" width="28" height="28"/>${SIM[c.type] || ''}</g>`;
+  }
+  $('capa-tuberia').innerHTML = tubos;
+  $('capa-simbolos').innerHTML = simbolos;
+  $('capa-cotas').innerHTML = cotas;
+  $('hud-count').textContent = estado.components.length;
+}
+/* Codos y tees: los brazos se orientan con las tuberías realmente conectadas al nodo */
+function simboloNodo(c, P, sel) {
+  const L = 0.42 * PASO_PX, br = brazos(c.coords[0]);
+  const pto = ang => { const u = unitAng(ang); return { x: P.x + u.x * L, y: P.y + u.y * L }; };
+  const punto = q => `<circle cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="2.5" fill="#000" stroke="#fff" stroke-width=".8"/>`;
+  let cuerpo = '', fin = [];
+  if (c.type === 'elbow90' || c.type === 'elbow45') {
+    let a1 = br[0] ?? c.rotation, a2 = br.find(a => a !== a1 && normAng(a - a1) !== 180);
+    if (a2 === undefined) {
+      const p = perpDefecto(a1);
+      if (c.type === 'elbow90') a2 = p;
+      else { const u = unitAng(a1 + 180), v = unitAng(p); a2 = Math.atan2(-(u.y + v.y), u.x + v.x) * 180 / Math.PI; }
+    }
+    const A1 = pto(a1), A2 = pto(a2); fin = [A1, A2];
+    cuerpo = `<path d="M${A1.x.toFixed(1)} ${A1.y.toFixed(1)}Q${P.x} ${P.y} ${A2.x.toFixed(1)} ${A2.y.toFixed(1)}" fill="none" stroke="#000" stroke-width="5.5"/>`;
+    if (c.type === 'elbow45') cuerpo += `<text x="${P.x + 7}" y="${P.y + 13}" font-size="8.5" font-weight="700">45°</text>`;
+  } else {
+    /* tee: corrida = par de brazos opuestos; ramal = el restante */
+    let run = null;
+    for (const a of br) if (br.includes(normAng(a + 180))) { run = a; break; }
+    if (run === null) run = br[0] ?? c.rotation;
+    const ramal = br.find(a => a !== normAng(run) && a !== normAng(run + 180)) ?? perpDefecto(run);
+    const R1 = pto(run), R2 = pto(run + 180), Bq = pto(ramal); fin = [R1, R2, Bq];
+    cuerpo = `<path d="M${R1.x.toFixed(1)} ${R1.y.toFixed(1)}L${R2.x.toFixed(1)} ${R2.y.toFixed(1)}M${P.x} ${P.y}L${Bq.x.toFixed(1)} ${Bq.y.toFixed(1)}" fill="none" stroke="#000" stroke-width="5.5"/>`;
+    if (c.type === 'tee_red') cuerpo += `<text x="${P.x + 7}" y="${P.y + 13}" font-size="8.5" font-weight="700">TR</text>`;
+  }
+  return `<g class="cmp${sel}" data-id="${c.id}"><circle class="hit" cx="${P.x}" cy="${P.y}" r="13"/>${cuerpo}${fin.map(punto).join('')}</g>`;
+}
+
+/* ---------- 8. Guías visuales (fantasma de trazado e indicador de imán) ---------- */
+function indicadorSnap(P, iman) {
+  const s = aPantalla(P);
+  return `<circle cx="${s.x}" cy="${s.y}" r="${iman ? 7 : 5}" fill="none" stroke="${iman ? '#16a34a' : '#f97316'}" stroke-width="2"/>
+          <circle cx="${s.x}" cy="${s.y}" r="1.6" fill="${iman ? '#16a34a' : '#f97316'}"/>`;
+}
+function actualizarHUD(ang, pasos, iman, manual) {
+  $('hud-angle').textContent = ang == null ? '—' : normAng(ang) + '°';
+  $('hud-length').textContent = f2(manual ?? (pasos || 0) * estado.escala) + ' m';
+  $('hud-snap').textContent = iman ? 'NODO (IMÁN)' : 'GRILLA ISO';
+}
+function dibujarFantasma(pt, R) {
+  const g = $('capa-guia');
+  if (!trazo) { const s = snapInicio(pt, R); g.innerHTML = indicadorSnap(s.P, s.iman); actualizarHUD(null, 0, s.iman); return; }
+  const r = bloqueoAxial(trazo.inicio, pt, R), A = aPantalla(trazo.inicio), B = aPantalla(r.fin);
+  g.innerHTML = `<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="#f59e0b" stroke-width="3" stroke-dasharray="7 5" stroke-linecap="round"/>
+    ${indicadorSnap(trazo.inicio, true)}${indicadorSnap(r.fin, r.iman)}
+    <text x="${B.x + 10}" y="${B.y - 10}" font-size="12" font-weight="800" fill="#b45309" paint-order="stroke" stroke="#fff" stroke-width="3">${f2(r.pasos * estado.escala)} m · ${r.ang}°</text>`;
+  actualizarHUD(r.ang, r.pasos, r.iman);
+}
+function previsualizarSimbolo(pt, R) {
+  const pos = posicionSimbolo(herramienta, pt, R);
+  $('capa-guia').innerHTML = indicadorSnap(pos.P, pos.iman);
+  actualizarHUD(pos.rot, 0, pos.iman);
+}
+const limpiarGuia = () => { $('capa-guia').innerHTML = ''; };
+
+/* ---------- 9. Historial (deshacer / rehacer) y persistencia ---------- */
+const instantanea = () => JSON.stringify({ components: estado.components, consumibles: estado.consumibles, ajustes: estado.ajustes });
+function registrar() { historial.push(instantanea()); if (historial.length > 200) historial.shift(); rehacerPila = []; }
+function restaurar(s) { const o = JSON.parse(s); estado.components = o.components; estado.consumibles = o.consumibles; estado.ajustes = o.ajustes; seleccion = null; actualizarTodo(); }
+function undoAction() {
+  if (trazo) { terminarTrazo(); return; }
+  if (!historial.length) { aviso('Nada para deshacer'); return; }
+  rehacerPila.push(instantanea()); restaurar(historial.pop());
+}
+function redoAction() {
+  if (!rehacerPila.length) { aviso('Nada para rehacer'); return; }
+  historial.push(instantanea()); restaurar(rehacerPila.pop());
+}
+let tGuardar;
+function guardarLocal() {
+  clearTimeout(tGuardar);
+  tGuardar = setTimeout(() => {
+    try { localStorage.setItem(CLAVE_LOCAL, JSON.stringify(estado)); }
+    catch (e) { aviso('No se pudo guardar el borrador en este equipo', 'error'); }
+  }, 250);
+}
+function cargarLocal() {
+  try {
+    const o = JSON.parse(localStorage.getItem(CLAVE_LOCAL) || 'null');
+    if (o && Array.isArray(o.components)) aplicarProyecto(o);
+  } catch (e) { /* borrador dañado: se ignora */ }
+}
+function aplicarProyecto(o) {
+  Object.assign(estado.cabecera, o.cabecera || {});
+  estado.escala = Number(o.escala) > 0 ? Number(o.escala) : 0.5;
+  estado.components = (o.components || []).filter(c => TIPOS[c.type] && Array.isArray(c.coords));
+  estado.consumibles = Array.isArray(o.consumibles) ? o.consumibles : [];
+  estado.ajustes = o.ajustes && typeof o.ajustes === 'object' ? o.ajustes : {};
+}
+function actualizarTodo() {
+  renderLienzo(); recalculateBOM(); renderPanelSeleccion(); guardarLocal();
+}
+/* Ejecuta una modificación del estado con registro en historial */
+function commit(fn) { registrar(); fn(); actualizarTodo(); }
+
+/* ---------- 10. Creación de componentes ---------- */
+function crearComponente(tipo, coords, rot, extra) {
+  return Object.assign({ id: nuevoId(), category: TIPOS[tipo].cat, type: tipo, nps: $('spec-nps').value, schedule: $('spec-mat').value,
+    length: 0, lengthManual: false, coords, rotation: normAng(rot) }, extra || {});
+}
+function crearTuberia(A, B) {
+  const c = crearComponente('pipe', [A, B], dirEntre(A, B).ang);
+  c.length = longitudTubo(c);
+  commit(() => estado.components.push(c));
+  if ($('chk-manual-len').checked) pedirLongitud(c.id);
+}
+function pedirLongitud(id) {
+  const c = estado.components.find(x => x.id === id); if (!c) return;
+  const pasos = dirEntre(c.coords[0], c.coords[1]).pasos;
+  abrirModal({
+    titulo: `Longitud real del tramo (${pasos} paso${pasos === 1 ? '' : 's'} de grilla)`,
+    html: `<label>Longitud en metros</label><input id="m-long" type="number" step="0.001" min="0" inputmode="decimal" value="${f2(longitudTubo(c))}">
+           <p>Deje el valor sugerido para usar la escala de la grilla (${estado.escala} m/paso). Escriba la cota medida en campo para fijarla.</p>`,
+    alAbrir: () => { const i = $('m-long'); i.focus(); i.select(); },
+    alAceptar: () => {
+      const v = parseFloat(String($('m-long').value).replace(',', '.'));
+      if (!(v > 0)) { aviso('Escriba una longitud mayor que cero', 'error'); return false; }
+      const auto = r2(pasos * estado.escala);
+      c.lengthManual = Math.abs(v - auto) > 1e-9; c.length = c.lengthManual ? v : auto;
+      actualizarTodo();
+    }
+  });
+}
+/* Calcula dónde y con qué orientación queda un símbolo según el cursor */
+function posicionSimbolo(tipo, pt, R) {
+  const T = TIPOS[tipo];
+  if (T.modo === 'nodo' || T.modo === 'punto') {
+    const pp = puertoCercano(pt, R);
+    if (pp) { const br = brazos(pp); return { P: pp, rot: br[0] ?? rotacionActual, iman: true }; }
+    const tb = tuberiaCercana(pt, R * 1.5);
+    if (tb) {
+      if (T.modo === 'punto') return { P: tb.P, rot: tb.ang, iman: true };
+      const k = Math.round(tb.k), A = tb.c.coords[0], d = dirEntre(A, tb.c.coords[1]).d;
+      return { P: [A[0] + k * d[0], A[1] + k * d[1]], rot: tb.ang, iman: true };
+    }
+    return { P: nodoMasCercano(pt.x, pt.y), rot: rotacionActual, iman: false };
+  }
+  const tb = tuberiaCercana(pt, R * 1.5);
+  if (tb) {
+    let rot = tb.ang;
+    if (T.modo === 'extremo') {
+      /* en los extremos el símbolo mira hacia afuera del tramo */
+      if (tb.k <= 0.5 * tb.pasos) { if (tb.k <= 1) return { P: tb.c.coords[0], rot: tb.ang + 180, iman: true }; }
+      else if (tb.pasos - tb.k <= 1) return { P: tb.c.coords[1], rot: tb.ang, iman: true };
+    }
+    return { P: tb.P, rot, iman: true };
+  }
+  const pp = puertoCercano(pt, R);
+  if (pp) { const br = brazos(pp); return { P: pp, rot: br[0] ?? rotacionActual, iman: true }; }
+  return { P: nodoMasCercano(pt.x, pt.y), rot: rotacionActual, iman: false };
+}
+function colocarSimbolo(tipo, pt, R) {
+  const pos = posicionSimbolo(tipo, pt, R), T = TIPOS[tipo];
+  const c = crearComponente(tipo, [pos.P], pos.rot);
+  if (!T.reduce) { commit(() => estado.components.push(c)); aviso(`${T.corto} colocado`, 'ok', 900); return; }
+  const i = NPS_LISTA.indexOf(c.nps), sugerido = NPS_LISTA[Math.max(0, i - 1)];
+  abrirModal({
+    titulo: `${T.corto}: diámetro reducido`,
+    html: `<label>Diámetro mayor</label><input value="Ø ${esc(c.nps)}" disabled>
+           <label>Diámetro menor (${tipo === 'tee_red' ? 'ramal' : 'salida'})</label>
+           <select id="m-red">${NPS_LISTA.map(n => `<option${n === sugerido ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>`,
+    alAceptar: () => {
+      c.npsRed = $('m-red').value;
+      if (npsNum(c.npsRed) >= npsNum(c.nps)) { aviso('El diámetro menor debe ser inferior al mayor', 'error'); return false; }
+      commit(() => estado.components.push(c));
+    }
+  });
+}
+
+/* ---------- 11. Motor del Listado de Materiales (BOM) ---------- */
+function descripcion(c) {
+  const sp = SPECS[c.schedule] || { sch: '', tubo: c.schedule, acc: c.schedule, brida: c.schedule, val: c.schedule };
+  const T = TIPOS[c.type], med = T.reduce && c.npsRed ? `Ø ${c.nps} x ${c.npsRed}` : `Ø ${c.nps}`;
+  switch (T.mat) {
+    case 'tubo':  return `TUBERÍA ${med} ${sp.sch} ${sp.tubo}`;
+    case 'acc':   return `${T.nombre} ${med} ${sp.sch} ${sp.acc}`;
+    case 'brida': return `${T.nombre} ${med} ${c.type === 'flange_wn' ? sp.sch + ' ' : ''}${sp.brida}`;
+    case 'val':   return `${T.nombre} ${med} ${sp.val}`;
+    default:      return `${T.nombre} ${med} ${sp.sch} — INSPECCIÓN END (VT/PT)`;
+  }
+}
+/* Agrupa componentes idénticos (tipo + diámetro + especificación): tubería en ML, el resto en UND */
+function recalculateBOM() {
+  const grupos = new Map();
+  for (const c of estado.components) {
+    const T = TIPOS[c.type], key = [c.type, c.nps, c.npsRed || '', c.schedule].join('|');
+    const g = grupos.get(key) || { key, orden: T.orden, nps: npsNum(c.nps), uni: c.type === 'pipe' ? 'ML' : 'UND', desc: descripcion(c), cant: 0 };
+    g.cant += c.type === 'pipe' ? longitudTubo(c) : 1;
+    grupos.set(key, g);
+  }
+  const filas = [...grupos.values()].sort((a, b) => a.orden - b.orden || b.nps - a.nps || a.desc.localeCompare(b.desc));
+  for (const f of filas) {
+    f.calc = f.uni === 'ML' ? r2(f.cant) : f.cant;
+    f.ajustado = estado.ajustes[f.key] != null;
+    f.cant = f.ajustado ? estado.ajustes[f.key] : f.calc;
+  }
+  for (const k of estado.consumibles) filas.push({ key: 'CONS|' + k.id, id: k.id, uni: k.uni, desc: k.desc, cant: k.cant, consumible: true });
+  ultimoBOM = filas;
+  renderBOM(filas);
+}
+function renderBOM(filas) {
+  const porCol = Math.max(11, Math.ceil(filas.length / 2));
+  const alto = Math.max(9, Math.min(17, Math.floor((238 - 22 - 18 - 2) / porCol)));
+  const cols = [filas.slice(0, porCol), filas.slice(porCol)];
+  let n = 0;
+  $('bom-cols').style.setProperty('--fila', alto + 'px');
+  $('bom-cols').style.fontSize = alto < 14 ? '9px' : '';
+  $('bom-cols').innerHTML = cols.map(col => {
+    const cuerpo = col.map(f => {
+      n++;
+      const cant = f.uni === 'ML' || f.uni === 'm' ? f2(f.cant) : String(f.cant);
+      if (f.consumible) return `<tr data-key="${esc(f.key)}"><td class="c">${n}</td>
+        <td class="c"><select data-cons="uni" aria-label="Unidad">${UNIDADES.map(u => `<option${u === f.uni ? ' selected' : ''}>${u}</option>`).join('')}</select></td>
+        <td><div style="display:flex;height:100%"><input data-cons="desc" value="${esc(f.desc)}" aria-label="Descripción"><button class="quitar no-print" data-quitar="${f.id}" title="Quitar consumible">×</button></div></td>
+        <td class="r"><input data-cons="cant" value="${esc(cant)}" inputmode="decimal" aria-label="Cantidad"></td></tr>`;
+      return `<tr data-key="${esc(f.key)}" class="${f.ajustado ? 'ajustado' : ''}"><td class="c">${n}</td><td class="c">${f.uni}</td>
+        <td title="${esc(f.desc)}">${esc(f.desc)}</td>
+        <td class="r"><input data-ajuste="1" value="${esc(cant)}" inputmode="decimal" title="${f.ajustado ? 'Ajuste manual (calculado: ' + f.calc + '). Deje vacío para volver al cálculo.' : 'Cantidad calculada; puede ajustarla'}" aria-label="Cantidad"></td></tr>`;
+    }).join('');
+    const vacias = Array.from({ length: Math.max(0, porCol - col.length) }, () => { n++; return `<tr><td class="c" style="color:#94a3b8">${n}</td><td></td><td></td><td></td></tr>`; }).join('');
+    return `<div><table><colgroup><col style="width:38px"><col style="width:52px"><col><col style="width:78px"></colgroup>
+      <thead><tr><th>ITEM</th><th>UNI</th><th>DESCRIPCIÓN TÉCNICA</th><th>CANTIDAD</th></tr></thead><tbody>${cuerpo}${vacias}</tbody></table></div>`;
+  }).join('');
+}
+$('bom-cols').addEventListener('change', e => {
+  const tr = e.target.closest('tr[data-key]'); if (!tr) return;
+  const key = tr.dataset.key, v = String(e.target.value).trim().replace(',', '.');
+  if (e.target.dataset.ajuste) {
+    commit(() => {
+      if (v === '') delete estado.ajustes[key];
+      else if (isNaN(Number(v)) || Number(v) < 0) aviso('Cantidad no válida', 'error');
+      else estado.ajustes[key] = Number(v);
+    });
+    return;
+  }
+  const campo = e.target.dataset.cons; if (!campo) return;
+  const k = estado.consumibles.find(x => 'CONS|' + x.id === key); if (!k) return;
+  commit(() => { k[campo] = campo === 'cant' ? (Number(v) >= 0 ? Number(v) : k.cant) : e.target.value; });
+});
+$('bom-cols').addEventListener('click', e => {
+  const id = e.target.dataset.quitar; if (!id) return;
+  commit(() => { estado.consumibles = estado.consumibles.filter(x => x.id !== id); });
+});
+function openConsumableModal() {
+  toggleSidebar(false);
+  abrirModal({
+    titulo: 'Añadir consumible al listado',
+    html: `<label>Consumible</label><select id="m-cons"><option value="">— Otro (escribir) —</option>${CONSUMIBLES.map((c, i) => `<option value="${i}">${esc(c[0])}</option>`).join('')}</select>
+      <label>Descripción</label><input id="m-desc" placeholder="Ej: Soldadura E7018 Ø 1/8&quot;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div><label>Unidad</label><select id="m-uni">${UNIDADES.map(u => `<option>${u}</option>`).join('')}</select></div>
+      <div><label>Cantidad</label><input id="m-cant" type="number" step="any" min="0" value="1" inputmode="decimal"></div></div>`,
+    alAbrir: () => { $('m-cons').onchange = () => { const c = CONSUMIBLES[$('m-cons').value]; if (c) { $('m-desc').value = c[0]; $('m-uni').value = c[1]; } }; },
+    alAceptar: () => {
+      const desc = $('m-desc').value.trim(), cant = Number(String($('m-cant').value).replace(',', '.'));
+      if (!desc) { aviso('Escriba la descripción', 'error'); return false; }
+      if (!(cant >= 0)) { aviso('Cantidad no válida', 'error'); return false; }
+      commit(() => estado.consumibles.push({ id: nuevoId(), uni: $('m-uni').value, desc: desc.toUpperCase(), cant }));
+    }
+  });
+}
+
+/* ---------- 12. Selección y panel de propiedades ---------- */
+function seleccionar(id) { seleccion = id; renderLienzo(); renderPanelSeleccion(); }
+function renderPanelSeleccion() {
+  const p = $('panel-sel'), c = estado.components.find(x => x.id === seleccion);
+  if (!c) { seleccion = null; p.hidden = true; return; }
+  const T = TIPOS[c.type], opNps = v => NPS_LISTA.map(n => `<option${n === v ? ' selected' : ''}>${esc(n)}</option>`).join('');
+  p.innerHTML = `<h4><span>${esc(T.corto)}</span><button class="btn" onclick="seleccionar(null)" aria-label="Cerrar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-x"/></svg></button></h4>
+    <label>Diámetro (NPS)</label><select data-p="nps">${opNps(c.nps)}</select>
+    ${T.reduce ? `<label>Diámetro menor</label><select data-p="npsRed">${opNps(c.npsRed)}</select>` : ''}
+    <label>Especificación</label><select data-p="schedule">${Object.keys(SPECS).map(s => `<option value="${esc(s)}"${s === c.schedule ? ' selected' : ''}>${esc(SPECS[s].corto)}</option>`).join('')}</select>
+    ${c.type === 'pipe' ? `<label>Longitud (m)${c.lengthManual ? ' · manual' : ' · por grilla'}</label>
+      <div style="display:flex;gap:5px"><input data-p="length" type="number" step="0.001" min="0" inputmode="decimal" value="${f2(longitudTubo(c))}">
+      <button class="btn" data-acc="auto" title="Volver a la longitud por grilla">Grilla</button></div>` : ''}
+    <div class="acc">${c.type !== 'pipe' && TIPOS[c.type].modo !== 'punto' ? '<button class="btn" data-acc="rotar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-rotate"/></svg>Rotar</button>' : ''}
+      <button class="btn peligro" data-acc="borrar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-trash"/></svg>Borrar</button></div>`;
+  p.hidden = false;
+}
+$('panel-sel').addEventListener('change', e => {
+  const k = e.target.dataset.p, c = estado.components.find(x => x.id === seleccion); if (!k || !c) return;
+  if (k === 'length') {
+    const v = parseFloat(String(e.target.value).replace(',', '.'));
+    if (!(v > 0)) { aviso('Longitud no válida', 'error'); renderPanelSeleccion(); return; }
+    commit(() => { c.length = v; c.lengthManual = true; });
+  } else commit(() => { c[k] = e.target.value; });
+});
+$('panel-sel').addEventListener('click', e => {
+  const b = e.target.closest('[data-acc]'), c = estado.components.find(x => x.id === seleccion); if (!b || !c) return;
+  if (b.dataset.acc === 'borrar') deleteSelected();
+  if (b.dataset.acc === 'rotar') commit(() => { c.rotation = normAng(c.rotation + 60); });
+  if (b.dataset.acc === 'auto') commit(() => { c.lengthManual = false; c.length = longitudTubo(c); });
+});
+function deleteSelected() {
+  if (!seleccion) { aviso('Seleccione primero un componente (herramienta Tocar)'); return; }
+  const id = seleccion;
+  commit(() => { estado.components = estado.components.filter(c => c.id !== id); seleccion = null; });
+}
+
+/* ---------- 13. Herramientas y eventos de puntero (ratón, dedo, lápiz) ---------- */
+const PISTAS = {
+  pan: 'Mover: arrastre la hoja · pellizque para zoom',
+  select: 'Tocar: seleccione un componente para editarlo',
+  pipe: 'Tubería: arrastre, o toque inicio y toque cada punto'
+};
+function setActiveTool(t) {
+  if (trazo) terminarTrazo();
+  herramienta = t;
+  document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('activa', b.dataset.tool === t));
+  document.querySelectorAll('[data-rapida]').forEach(b => b.classList.toggle('activa', b.dataset.rapida === t));
+  svg.classList.toggle('modo-pan', t === 'pan'); svg.classList.toggle('modo-sel', t === 'select');
+  if (t !== 'select') seleccionar(null);
+  limpiarGuia(); actualizarBarraEstado();
+  if (window.innerWidth < 1024) toggleSidebar(false);
+}
+function actualizarBarraEstado() {
+  $('pista').textContent = trazo && trazo.cadena ? 'Toque el siguiente punto · toque el mismo punto para terminar'
+    : PISTAS[herramienta] || `${TIPOS[herramienta].corto}: toque sobre la tubería o el nodo`;
+  $('btn-terminar').hidden = !(trazo && trazo.cadena);
+}
+function terminarTrazo() { trazo = null; limpiarGuia(); actualizarHUD(null, 0, false); actualizarBarraEstado(); }
+function cycleSymbolRotation() {
+  rotacionActual = ROTACIONES[(ROTACIONES.indexOf(rotacionActual) + 1) % ROTACIONES.length];
+  $('rot-label').textContent = rotacionActual + '°';
+  const c = estado.components.find(x => x.id === seleccion);
+  if (c && c.type !== 'pipe') commit(() => { c.rotation = rotacionActual; });
+}
+
+const punteros = new Map();
+let pinch = null, arrastreHoja = null, gestoMultiple = false, simboloPendiente = null;
+const distP = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const medioP = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+
+svg.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'mouse' && e.button > 1) return;
+  try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+  punteros.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (punteros.size >= 2) {
+    /* dos dedos: zoom/desplazamiento; se cancela el gesto de dibujo en curso */
+    const [a, b] = [...punteros.values()];
+    pinch = { d0: distP(a, b) || 1, z0: zoom, m: medioP(a, b) }; gestoMultiple = true; arrastreHoja = null; simboloPendiente = null;
+    if (trazo) { trazo.down = null; if (!trazo.cadena) terminarTrazo(); }
+    return;
+  }
+  e.preventDefault();
+  const pt = puntoSVG(e), R = radioCaptura(e);
+  if (herramienta === 'pan' || e.button === 1) { arrastreHoja = { x: e.clientX, y: e.clientY }; svg.style.cursor = 'grabbing'; return; }
+  if (herramienta === 'select') {
+    const g = e.target.closest('[data-id]');
+    if (g) seleccionar(g.dataset.id); else { seleccionar(null); arrastreHoja = { x: e.clientX, y: e.clientY }; }
+    return;
+  }
+  if (herramienta === 'pipe') {
+    if (!trazo) trazo = { inicio: snapInicio(pt, R).P, cadena: false, fresco: true };
+    else trazo.fresco = false;
+    trazo.down = { x: e.clientX, y: e.clientY }; trazo.movido = false;
+    dibujarFantasma(pt, R);
+    return;
+  }
+  /* símbolos: se colocan al soltar (si el dedo se desplaza, se mueve la hoja) */
+  simboloPendiente = { pt, R, x: e.clientX, y: e.clientY };
+  previsualizarSimbolo(pt, R);
+});
+svg.addEventListener('pointermove', e => {
+  if (punteros.has(e.pointerId)) punteros.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && punteros.size >= 2) {
+    const [a, b] = [...punteros.values()], m = medioP(a, b);
+    setZoom(pinch.z0 * distP(a, b) / pinch.d0, pinch.m.x, pinch.m.y);
+    vp.scrollLeft -= m.x - pinch.m.x; vp.scrollTop -= m.y - pinch.m.y; pinch.m = m;
+    return;
+  }
+  if (gestoMultiple) return;
+  if (simboloPendiente && Math.hypot(e.clientX - simboloPendiente.x, e.clientY - simboloPendiente.y) > 10) {
+    arrastreHoja = { x: simboloPendiente.x, y: simboloPendiente.y }; simboloPendiente = null; limpiarGuia();
+  }
+  if (arrastreHoja) {
+    vp.scrollLeft -= e.clientX - arrastreHoja.x; vp.scrollTop -= e.clientY - arrastreHoja.y;
+    arrastreHoja = { x: e.clientX, y: e.clientY }; return;
+  }
+  const pt = puntoSVG(e), R = radioCaptura(e);
+  if (herramienta === 'pipe') {
+    if (trazo && trazo.down && Math.hypot(e.clientX - trazo.down.x, e.clientY - trazo.down.y) > 8) trazo.movido = true;
+    if (e.pointerType === 'mouse' || trazo) dibujarFantasma(pt, R);
+  } else if (TIPOS[herramienta] && (e.pointerType === 'mouse' || punteros.size)) previsualizarSimbolo(pt, R);
+});
+function finPuntero(e, cancelado) {
+  punteros.delete(e.pointerId);
+  if (gestoMultiple) { if (punteros.size < 2) pinch = null; if (!punteros.size) gestoMultiple = false; return; }
+  if (arrastreHoja) { arrastreHoja = null; svg.style.cursor = ''; return; }
+  if (simboloPendiente) {
+    const sp = simboloPendiente; simboloPendiente = null;
+    if (!cancelado) colocarSimbolo(herramienta, sp.pt, sp.R);
+    if (e.pointerType !== 'mouse') limpiarGuia();
+    return;
+  }
+  if (herramienta !== 'pipe' || !trazo || !trazo.down) { if (e.pointerType !== 'mouse') limpiarGuia(); return; }
+  trazo.down = null;
+  if (cancelado) { if (!trazo.cadena) terminarTrazo(); return; }
+  const r = bloqueoAxial(trazo.inicio, puntoSVG(e), radioCaptura(e));
+  if (r.pasos >= 1) {
+    const ini = trazo.inicio;
+    if (trazo.fresco && trazo.movido) trazo = null;           // trazo por arrastre: un solo tramo
+    else { trazo.inicio = r.fin; trazo.cadena = true; }       // trazo por toques: continúa en cadena
+    crearTuberia(ini, r.fin);
+  } else if (trazo.cadena && !trazo.fresco) terminarTrazo();  // tocó el mismo punto: fin de la cadena
+  else trazo.cadena = true;                                    // primer toque: queda esperando el siguiente
+  if (trazo) { if (e.pointerType === 'mouse') dibujarFantasma(puntoSVG(e), radioCaptura(e)); else { limpiarGuia(); $('capa-guia').innerHTML = indicadorSnap(trazo.inicio, true); } }
+  actualizarBarraEstado();
+}
+svg.addEventListener('pointerup', e => finPuntero(e, false));
+svg.addEventListener('pointercancel', e => finPuntero(e, true));
+svg.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !trazo) limpiarGuia(); });
+svg.addEventListener('dblclick', () => { if (trazo) terminarTrazo(); });
+svg.addEventListener('contextmenu', e => { e.preventDefault(); if (trazo) terminarTrazo(); });
+
+/* ---------- 14. Zoom y desplazamiento de la hoja ---------- */
+function aplicarZoom() {
+  hoja.style.transform = `scale(${zoom})`;
+  envoltura.style.width = HOJA.w * zoom + 'px'; envoltura.style.height = HOJA.h * zoom + 'px';
+  $('zoom-indicator').textContent = Math.round(zoom * 100) + '%';
+}
+function setZoom(z, cx, cy) {
+  z = Math.min(4, Math.max(0.12, z));
+  if (cx == null) { const r = vp.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2; }
+  const r0 = hoja.getBoundingClientRect(), sx = (cx - r0.left) / zoom, sy = (cy - r0.top) / zoom;
+  zoom = z; aplicarZoom();
+  const r1 = hoja.getBoundingClientRect();
+  vp.scrollLeft += r1.left + sx * zoom - cx; vp.scrollTop += r1.top + sy * zoom - cy;
+}
+const adjustZoom = f => setZoom(zoom * f);
+function fitSheetToScreen() {
+  const pad = window.innerWidth <= 760 ? 16 : 32;
+  zoom = Math.max(0.12, Math.min((vp.clientWidth - pad) / HOJA.w, (vp.clientHeight - pad - 50) / HOJA.h));
+  aplicarZoom(); vp.scrollLeft = 0; vp.scrollTop = 0;
+}
+/* Acerca al área de dibujo con un paso de grilla cómodo para el dedo */
+function enfocarLienzo() {
+  const z = $('zona-dibujo');
+  zoom = Math.min(1.6, Math.max(0.85, Math.min((vp.clientWidth - 16) / z.offsetWidth, (vp.clientHeight - 70) / z.offsetHeight)));
+  aplicarZoom();
+  const r = z.getBoundingClientRect(), rv = vp.getBoundingClientRect();
+  vp.scrollLeft += (r.left + r.width / 2) - (rv.left + rv.width / 2);
+  vp.scrollTop += (r.top + r.height / 2) - (rv.top + rv.height / 2);
+}
+vp.addEventListener('wheel', e => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  e.preventDefault(); setZoom(zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1), e.clientX, e.clientY);
+}, { passive: false });
+/* Safari (iOS/macOS): evita el zoom nativo de la página con el gesto de pellizco */
+['gesturestart', 'gesturechange'].forEach(ev => document.addEventListener(ev, e => e.preventDefault()));
+
+/* ---------- 15. Teclado (PC) ---------- */
+document.addEventListener('keydown', e => {
+  if (!$('modal').hidden) { if (e.key === 'Escape') cerrarModal(); return; }
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+  const k = e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey;
+  if (mod && k === 'z' && !e.shiftKey) { e.preventDefault(); undoAction(); }
+  else if (mod && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); redoAction(); }
+  else if (mod && k === 's') { e.preventDefault(); guardarProyecto(); }
+  else if (mod && k === 'p') { e.preventDefault(); imprimirA3(); }
+  else if (mod) return;
+  else if (k === 'delete' || k === 'backspace') { e.preventDefault(); deleteSelected(); }
+  else if (k === 'escape') { if (trazo) terminarTrazo(); else seleccionar(null); }
+  else if (k === 'r') cycleSymbolRotation();
+  else if (k === 't') setActiveTool('pipe');
+  else if (k === 'v') setActiveTool('select');
+  else if (k === 'h' || k === ' ') { e.preventDefault(); setActiveTool('pan'); }
+  else if (k === '+' || k === '=') adjustZoom(1.2);
+  else if (k === '-') adjustZoom(1 / 1.2);
+  else if (k === '0') fitSheetToScreen();
+});
+
+/* ---------- 16. Rótulo (cabecera) reactivo ---------- */
+function pintarCabecera() {
+  document.querySelectorAll('[data-h]').forEach(i => { i.value = estado.cabecera[i.dataset.h] ?? ''; });
+  $('grid-scale').value = estado.escala;
+  $('txt-escala').value = `S/E · 1 paso de grilla = ${estado.escala} m`;
+}
+document.querySelectorAll('[data-h]').forEach(i => i.addEventListener('input', () => { estado.cabecera[i.dataset.h] = i.value; guardarLocal(); }));
+$('spec-nps').addEventListener('change', () => { estado.cabecera.nps = $('spec-nps').value; pintarCabecera(); guardarLocal(); });
+$('spec-mat').addEventListener('change', () => { estado.cabecera.spec = $('spec-mat').value; pintarCabecera(); guardarLocal(); });
+$('grid-scale').addEventListener('change', () => {
+  const v = parseFloat(String($('grid-scale').value).replace(',', '.'));
+  if (!(v > 0)) { aviso('Paso de grilla no válido', 'error'); $('grid-scale').value = estado.escala; return; }
+  estado.escala = v;
+  for (const c of tuberias()) if (!c.lengthManual) c.length = longitudTubo(c);
+  pintarCabecera(); actualizarTodo();
+});
+
+/* ---------- 17. Archivo: nuevo, abrir, guardar, limpiar ---------- */
+function clearCanvas() {
+  toggleSidebar(false);
+  if (!estado.components.length && !estado.consumibles.length) { aviso('El plano ya está vacío'); return; }
+  abrirModal({ titulo: '¿Limpiar todo el plano?', html: '<p>Se borran tuberías, accesorios, válvulas, consumibles y ajustes del BOM. El rótulo se conserva. Puede deshacerlo con Ctrl+Z / Deshacer.</p>',
+    okTxt: 'Limpiar', alAceptar: () => { terminarTrazo(); commit(() => { estado.components = []; estado.consumibles = []; estado.ajustes = {}; seleccion = null; }); } });
+}
+function nuevoPlano() {
+  toggleSidebar(false);
+  abrirModal({ titulo: '¿Empezar un plano nuevo?', html: '<p>Se conservan cliente, proyecto y firmas; se limpian el dibujo, la línea, el consecutivo y el BOM. Guarde antes el proyecto si lo necesita.</p>',
+    okTxt: 'Nuevo plano', alAceptar: () => {
+      terminarTrazo();
+      commit(() => { estado.components = []; estado.consumibles = []; estado.ajustes = {}; seleccion = null; });
+      Object.assign(estado.cabecera, { linea: '', consecutivo: '', notas: '', fecha: hoyISO(), pagina: '1', paginas: '1' });
+      pintarCabecera(); guardarLocal();
+    } });
+}
+const nombreSeguro = s => String(s || '').trim().replace(/[\\/:*?"<>|#%&\s]+/g, '_').slice(0, 60);
+const nombreBase = () => ['DP-F-009', nombreSeguro(estado.cabecera.linea) || 'ISO', nombreSeguro(estado.cabecera.consecutivo)].filter(Boolean).join('_');
+function descargarBlob(blob, nombre) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nombre;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+function guardarProyecto() {
+  const datos = { formato: 'INDIMON-DP-F-009', version: 1, guardado: new Date().toISOString(), ...estado };
+  descargarBlob(new Blob([JSON.stringify(datos, null, 1)], { type: 'application/json' }), nombreBase() + '.json');
+  aviso('Proyecto guardado', 'ok');
+}
+$('in-proyecto').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const o = JSON.parse(await f.text());
+    if (!o || !Array.isArray(o.components)) throw new Error('el archivo no es un proyecto DP-F-009');
+    terminarTrazo(); registrar(); aplicarProyecto(o); seleccion = null;
+    pintarCabecera(); sincronizarSelectores(); actualizarTodo(); toggleSidebar(false);
+    aviso('Proyecto abierto: ' + f.name, 'ok');
+  } catch (err) { aviso('No se pudo abrir: ' + err.message, 'error', 5000); }
+});
+
+/* ---------- 18. Exportación: Excel (.xlsx), PDF A3 y app .html ---------- */
+function exportToExcel() {
+  const cab = estado.cabecera;
+  const filasBOM = ultimoBOM.map((f, i) => [i + 1, f.uni, f.desc, Number(f.uni === 'ML' || f.uni === 'm' ? r2(f.cant) : f.cant)]);
+  const aoa = [
+    ['INDIMON S.A.S.  —  NIT 900602215-5'],
+    ['FORMATO BOCETOS ISOMÉTRICOS — LISTADO DE MATERIALES (BOM)'],
+    ['Código', 'DP-F-009', 'Versión', '01', 'Página', `${cab.pagina || 1} de ${cab.paginas || 1}`],
+    [],
+    ['CLIENTE', cab.cliente], ['PROYECTO', cab.proyecto], ['DIBUJO / LÍNEA N°', cab.linea], ['FECHA', cab.fecha],
+    ['CONSECUTIVO', cab.consecutivo], ['DIÁMETRO NOMINAL (NPS)', cab.nps], ['ESPECIFICACIÓN', cab.spec],
+    ['ESCALA', `1 paso de grilla = ${estado.escala} m`], ['FLUIDO / SERVICIO', cab.servicio],
+    ['ELABORÓ', cab.elaboro, 'REVISÓ', cab.reviso, 'APROBÓ', cab.aprobo], ['NOTAS', cab.notas],
+    [],
+    ['ITEM', 'UNI', 'DESCRIPCIÓN TÉCNICA', 'CANTIDAD'],
+    ...filasBOM
+  ];
+  const detalle = [['ID', 'CATEGORÍA', 'TIPO', 'NPS', 'NPS MENOR', 'ESPECIFICACIÓN', 'LONGITUD (m)', 'LONG. MANUAL', 'COORDENADAS RED [p,q]', 'ROTACIÓN (°)', 'DESCRIPCIÓN']]
+    .concat(estado.components.map(c => [c.id, c.category, TIPOS[c.type].corto, c.nps, c.npsRed || '', c.schedule,
+      c.type === 'pipe' ? longitudTubo(c) : '', c.type === 'pipe' ? (c.lengthManual ? 'SÍ' : 'NO') : '',
+      c.coords.map(P => `[${P[0]},${P[1]}]`).join(' → '), c.rotation, descripcion(c)]));
+  if (typeof XLSX === 'undefined') {
+    /* respaldo sin librería: CSV compatible con Excel (separador ;) */
+    const csv = aoa.map(f => f.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
+    descargarBlob(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }), nombreBase() + '.csv');
+    aviso('Librería Excel no disponible: se exportó CSV', 'error', 4500); return;
+  }
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 90 }, { wch: 14 }, { wch: 12 }, { wch: 16 }];
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } }];
+  const ws2 = XLSX.utils.aoa_to_sheet(detalle);
+  ws2['!cols'] = [12, 12, 18, 8, 10, 26, 12, 12, 30, 11, 80].map(w => ({ wch: w }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'BOM DP-F-009');
+  XLSX.utils.book_append_sheet(wb, ws2, 'Componentes');
+  XLSX.writeFile(wb, nombreBase() + '.xlsx');
+  aviso('Excel exportado', 'ok');
+}
+function imprimirA3() {
+  seleccionar(null); terminarTrazo();
+  if (document.activeElement) document.activeElement.blur();
+  setTimeout(() => window.print(), 60);
+}
+window.addEventListener('beforeprint', () => { seleccion = null; renderLienzo(); limpiarGuia(); $('panel-sel').hidden = true; });
+
+/* Descarga la app completa en un único .html (con la librería Excel incrustada) para usar sin internet */
+async function downloadSelfHtml() {
+  toggleSidebar(false);
+  let html = null;
+  try {
+    html = await (await fetch(location.href.split('#')[0].split('?')[0], { cache: 'no-store' })).text();
+    try {
+      const lib = await (await fetch('vendor/xlsx.full.min.js')).text();
+      if (lib.length > 1000) html = html.replace(/<script src="vendor\/xlsx\.full\.min\.js"[^>]*><\/script>/, () => '<script>' + lib + '</scr' + 'ipt>');
+    } catch (_) { /* queda la referencia al CDN como respaldo */ }
+  } catch (_) {
+    html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+  }
+  descargarBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), 'INDIMON_CAD_DP-F-009.html');
+  aviso('App descargada: ábrala con Chrome, Edge o Safari', 'ok', 4000);
+}
+
+/* ---------- 19. Instalación como aplicación (PWA) ---------- */
+let eventoInstalar = null;
+const esStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); eventoInstalar = e; $('btn-instalar').hidden = false; });
+window.addEventListener('appinstalled', () => { eventoInstalar = null; $('btn-instalar').hidden = true; aviso('Aplicación instalada', 'ok'); });
+async function instalarApp(desdeMenu) {
+  toggleSidebar(false);
+  if (esStandalone()) { aviso('La aplicación ya está instalada y abierta como app', 'ok'); return; }
+  if (eventoInstalar) { eventoInstalar.prompt(); await eventoInstalar.userChoice; eventoInstalar = null; $('btn-instalar').hidden = true; return; }
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const local = location.protocol === 'file:';
+  abrirModal({
+    titulo: 'Instalar INDIMON CAD', okTxt: 'Entendido', sinCancelar: true,
+    html: local ? `<p>Está abriendo el archivo directamente. Para instalarla como app debe publicarse en un sitio <b>https</b> (por ejemplo GitHub Pages). Mientras tanto, este .html funciona sin internet: guárdelo en el equipo y ábralo con el navegador.</p>`
+      : ios ? `<ol><li>Abra esta página en <b>Safari</b>.</li><li>Toque <b>Compartir</b> (cuadro con flecha).</li><li>Elija <b>Agregar a pantalla de inicio</b> y luego <b>Agregar</b>.</li></ol><p>Quedará un ícono INDIMON CAD que funciona sin internet.</p>`
+      : `<ol><li><b>Android (Chrome):</b> menú ⋮ → <b>Instalar aplicación</b> / Agregar a pantalla principal.</li><li><b>PC (Chrome / Edge):</b> ícono de instalar en la barra de direcciones, o menú → <b>Instalar INDIMON CAD</b>.</li></ol><p>También puede usar <b>Descargar app (.html)</b> para llevarla en un archivo.</p>`
+  });
+}
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+
+/* ---------- 20. Interfaz: panel lateral, avisos, ventanas ---------- */
+function toggleSidebar(abrir) {
+  const s = $('tools-sidebar'), v = abrir === undefined ? !s.classList.contains('abierta') : abrir;
+  s.classList.toggle('abierta', v); $('velo').hidden = !v;
+}
+function aviso(m, tipo, ms = 2200) {
+  const e = $('aviso'); e.textContent = m;
+  e.style.background = tipo === 'ok' ? '#047857' : tipo === 'error' ? '#b91c1c' : '#1e293b';
+  e.style.display = 'block'; clearTimeout(aviso.t); aviso.t = setTimeout(() => { e.style.display = 'none'; }, ms);
+}
+let modalCfg = null;
+function abrirModal(cfg) {
+  modalCfg = cfg;
+  $('modal-titulo').textContent = cfg.titulo; $('modal-cuerpo').innerHTML = cfg.html;
+  $('modal-ok').textContent = cfg.okTxt || 'Aceptar'; $('modal-cancelar').hidden = !!cfg.sinCancelar;
+  $('modal').hidden = false;
+  if (cfg.alAbrir) cfg.alAbrir(); else setTimeout(() => $('modal-ok').focus(), 30);
+}
+function cerrarModal() { $('modal').hidden = true; modalCfg = null; }
+$('modal-form').addEventListener('submit', () => { const cfg = modalCfg; if (cfg && cfg.alAceptar && cfg.alAceptar() === false) return; cerrarModal(); });
+$('modal-cancelar').addEventListener('click', cerrarModal);
+$('modal').addEventListener('pointerdown', e => { if (e.target === $('modal') && !(modalCfg && modalCfg.sinCancelar)) cerrarModal(); });
+
+/* Iconos de interfaz (trazos simples, sin dependencias externas) */
+const ICONOS = {
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>', x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>', redo: '<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>',
+  trash: '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  zoomIn: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/>', zoomOut: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M8 11h6"/>',
+  sheet: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>',
+  printer: '<path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+  rotate: '<path d="M21 12a9 9 0 1 1-9-9c2.5 0 4.9 1 6.7 2.7L21 8"/><path d="M21 3v5h-5"/>',
+  move: '<path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/>',
+  pointer: '<path d="m4 4 7 17 2.5-7.5L21 11z"/>', pipe: '<path d="M3 17l8-4.5V4M11 12.5l10 5.5"/><circle cx="11" cy="12.5" r="1.5"/>',
+  plus: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>', file: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 12v6M9 15h6"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>',
+  code: '<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>', check: '<path d="M20 6 9 17l-5-5"/>',
+  target: '<circle cx="12" cy="12" r="8"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/>'
+};
+function construirInterfaz() {
+  /* sprite de iconos reutilizables + inserción en los botones */
+  const sprite = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  sprite.setAttribute('style', 'display:none');
+  sprite.innerHTML = Object.entries(ICONOS).map(([k, v]) => `<symbol id="i-${k}" viewBox="0 0 24 24">${v}</symbol>`).join('');
+  document.body.prepend(sprite);
+  document.querySelectorAll('svg[data-ico]').forEach(s => { s.setAttribute('viewBox', '0 0 24 24'); s.innerHTML = `<use href="#i-${s.dataset.ico}"/>`; });
+
+  /* botones de herramientas generados desde el catálogo */
+  const boton = (tool, etiqueta, dibujo, esIcono) => `<button class="herr" data-tool="${tool}" onclick="setActiveTool('${tool}')" title="${esc(etiqueta)}">
+      ${esIcono ? `<svg class="ico" viewBox="0 0 24 24" style="width:22px;height:22px"><use href="#i-${dibujo}"/></svg>` : `<svg class="sim" viewBox="-20 -20 40 40" style="stroke:#e2e8f0">${dibujo}</svg>`}<span>${esc(etiqueta)}</span></button>`;
+  const claro = s => s.replace(/class="sb"/g, 'fill="#0f172a" stroke="#e2e8f0" stroke-width="1.6"').replace(/class="sn"/g, 'fill="#e2e8f0"').replace(/class="s"/g, 'fill="none" stroke="#e2e8f0" stroke-width="1.6"').replace(/<text /g, '<text fill="#fbbf24" ');
+  const simbolo = t => claro(ICONO_NODO[t] || SIM[t]);
+  $('herr-control').innerHTML = boton('pan', 'Mover', 'move', true) + boton('select', 'Tocar', 'pointer', true) + boton('pipe', 'Tubería', 'pipe', true);
+  $('herr-accesorios').innerHTML = ['elbow90', 'elbow45', 'tee', 'tee_red', 'reducer', 'reducer_ecc', 'cap', 'flange_wn', 'flange_so'].map(t => boton(t, TIPOS[t].corto, simbolo(t))).join('');
+  $('herr-valvulas').innerHTML = ['v_gate', 'v_globe', 'v_ball', 'v_check', 'v_needle'].map(t => boton(t, TIPOS[t].corto, simbolo(t))).join('');
+  $('herr-juntas').innerHTML = boton('weld', 'Punto soldadura (END)', simbolo('weld'));
+
+  $('spec-nps').innerHTML = NPS_LISTA.map(n => `<option value="${esc(n)}">Ø ${esc(n)}</option>`).join('');
+  $('spec-mat').innerHTML = Object.keys(SPECS).map(s => `<option value="${esc(s)}">${esc(SPECS[s].corto)}</option>`).join('');
+}
+function sincronizarSelectores() {
+  if (NPS_LISTA.includes(estado.cabecera.nps)) $('spec-nps').value = estado.cabecera.nps;
+  if (SPECS[estado.cabecera.spec]) $('spec-mat').value = estado.cabecera.spec;
+}
+
+/* ---------- 21. Arranque ---------- */
+(function iniciar() {
+  construirInterfaz();
+  cargarLocal();
+  if (!estado.cabecera.fecha) estado.cabecera.fecha = hoyISO();
+  sincronizarSelectores(); pintarCabecera();
+  prepararLienzo();
+  setActiveTool('pipe');
+  actualizarTodo();
+  if (window.innerWidth <= 760) enfocarLienzo(); else fitSheetToScreen();
+  let anchoPrevio = window.innerWidth;
+  window.addEventListener('resize', () => {
+    clearTimeout(window._tr);
+    window._tr = setTimeout(() => { if (window.innerWidth !== anchoPrevio) { anchoPrevio = window.innerWidth; if (window.innerWidth >= 1024) toggleSidebar(false); fitSheetToScreen(); } }, 200);
+  });
+})();
+</script>
+</body>
+</html>
