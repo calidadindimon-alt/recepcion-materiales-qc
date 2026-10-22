@@ -99,6 +99,9 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
 /* Avisos y ventanas modales */
 #aviso{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top));transform:translateX(-50%);z-index:90;background:var(--s800);border:1px solid var(--s600);color:#fff;
   padding:9px 14px;border-radius:9px;font-size:13px;font-weight:600;display:none;max-width:92vw;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.4)}
+#tarjeta-version{position:fixed;right:14px;bottom:calc(74px + var(--safe-b));z-index:85;display:flex;align-items:center;gap:10px;max-width:min(460px,calc(100vw - 28px));
+  background:var(--s900);border:1px solid var(--ambar);border-radius:12px;padding:10px 12px;font-size:13px;color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+#tarjeta-version[hidden]{display:none}
 .modal{position:fixed;inset:0;background:rgba(2,6,23,.7);z-index:80;display:flex;align-items:center;justify-content:center;padding:14px}
 .modal[hidden]{display:none}
 .modal-card{width:100%;max-width:440px;max-height:90vh;overflow:auto;background:var(--s900);border:1px solid var(--s700);border-radius:14px;padding:16px}
@@ -221,7 +224,7 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
     <div class="grupo">
       <button class="btn solo-movil" onclick="toggleSidebar()" aria-label="Abrir simbología"><svg class="ico" data-ico="menu"></svg><span class="txt-btn">Simbología</span></button>
       <span class="marca">INDÍMON CAD</span>
-      <span class="marca-sub">DP-F-009</span>
+      <span class="marca-sub" id="version-app">DP-F-009</span>
     </div>
 
     <!-- Selectores técnicos: diámetro, especificación, rotación por defecto -->
@@ -305,6 +308,7 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
         <div><span>Longitud tramo:</span><b id="hud-length" style="color:var(--verde)">0 mm</b></div>
         <div><span>Imantación:</span><b id="hud-snap" style="color:var(--cian)">GRILLA ISO</b></div>
         <div><span>Componentes:</span><b id="hud-count" style="color:var(--s200)">0</b></div>
+        <div><span>Versión app:</span><b id="hud-version" style="color:var(--s400)">—</b></div>
       </div>
     </aside>
 
@@ -409,6 +413,12 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
 </div>
 
 <div id="aviso" class="no-print" role="status"></div>
+<div id="tarjeta-version" class="no-print" role="alert" hidden>
+  <div style="font-size:22px">⏲️</div>
+  <div style="flex:1"><b>Nueva versión disponible</b><div id="tarjeta-version-txt" style="font-size:12px;color:var(--s300)">Actualice para usar los últimos cambios. Su dibujo queda guardado.</div></div>
+  <button class="btn ambar" onclick="location.reload()">Actualizar ahora</button>
+  <button class="btn" onclick="document.getElementById('tarjeta-version').hidden = true" aria-label="Más tarde">Más tarde</button>
+</div>
 <div id="modal" class="modal no-print" hidden>
   <form class="modal-card" id="modal-form" onsubmit="return false" novalidate>
     <h3 id="modal-titulo"></h3>
@@ -649,6 +659,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
+const APP_VERSION = 'v13';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-10-22T19:31';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -667,6 +679,7 @@ const estado = {
 let historial = [], rehacerPila = [];
 let herramienta = 'pipe', rotacionActual = 30, seleccion = null, zoom = 1;
 let trazo = null;            // trazado de tubería en curso
+const barraElegida = { nps: false, spec: false };   // el usuario eligió en la barra un valor para lo nuevo
 let ultimoBOM = [];
 
 const $ = id => document.getElementById(id);
@@ -1477,7 +1490,8 @@ function crearTuberia(A, B, info) {
   const c = crearComponente('pipe', [A, B], angPantalla(A, B));
   /* hereda diámetro y especificación del tramo o la reducción donde arranca */
   const previo = tuberias().find(p => tocaTubo(A, p));
-  if (previo) { c.nps = previo.nps; c.schedule = previo.schedule; }
+  if (previo && !barraElegida.nps) c.nps = previo.nps;
+  if (previo && !barraElegida.spec) c.schedule = previo.schedule;
   const red = diametroDesde(A, c.rotation); if (red) c.nps = red;
   if (info && info.libre && !dirEntre(A, B)) c.libre = { plano: info.plano, ang: info.angPlano };
   c.length = longitudTubo(c);
@@ -1573,15 +1587,37 @@ function colocarSimbolo(tipo, pt, R) {
   /* el accesorio toma diámetro y especificación del tramo donde se coloca */
   const base = tuberias().find(p => tocaTubo(pos.P, p));
   if (base && T.modo !== 'equipo') { c.nps = base.nps; c.schedule = base.schedule; }
+  if (tipo === 'weld') {
+    const pieza = estado.components.find(o => o.type !== 'pipe' && o.type !== 'weld' && !TIPOS[o.type].noBOM && (() => { const q = aPantalla(o.coords[0]); return Math.hypot(q.x - s.x, q.y - s.y) < 12; })());
+    if (pieza) c.junta = pieza.type === 'flange_so' ? 'FILETE' : tipoUnion(pieza) === 'SW' ? 'SW' : 'BW';
+  }
   if (!T.reduce) { commit(() => estado.components.push(c)); aviso(`${T.corto} colocado`, 'ok', 900); return; }
-  const i = NPS_LISTA.indexOf(c.nps), sugerido = NPS_LISTA[Math.max(0, i - 1)];
+  /* reducción en la unión de dos tramos de distinto diámetro: toma mayor y menor de los tramos, sin preguntar */
+  if (REDUCTORES_LINEA.includes(tipo)) {
+    const unidos = tuberias().filter(p => igual(p.coords[0], pos.P) || igual(p.coords[1], pos.P));
+    if (unidos.length >= 2) {
+      const orden = [...unidos].sort((a, b) => npsNum(b.nps) - npsNum(a.nps)), mayor = orden[0], menor = orden[orden.length - 1];
+      if (npsNum(mayor.nps) > npsNum(menor.nps)) {
+        const otro = igual(menor.coords[0], pos.P) ? menor.coords[1] : menor.coords[0];
+        Object.assign(c, { nps: mayor.nps, npsRed: menor.nps, schedule: mayor.schedule, rotation: angPantalla(pos.P, otro) });
+        commit(() => { estado.components.push(c); aplicarReduccion(c); });
+        aviso(`${T.corto} ${c.nps} x ${c.npsRed} (tomado de los tramos que une)`, 'ok', 2600);
+        return;
+      }
+    }
+  }
+  /* diámetro menor sugerido: el elegido en la barra superior si es menor; si no, el inmediato inferior */
+  const i = NPS_LISTA.indexOf(c.nps), barra = $('spec-nps').value;
+  const sugerido = npsNum(barra) < npsNum(c.nps) ? barra : NPS_LISTA[Math.max(0, i - 1)];
   abrirModal({
     titulo: `${T.corto}: diámetro reducido`,
     html: `<label>Diámetro mayor</label><input value="Ø ${esc(c.nps)}" disabled>
-           <label>Diámetro menor (${/tee|olet|copla/i.test(tipo + T.corto) ? 'ramal' : 'salida'})</label>
-           <select id="m-red">${NPS_LISTA.map(n => `<option${n === sugerido ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>`,
+           <label>Diámetro menor (${DERIVACIONES.includes(tipo) ? 'ramal' : 'salida'})</label>
+           <select id="m-red">${NPS_LISTA.filter(n => npsNum(n) < npsNum(c.nps)).map(n => `<option${n === sugerido ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>
+           ${REDUCTORES_LINEA.includes(tipo) ? '<p>El lado menor queda hacia donde apunta el tramo; si quedó al revés, selecciónela y use <b>Invertir</b>.</p>' : ''}`,
     alAceptar: () => {
       c.npsRed = $('m-red').value;
+      if (!c.npsRed) { aviso('No hay un diámetro menor para ' + c.nps, 'error'); return false; }
       if (npsNum(c.npsRed) >= npsNum(c.nps)) { aviso('El diámetro menor debe ser inferior al mayor', 'error'); return false; }
       commit(() => { estado.components.push(c); aplicarReduccion(c); });
       aviso(`${T.corto} ${c.nps} x ${c.npsRed}: los tramos del lado menor pasaron a ${c.npsRed}`, 'ok', 2600);
@@ -1606,6 +1642,8 @@ function descripcionBase(c) {
     case 'gen':   return `${T.nombre} ${med}${T.desc ? ' ' + T.desc : ''}`;
     case 'equipo': return `${T.nombre}${c.tag ? ' — TAG ' + c.tag : ''}, CONEXIÓN ${med}`;
     default: {
+      if (c.junta === 'SW') return `JUNTA SOLDADA SOCKET WELD (FILETE) ${med} — INSPECCIÓN END (VT/PT)`;
+      if (c.junta === 'FILETE') return `JUNTA SOLDADA DE FILETE (BRIDA SLIP-ON) ${med} — INSPECCIÓN END (VT/PT)`;
       const j = sp.junta || 'BW';
       return `${TIPO_JUNTA[j] || TIPO_JUNTA.BW} ${med}${j === 'BW' ? ` ${sp.sch} — INSPECCIÓN END (VT/PT)` : ''}`;
     }
@@ -1616,7 +1654,7 @@ function recalculateBOM() {
   const grupos = new Map();
   for (const c of estado.components) {
     if (TIPOS[c.type].noBOM) continue;
-    const T = TIPOS[c.type], key = [c.type, c.nps, c.npsRed || '', c.schedule, c.ref || '', c.tag || ''].join('|');
+    const T = TIPOS[c.type], key = [c.type, c.nps, c.npsRed || '', c.schedule, c.ref || '', c.tag || '', c.junta || ''].join('|');
     const g = grupos.get(key) || { key, orden: T.orden, nps: npsNum(c.nps), uni: c.type === 'pipe' ? 'ML' : (T.uni || 'UND'), desc: descripcion(c), cant: 0 };
     g.cant += c.type === 'pipe' ? (estado.descontar ? Math.max(0, longitudCorte(c)) : longitudTubo(c)) : 1;
     grupos.set(key, g);
@@ -1705,10 +1743,12 @@ function generarJuntas() {
   const esBW = c => (SPECS[c.schedule]?.junta || 'BW') === 'BW';
   const existentes = estado.components.filter(c => c.type === 'weld').map(c => aPantalla(c.coords[0]));
   const nuevas = [], omitidas = new Set();
-  const agregar = (scr, origen) => {
+  /* tipo de junta según la pieza: a tope, socket weld (filete) o filete de brida slip-on */
+  const tipoJunta = o => o.type === 'flange_so' ? 'FILETE' : o.type === 'pipe' ? 'BW' : tipoUnion(o) === 'SW' ? 'SW' : 'BW';
+  const agregar = (scr, origen, nps) => {
     if (!esBW(origen)) { omitidas.add(SPECS[origen.schedule]?.corto || origen.schedule); return; }
     if ([...existentes, ...nuevas.map(n => n.s)].some(q => Math.hypot(q.x - scr.x, q.y - scr.y) < 7)) return;
-    nuevas.push({ s: scr, origen });
+    nuevas.push({ s: scr, origen, nps: nps || origen.nps, junta: tipoJunta(origen) });
   };
   const nodosConAccesorio = new Set();
   for (const c of estado.components) {
@@ -1716,12 +1756,14 @@ function generarJuntas() {
     const T = TIPOS[c.type], tipo = T.base || c.type, P = aPantalla(c.coords[0]);
     if (T.modo === 'nodo') {
       nodosConAccesorio.add(c.coords[0].join(','));
-      for (const a of brazosAccesorio(c).brazos) { const u = unitAng(a); agregar({ x: P.x + u.x * 0.42 * PASO_PX, y: P.y + u.y * 0.42 * PASO_PX }, c); }
+      /* en la tee reductora el tercer brazo (ramal) lleva el diámetro menor */
+      brazosAccesorio(c).brazos.forEach((a, i) => { const u = unitAng(a); agregar({ x: P.x + u.x * 0.42 * PASO_PX, y: P.y + u.y * 0.42 * PASO_PX }, c, i === 2 && c.npsRed ? c.npsRed : c.nps); });
       continue;
     }
     const locales = JUNTAS_LOCALES[tipo]; if (!locales) continue;
     const e = unitAng(c.rotation), n = esVertical(c.rotation) ? { x: C30, y: 0.5 } : { x: 0, y: 1 };
-    for (const [lx, ly] of locales) agregar({ x: P.x + e.x * lx + n.x * ly, y: P.y + e.y * lx + n.y * ly }, c);
+    /* en reducciones, la junta del lado chico (+x local) lleva el diámetro menor */
+    for (const [lx, ly] of locales) agregar({ x: P.x + e.x * lx + n.x * ly, y: P.y + e.y * lx + n.y * ly }, c, lx > 0 && c.npsRed && REDUCTORES_LINEA.includes(c.type) ? c.npsRed : c.nps);
   }
   /* uniones directas tubo con tubo (sin accesorio en el nodo) */
   const extremos = new Map();
@@ -1734,7 +1776,7 @@ function generarJuntas() {
   }
   if (!nuevas.length) { aviso(omitidas.size ? `Sin juntas nuevas (uniones no soldadas: ${[...omitidas].join(', ')})` : 'No hay juntas nuevas para agregar', null, 3500); return; }
   commit(() => {
-    for (const { s, origen } of nuevas) estado.components.push(Object.assign(crearComponente('weld', [red6(aRed(s.x, s.y))], origen.rotation || 0), { nps: origen.nps, schedule: origen.schedule }));
+    for (const { s, origen, nps, junta } of nuevas) estado.components.push(Object.assign(crearComponente('weld', [red6(aRed(s.x, s.y))], origen.rotation || 0), { nps, schedule: origen.schedule, junta }));
   });
   aviso(`Se agregaron ${nuevas.length} juntas soldadas`, 'ok', 2500);
 }
@@ -1835,7 +1877,17 @@ function descargarPlantillaCatalogo() {
 }
 
 /* ---------- 12. Selección y panel de propiedades ---------- */
-function seleccionar(id) { seleccion = id; renderLienzo(); renderPanelSeleccion(); }
+function seleccionar(id) {
+  seleccion = id;
+  /* la barra superior muestra diámetro y especificación del componente seleccionado */
+  const c = estado.components.find(x => x.id === id);
+  if (c && TIPOS[c.type].modo !== 'equipo' && !TIPOS[c.type].noBOM) {
+    if (NPS_LISTA.includes(c.nps)) $('spec-nps').value = c.nps;
+    if (SPECS[c.schedule]) $('spec-mat').value = c.schedule;
+    barraElegida.nps = barraElegida.spec = false;
+  }
+  renderLienzo(); renderPanelSeleccion();
+}
 function renderPanelSeleccion() {
   const p = $('panel-sel'), c = estado.components.find(x => x.id === seleccion);
   if (!c) { seleccion = null; p.hidden = true; return; }
@@ -1855,6 +1907,7 @@ function renderPanelSeleccion() {
       <input data-p="largo" type="number" step="any" min="0" inputmode="decimal" placeholder="vacío = tabla" value="${c.largo != null || largoAccesorio(c) ? aUnidad(largoAccesorio(c)) : ''}">` : ''}
     ${c.type === 'pipe' ? `<label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:12px;color:var(--s200)"><input type="checkbox" data-p="sinCota" style="width:18px;height:18px"${c.sinCota ? ' checked' : ''}> Ocultar cota de este tramo</label>` : ''}
     ${c.type === 'pipe' ? `<label>Pendiente</label><button class="btn" style="width:100%" data-acc="pend">${c.pendiente ? `PEND. ${c.pendiente.valor}% · baja hacia el ${c.pendiente.haciaFin === false ? 'inicio' : 'final'}` : 'Agregar pendiente'}</button>` : ''}
+    ${c.type === 'weld' ? `<label>Tipo de junta</label><select data-p="junta">${[['BW', 'A tope (BW)'], ['SW', 'Socket weld (filete)'], ['FILETE', 'Filete brida slip-on']].map(([v, t]) => `<option value="${v}"${(c.junta || 'BW') === v ? ' selected' : ''}>${t}</option>`).join('')}</select>` : ''}
     ${T.modo === 'equipo' ? `<label>TAG del equipo</label><input data-p="tag" maxlength="24" placeholder="Ej: P-101, TK-01" value="${esc(c.tag || '')}">` : ''}
     ${c.type !== 'pipe' && c.type !== 'weld' && !TIPOS[c.type].noBOM && T.modo !== 'equipo' ? `<div style="margin-top:6px;font:600 11px var(--mono);color:var(--s300)">Unión: ${tipoUnion(c)}${holgura(c) ? ` · holgura ${fmtLong(holgura(c))} por junta` : ''}</div>` : ''}
     ${c.type !== 'weld' && !TIPOS[c.type].noBOM ? `<label>Código / ref. fabricante</label><input data-p="ref" maxlength="60" placeholder="Ej: 032U1247" value="${esc(c.ref || '')}">` : ''}
@@ -1918,6 +1971,12 @@ function componentesDeLinea(c) {
   for (const o of estado.components) if (o.type !== 'pipe' && TIPOS[o.type].modo !== 'equipo' && [...vistos].some(t => tocaTubo(o.coords[0], t))) res.add(o);
   return [...res].filter(o => !TIPOS[o.type].noBOM);
 }
+/* tras editar en el panel, la barra superior refleja el componente seleccionado */
+$('panel-sel').addEventListener('change', () => {
+  const s = estado.components.find(x => x.id === seleccion); if (!s) return;
+  if (NPS_LISTA.includes(s.nps)) $('spec-nps').value = s.nps;
+  if (SPECS[s.schedule]) $('spec-mat').value = s.schedule;
+});
 function deleteSelected() {
   if (!seleccion) { aviso('Seleccione primero un componente (herramienta Tocar)'); return; }
   const id = seleccion;
@@ -2136,9 +2195,33 @@ function pintarCabecera() {
   $('etq-dibujo').textContent = `ISOMÉTRICO — SIN ESCALA (COTAS EN ${enMM() ? 'MILÍMETROS' : 'METROS'}) · JUNTA BW: RAÍZ ${String(estado.apertura).replace('.', ',')} mm · SW: SEPARACIÓN ${String(estado.sepSW).replace('.', ',')} mm`;
 }
 document.querySelectorAll('[data-h]').forEach(i => i.addEventListener('input', () => { estado.cabecera[i.dataset.h] = i.value; guardarLocal(); }));
-$('spec-nps').addEventListener('change', () => { estado.cabecera.nps = $('spec-nps').value; pintarCabecera(); guardarLocal(); });
+$('spec-nps').addEventListener('change', () => {
+  const nps = $('spec-nps').value; estado.cabecera.nps = nps; pintarCabecera(); guardarLocal();
+  barraElegida.nps = true;
+  const sel = estado.components.find(c => c.id === seleccion);
+  const tubo = sel && (sel.type === 'pipe' ? sel : !sel.npsRed && tuberias().find(p => tocaTubo(sel.coords[0], p)));
+  const hayReducciones = estado.components.some(c => c.npsRed);
+  const distintos = estado.components.filter(c => c.type !== 'pipe' ? !TIPOS[c.type].noBOM && TIPOS[c.type].modo !== 'equipo' && c.nps !== nps : c.nps !== nps).length;
+  if (!tubo && !distintos) return;
+  const opciones = [tubo ? `<option value="linea" selected>A la línea seleccionada (hasta la próxima reducción)</option>` : '',
+    `<option value="nuevo"${tubo ? '' : ' selected'}>Solo a lo que dibuje de ahora en adelante</option>`,
+    !hayReducciones && distintos ? `<option value="todo">A todo el plano (${distintos} componentes)</option>` : ''].join('');
+  abrirModal({
+    titulo: `Diámetro: Ø ${nps}`,
+    html: `<label>¿A qué se aplica?</label><select id="m-alcance-nps">${opciones}</select>
+      <p>${hayReducciones ? 'El plano tiene reducciones: para cambiar un tramo, selecciónelo con <b>Tocar</b> y elija el diámetro; el cambio sigue por la línea hasta la próxima reducción.' : 'Para cambiar una sola línea, selecciónela con <b>Tocar</b> antes de elegir el diámetro.'}</p>`,
+    okTxt: 'Aplicar',
+    alAceptar: () => {
+      const a = $('m-alcance-nps').value;
+      if (a === 'linea') { barraElegida.nps = false; commit(() => propagarDiametro(tubo, nps)); aviso(`La línea pasó a Ø ${nps}`, 'ok'); }
+      if (a === 'todo') { barraElegida.nps = false; }
+      if (a === 'todo') { commit(() => estado.components.forEach(c => { if (c.type === 'pipe' || (!TIPOS[c.type].noBOM && TIPOS[c.type].modo !== 'equipo')) c.nps = nps; })); aviso(`Todo el plano pasó a Ø ${nps}`, 'ok'); }
+    }
+  });
+});
 $('spec-mat').addEventListener('change', () => {
   const spec = $('spec-mat').value; estado.cabecera.spec = spec; pintarCabecera(); guardarLocal();
+  barraElegida.spec = true;
   const n = estado.components.filter(c => !TIPOS[c.type].noBOM && TIPOS[c.type].modo !== 'equipo' && c.schedule !== spec).length;
   if (!n) return;
   abrirModal({
@@ -2150,6 +2233,7 @@ $('spec-mat').addEventListener('change', () => {
     okTxt: 'Aplicar',
     alAceptar: () => {
       if ($('m-alcance').value !== 'todo') return;
+      barraElegida.spec = false;
       commit(() => estado.components.forEach(c => { if (!TIPOS[c.type].noBOM && TIPOS[c.type].modo !== 'equipo') c.schedule = spec; }));
       aviso(`Todo el plano pasó a ${SPECS[spec]?.corto || spec}`, 'ok', 2600);
     }
@@ -2252,7 +2336,7 @@ function exportToExcel() {
   const fDat = aoa.length; filasBOM.forEach(f => aoa.push(f));
   aoa.push([]);
   const fTot = aoa.length; aoa.push(['', '', estado.descontar ? 'TOTAL TUBERÍA (ML, LONGITUD DE CORTE)' : 'TOTAL TUBERÍA (ML, CENTRO A CENTRO)', totML], ['', '', 'TOTAL JUNTAS SOLDADAS (END)', nJuntas]);
-  aoa.push([]); const fPie = aoa.length; aoa.push([`Generado con INDIMON CAD · ${new Date().toLocaleString('es-CO')}`]);
+  aoa.push([]); const fPie = aoa.length; aoa.push([`Generado con INDIMON CAD ${APP_VERSION} · ${new Date().toLocaleString('es-CO')}`]);
   const ws = XLSX.utils.aoa_to_sheet(aoa), merges = [];
   const linea = { style: 'thin', color: { rgb: '000000' } }, borde = { top: linea, bottom: linea, left: linea, right: linea };
   const est = (r, c, s, z) => { const ref = XLSX.utils.encode_cell({ r, c }); if (!ws[ref]) ws[ref] = { t: 's', v: '' }; ws[ref].s = s; if (z) ws[ref].z = z; };
@@ -2344,7 +2428,26 @@ async function instalarApp(desdeMenu) {
   });
 }
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  /* revisa si hay versión nueva al abrir, cada 30 min y al volver a la ventana; si la hay, muestra la tarjeta */
+  window.addEventListener('load', async () => {
+    try {
+      const habia = !!navigator.serviceWorker.controller;
+      const reg = await navigator.serviceWorker.register('sw.js');
+      navigator.serviceWorker.addEventListener('controllerchange', () => { if (habia) mostrarTarjetaVersion(); });
+      const revisar = () => reg.update().catch(() => {});
+      setInterval(revisar, 30 * 60 * 1000);
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) revisar(); });
+    } catch (_) { /* sin service worker: la app funciona igual */ }
+  });
+}
+
+async function mostrarTarjetaVersion() {
+  $('tarjeta-version').hidden = false;
+  try {
+    const html = await (await fetch(location.href.split('#')[0].split('?')[0] + '?v=' + Date.now(), { cache: 'no-store' })).text();
+    const v = html.match(/const APP_VERSION = '([^']+)'/);
+    if (v && v[1] !== APP_VERSION) $('tarjeta-version-txt').textContent = `Versión ${v[1]} publicada (usted tiene ${APP_VERSION}). Su dibujo queda guardado.`;
+  } catch (_) {}
 }
 
 /* ---------- 20. Interfaz: panel lateral, avisos, ventanas ---------- */
@@ -2426,6 +2529,9 @@ function sincronizarSelectores() {
 /* ---------- 21. Arranque ---------- */
 (function iniciar() {
   construirInterfaz();
+  const fv = new Date(APP_FECHA + 'Z'), dosD = n => String(n).padStart(2, '0');
+  const fechaTxt = isNaN(fv) ? '' : `${dosD(fv.getDate())}/${dosD(fv.getMonth() + 1)}/${fv.getFullYear()} ${dosD(fv.getHours())}:${dosD(fv.getMinutes())}`;
+  $('version-app').textContent = `DP-F-009 · ⏲ ${APP_VERSION} · ${fechaTxt}`; $('hud-version').textContent = `${APP_VERSION} · ${fechaTxt}`;
   cargarLocal();
   if (!estado.cabecera.fecha) estado.cabecera.fecha = hoyISO();
   sincronizarSelectores(); pintarCabecera(); construirCatalogo(); sincronizarTrazo();
