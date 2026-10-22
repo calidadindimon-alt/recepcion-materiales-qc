@@ -937,11 +937,52 @@ const TAKEOFF = {
   v_butterfly: tablaMM([null, null, null, null, null, 43, 46, 46, 52, 56, 60, 68, 78, 92, 102, 114, 127, 154])
 };
 TAKEOFF.tee_red = TAKEOFF.tee; TAKEOFF.cross = TAKEOFF.tee; TAKEOFF.reducer_ecc = TAKEOFF.reducer; TAKEOFF.elbow180 = TAKEOFF.elbow90; TAKEOFF.v_ball = TAKEOFF.v_gate;
-/* Largo que un accesorio le quita al tubo (m): valor del usuario o de la tabla */
+/* Roscados NPT: penetración de rosca E (mm, apriete normal) y centro a extremo A de accesorios
+   de hierro maleable clase 150 (ASME B16.3). El descuento al tubo es A − E. */
+const ROSCA_E = { '1/4"': 10, '3/8"': 10, '1/2"': 13, '3/4"': 14, '1"': 17, '1-1/4"': 18, '1-1/2"': 18, '2"': 19, '2-1/2"': 24, '3"': 25, '4"': 27 };
+const N_ROS = ['1/4"', '3/8"', '1/2"', '3/4"', '1"', '1-1/4"', '1-1/2"', '2"', '2-1/2"', '3"', '4"'];
+const tablaRosca = v => Object.fromEntries(N_ROS.map((n, i) => [n, v[i]]).filter(([, x]) => x != null));
+const B163_A90 = tablaRosca([21, 24, 28, 33, 38, 44, 49, 57, 69, 78, 96]);   // codo 90°, tee y cruz
+const B163_A45 = tablaRosca([19, 20, 22, 25, 28, 33, 36, 43, 50, 55, 66]);   // codo 45°
+/* Válvulas roscadas: largo cara a cara típico de catálogo (bronce 125# / bola 2 piezas paso total).
+   Varía según fabricante: verificar y corregir en el panel. El descuento es L − 2E. */
+const ROSCA_VALV = {
+  v_gate:  tablaRosca([null, null, 52, 58, 68, 75, 81, 91]),
+  v_ball:  tablaRosca([null, null, 58, 68, 82, 95, 105, 125]),
+  v_globe: tablaRosca([null, null, 62, 72, 85, 100, 110, 130]),
+  v_check: tablaRosca([null, null, 62, 72, 82, 95, 105, 120])
+};
+/* Danfoss: largo de cuerpo L (mm) según hoja técnica del fabricante (DN15=1/2", DN20=3/4", DN25=1",
+   DN32=1-1/4", DN40=1-1/2", DN50=2"…). rosca: descuento L − 2E; wafer: va entre bridas (descuento L). */
+const LARGO_FAB = {
+  d_ev220b: { rosca: true, mm: { '1/2"': 80, '3/4"': 90, '1"': 109, '1-1/4"': 120, '1-1/2"': 130, '2"': 162 } },
+  d_abqm:   { rosca: true, mm: { '1/2"': 65, '3/4"': 82, '1"': 104, '1-1/4"': 130, '2"': 130 } },
+  d_asvpv:  { rosca: true, mm: { '1/2"': 65, '2"': 130 } },
+  d_asvbd:  { rosca: true, mm: { '1/2"': 65 } },
+  d_msvbd:  { rosca: true, mm: { '1/2"': 65, '2"': 130 } },
+  d_vfy:    { rosca: false, mm: { '2"': 43, '2-1/2"': 46, '3"': 46, '4"': 52, '6"': 56, '8"': 60 } }
+};
+/* Origen del largo por defecto de un accesorio (para el panel); null si no hay dato */
+function fuenteLargo(c) {
+  const fab = LARGO_FAB[c.type];
+  if (fab) return fab.mm[c.nps] ? 'hoja Danfoss' : null;
+  const j = SPECS[c.schedule]?.junta || 'BW';
+  if (j === 'ROSCA') return ROSCA_VALV[c.type]?.[c.nps] ? 'típico roscado' : ({ elbow90: 1, elbow90_sr: 1, tee: 1, tee_red: 1, cross: 1, elbow45: 1 }[c.type] && ROSCA_E[c.nps] ? 'ASME B16.3' : null);
+  return j === 'BW' && TAKEOFF[c.type]?.[c.nps] ? 'ASME' : null;
+}
+/* Largo que un accesorio le quita al tubo (m): valor del usuario o de la tabla que corresponda */
 function largoAccesorio(c) {
   if (c.largo != null && c.largo !== '') return Math.max(0, Number(c.largo) || 0);
+  const E = ROSCA_E[c.nps] || 0, fab = LARGO_FAB[c.type];
+  if (fab) { const L = fab.mm[c.nps] || 0; return L ? Math.max(0, fab.rosca ? L - 2 * E : L) / 1000 : 0; }
+  const junta = SPECS[c.schedule]?.junta || 'BW';
+  if (junta === 'ROSCA') {
+    if (ROSCA_VALV[c.type]) { const L = ROSCA_VALV[c.type][c.nps] || 0; return L ? Math.max(0, L - 2 * E) / 1000 : 0; }
+    const A = (c.type === 'elbow45' ? B163_A45 : ['elbow90', 'elbow90_sr', 'tee', 'tee_red', 'cross'].includes(c.type) ? B163_A90 : {})[c.nps] || 0;
+    return A ? Math.max(0, A - E) / 1000 : 0;
+  }
+  if (junta !== 'BW') return 0;
   const tabla = TAKEOFF[c.type]; if (!tabla) return 0;
-  if ((SPECS[c.schedule]?.junta || 'BW') !== 'BW') return 0;
   return (tabla[c.nps] || 0) / 1000;
 }
 /* Descuento de accesorios sobre un tramo: codos/tees en sus extremos (y tee pasante 2×C),
@@ -1604,7 +1645,7 @@ function renderPanelSeleccion() {
       ${c.libre && PLANOS[c.libre.plano] && !dirEntre(c.coords[0], c.coords[1]) ? `<label>Ángulo · plano ${PLANOS[c.libre.plano].nombre} (° desde ${PLANOS[c.libre.plano].ref})</label>
       <input data-p="angulo" type="number" step="0.1" inputmode="decimal" value="${c.libre.ang}">` : ''}` : ''}
     ${c.type === 'pipe' ? `<div style="margin-top:6px;font:600 12px var(--mono);color:${longitudCorte(c) <= 0 ? '#f87171' : 'var(--verde)'}">Corte: ${fmtLong(Math.max(0, longitudCorte(c)))} · descuento acc.: ${fmtLong(descuentoTubo(c))}</div>` : ''}
-    ${c.type !== 'pipe' && c.type !== 'weld' && !TIPOS[c.type].noBOM ? `<label>Largo / descuento al tubo (${txtUnidad()})${c.largo != null ? ' · manual' : TAKEOFF[c.type] ? ' · tabla ASME' : ''}</label>
+    ${c.type !== 'pipe' && c.type !== 'weld' && !TIPOS[c.type].noBOM ? `<label>Largo / descuento al tubo (${txtUnidad()})${c.largo != null ? ' · manual' : fuenteLargo(c) ? ' · ' + fuenteLargo(c) : ' · sin dato'}</label>
       <input data-p="largo" type="number" step="any" min="0" inputmode="decimal" placeholder="vacío = tabla" value="${c.largo != null || largoAccesorio(c) ? aUnidad(largoAccesorio(c)) : ''}">` : ''}
     ${c.type === 'pipe' ? `<label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:12px;color:var(--s200)"><input type="checkbox" data-p="sinCota" style="width:18px;height:18px"${c.sinCota ? ' checked' : ''}> Ocultar cota de este tramo</label>` : ''}
     ${c.type === 'pipe' ? `<label>Pendiente</label><button class="btn" style="width:100%" data-acc="pend">${c.pendiente ? `PEND. ${c.pendiente.valor}% · baja hacia el ${c.pendiente.haciaFin === false ? 'inicio' : 'final'}` : 'Agregar pendiente'}</button>` : ''}
