@@ -497,6 +497,7 @@ const TIPOS = {
   /* roscados, socket weld y derivaciones */
   union:         { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 12, nombre: 'UNIVERSAL (UNIÓN)', corto: 'Universal' },
   coupling:      { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 13, nombre: 'ACOPLE / COPLA COMPLETA', corto: 'Copla' },
+  coupling_red:  { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 13.5, nombre: 'COPLA REDUCTORA SOCKET WELD 3000#', corto: 'Copla reductora SW', reduce: true, union: 'SW' },
   half_coupling: { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 14, nombre: 'MEDIA COPLA', corto: 'Media copla', reduce: true },
   nipple:        { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 15, nombre: 'NIPLE', corto: 'Niple' },
   swage:         { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 16, nombre: 'NIPLE REDUCTOR (SWAGE)', corto: 'Swage', reduce: true },
@@ -853,6 +854,7 @@ const SIM = {
   stub_end: '<path d="M-10 -4H0V-8H3V8H0V4H-10Z" class="sb"/>',
   union: '<rect x="-5" y="-6" width="10" height="12" class="sb"/><path d="M0 -6V6" class="s"/>',
   coupling: '<rect x="-5" y="-5" width="10" height="10" class="sb"/>',
+  coupling_red: '<rect x="-7" y="-6" width="8" height="12" class="sb"/><rect x="1" y="-4" width="6" height="8" class="sb"/>',
   half_coupling: '<rect x="-4" y="-12" width="8" height="12" class="sb"/>',
   nipple: '<rect x="-9" y="-3.5" width="18" height="7" class="sb"/><path d="M-6 -3.5L-4 3.5M-2 -3.5L0 3.5M2 -3.5L4 3.5" class="s" style="stroke-width:1"/>',
   swage: '<polygon points="-10,-6 -3,-6 3,-3.5 10,-3.5 10,3.5 3,3.5 -3,6 -10,6" class="sb"/>',
@@ -1000,6 +1002,9 @@ const ROSCA_VALV = {
 const SW_A90 = tablaRosca([11.0, 13.5, 15.5, 19.0, 22.5, 27.0, 32.0, 38.0, 41.0, 57.0, 66.5]);
 const SW_A45 = tablaRosca([8.0, 8.0, 11.0, 13.0, 14.0, 17.5, 20.5, 25.5, 28.5, 32.0, 41.0]);   // 1/2"–4": ficha FEINSA codo 45° SW 3000
 const SW_E_COPLA = tablaRosca([6.5, 6.5, 9.5, 9.5, 12.5, 12.5, 12.5, 19.0, 19.0, 19.0, 19.0]);
+/* Copla reductora SW 3000# (ficha FEINSA): E = largo entre fondos de socket, por mayor x menor */
+const SW_E_COPLA_RED = { '3/4"x1/2"': 9.5, '1"x3/4"': 12.5, '1"x1/2"': 12.5, '1-1/4"x1"': 12.5, '1-1/4"x3/4"': 12.5, '1-1/2"x1"': 12.5,
+  '1-1/2"x3/4"': 12.5, '2"x1-1/4"': 19, '2"x1"': 19, '2-1/2"x2"': 19, '3"x2"': 19, '4"x3"': 19 };
 const SW_J = tablaRosca([9.5, 9.5, 9.5, 12.5, 12.5, 12.5, 12.5, 16.0, 16.0, 16.0, 19.0]);
 /* Olets 3000# (ficha FEINSA): A = altura desde la superficie del tubo principal, por diámetro del ramal */
 const OLET_A = {
@@ -1064,6 +1069,7 @@ function largoAccesorio(c) {
   if (OLET_A[c.type]) return descuentoOlet(c);
   if (c.largo != null && c.largo !== '') return Math.max(0, Number(c.largo) || 0);
   if (tipoUnion(c) === 'SW') {
+    if (c.type === 'coupling_red') return (SW_E_COPLA_RED[`${c.nps}x${c.npsRed}`] || 0) / 1000;
     const tabla = { elbow90_sw: SW_A90, tee_sw: SW_A90, cross_sw: SW_A90, elbow45_sw: SW_A45, coupling: SW_E_COPLA }[c.type];
     return tabla && tabla[c.nps] ? tabla[c.nps] / 1000 : 0;
   }
@@ -1625,6 +1631,7 @@ function openConsumableModal() {
    Coloca juntas en: uniones tubo-tubo, extremos de codos/tees/cruces, reducciones, bridas,
    caps, stub ends, codos 180° y olets. Solo para especificaciones soldadas a tope (BW). */
 const JUNTAS_LOCALES = {
+  coupling_red: [[-7, 0], [7, 0]], coupling: [[-5, 0], [5, 0]],
   reducer: [[-10, 0], [10, 0]], reducer_ecc: [[-10, 0], [10, 0]], flange_wn: [[-11, 0]], flange_so: [[-4, 0]], flange_sw: [[-8, 0]],
   cap: [[0, 0]], stub_end: [[-10, 0]], elbow180: [[-10, 0], [-10, -14]], weldolet: [[0, 0]], flange_or: [[-9, 0], [9, 0]], exp_joint: [[-10, 0], [10, 0]]
 };
