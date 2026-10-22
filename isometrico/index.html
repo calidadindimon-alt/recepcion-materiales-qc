@@ -172,6 +172,7 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
 .sb{fill:#fff;stroke:#000;stroke-width:1.6;stroke-linejoin:round}
 .sn{fill:#000;stroke:#000;stroke-width:1.2}
 .cota{font:700 10.5px Arial;fill:#0f172a;paint-order:stroke;stroke:#fff;stroke-width:3px}
+.cota.err{fill:#dc2626}
 .wl{font:700 9.5px Arial;fill:#b91c1c;paint-order:stroke;stroke:#fff;stroke-width:2.5px}
 .pend{font:italic 800 9.5px Arial;fill:#1d4ed8;paint-order:stroke;stroke:#fff;stroke-width:2.5px}
 .angl{font:italic 700 9.5px Arial;fill:#334155;paint-order:stroke;stroke:#fff;stroke-width:2.5px}
@@ -259,6 +260,9 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
           <div class="fila-opc"><span>Unidad de cotas</span><select id="sel-unidad" class="sel" style="min-height:30px;padding:3px 6px;color:var(--cian)"><option value="mm">Milímetros (mm)</option><option value="m">Metros (m)</option></select></div>
           <div class="fila-opc"><span>Paso de grilla (<b id="lbl-unidad-paso">mm</b>)</span><input id="grid-scale" type="number" step="any" min="0.001" value="500" inputmode="decimal"></div>
           <label class="fila-opc"><span>Confirmar longitud al trazar</span><input type="checkbox" id="chk-manual-len" checked></label>
+          <div class="fila-opc"><span>Cotas del plano</span><select id="sel-cotas" class="sel" style="color:var(--cian)">
+            <option value="ambas">Centro-centro + corte</option><option value="cc">Centro a centro</option><option value="corte">Longitud de corte</option></select></div>
+          <label class="fila-opc"><span>Descontar accesorios en el BOM</span><input type="checkbox" id="chk-descontar" checked></label>
           <div class="fila-opc"><span>Ángulo de trazado</span><select id="sel-trazo" class="sel" style="color:var(--ambar2)">
             <option value="iso">ISO 30°/90°/150°</option><option value="15">Libre · cada 15°</option><option value="5">Libre · cada 5°</option><option value="1">Libre · cada 1°</option></select></div>
           <div class="fila-opc" id="fila-plano" hidden><span>Plano del ángulo</span><select id="sel-plano" class="sel" style="color:var(--ambar2)">
@@ -631,6 +635,8 @@ const estado = {
   consumibles: [],      // { id, uni, desc, cant }
   ajustes: {},          // ajustes manuales de cantidad en el BOM, por clave de grupo
   catalogoPropio: [],   // ítems agregados por el usuario: { id, nombre, cat, simbolo, desc, uni }
+  cotas: 'ambas',       // texto de cotas: 'cc' (centro a centro), 'corte' o 'ambas'
+  descontar: true,      // el BOM suma longitud de corte (descontando accesorios), no centro a centro
   trazo: { modo: 'iso', plano: 'H' }   // modo: 'iso' o paso angular libre ('15' | '5' | '1'); plano del ángulo libre
 };
 let historial = [], rehacerPila = [];
@@ -905,6 +911,58 @@ function prepararLienzo() {
     <circle cx="${n.x}" cy="${n.y}" r="30" fill="none" stroke="#000" stroke-width="1"/>
     <text x="${n.x + u.x * 42}" y="${n.y + u.y * 42}" font-size="15" font-weight="900" text-anchor="middle" dominant-baseline="middle">N</text>`;
 }
+/* Medidas de accesorios en mm según NPS, para la longitud de corte del tubo (las cotas del
+   isométrico son centro a centro):
+   - codos 90° RL / RC y 45°: centro a extremo A/B — ASME B16.9
+   - tee y cruz: centro a extremo C — ASME B16.9 (tee reductora: se usa C del tamaño mayor)
+   - reducción: largo total H — ASME B16.9 (por diámetro mayor)
+   - cap: largo E — ASME B16.9
+   - brida WN 150#: largo a través del cubo Y — ASME B16.5
+   - válvulas 150# RF: cara a cara — ASME B16.10 (compuerta/bola patrón largo, globo, cheque) y mariposa wafer típica
+   Solo se aplican por defecto en especificaciones soldadas a tope (BW); cualquier valor se puede corregir
+   en el panel del componente («Largo / descuento»). */
+const N_TAB = ['1/2"', '3/4"', '1"', '1-1/4"', '1-1/2"', '2"', '2-1/2"', '3"', '4"', '6"', '8"', '10"', '12"', '14"', '16"', '18"', '20"', '24"'];
+const tablaMM = valores => Object.fromEntries(N_TAB.map((n, i) => [n, valores[i]]).filter(([, v]) => v != null));
+const TAKEOFF = {
+  elbow90:     tablaMM([38, 29, 38, 48, 57, 76, 95, 114, 152, 229, 305, 381, 457, 533, 610, 686, 762, 914]),
+  elbow90_sr:  tablaMM([null, null, 25, 32, 38, 51, 64, 76, 102, 152, 203, 254, 305, 356, 406, 457, 508, 610]),
+  elbow45:     tablaMM([16, 11, 22, 25, 29, 35, 44, 51, 64, 95, 127, 159, 190, 222, 254, 286, 318, 381]),
+  tee:         tablaMM([25, 29, 38, 48, 57, 64, 76, 86, 105, 143, 178, 216, 254, 279, 305, 343, 381, 432]),
+  reducer:     tablaMM([null, 38, 51, 51, 64, 76, 89, 89, 102, 140, 152, 178, 203, 330, 356, 381, 508, 508]),
+  cap:         tablaMM([25, 25, 38, 38, 38, 38, 38, 51, 64, 89, 102, 127, 152, 165, 178, 203, 229, 267]),
+  flange_wn:   tablaMM([48, 52, 56, 57, 62, 62, 68, 68, 75, 87, 100, 100, 113, 125, 125, 138, 143, 151]),
+  v_gate:      tablaMM([108, 117, 127, 140, 165, 178, 190, 203, 229, 267, 292, 330, 356, 381, 406, 432, 457, 508]),
+  v_globe:     tablaMM([108, 117, 127, 140, 165, 203, 216, 241, 292, 406, 495, 622, 698]),
+  v_check:     tablaMM([108, 117, 127, 140, 165, 203, 216, 241, 292, 356, 495, 622, 698, 787, 864, 978, 978, 1295]),
+  v_butterfly: tablaMM([null, null, null, null, null, 43, 46, 46, 52, 56, 60, 68, 78, 92, 102, 114, 127, 154])
+};
+TAKEOFF.tee_red = TAKEOFF.tee; TAKEOFF.cross = TAKEOFF.tee; TAKEOFF.reducer_ecc = TAKEOFF.reducer; TAKEOFF.elbow180 = TAKEOFF.elbow90; TAKEOFF.v_ball = TAKEOFF.v_gate;
+/* Largo que un accesorio le quita al tubo (m): valor del usuario o de la tabla */
+function largoAccesorio(c) {
+  if (c.largo != null && c.largo !== '') return Math.max(0, Number(c.largo) || 0);
+  const tabla = TAKEOFF[c.type]; if (!tabla) return 0;
+  if ((SPECS[c.schedule]?.junta || 'BW') !== 'BW') return 0;
+  return (tabla[c.nps] || 0) / 1000;
+}
+/* Descuento de accesorios sobre un tramo: codos/tees en sus extremos (y tee pasante 2×C),
+   piezas en línea completas si están dentro del tramo o repartidas si están en una unión */
+function descuentoTubo(c) {
+  const [A, B] = c.coords, a = aPantalla(A), b = aPantalla(B), dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy || 1;
+  let total = 0;
+  for (const o of estado.components) {
+    if (o.type === 'pipe' || o.type === 'weld' || TIPOS[o.type].noBOM) continue;
+    const L = largoAccesorio(o); if (!(L > 0)) continue;
+    const P = o.coords[0], enExtremo = igual(P, A) || igual(P, B);
+    let interior = false;
+    if (!enExtremo) { const s = aPantalla(P), t = ((s.x - a.x) * dx + (s.y - a.y) * dy) / L2; interior = t > 0 && t < 1 && Math.hypot(a.x + t * dx - s.x, a.y + t * dy - s.y) < 0.5; }
+    if (!enExtremo && !interior) continue;
+    if (TIPOS[o.type].modo === 'nodo') total += interior ? 2 * L : L;
+    else if (interior) total += L;
+    else total += L / Math.max(1, tuberias().filter(p => igual(p.coords[0], P) || igual(p.coords[1], P)).length);
+  }
+  return total;
+}
+const longitudCorte = c => r3(longitudTubo(c) - descuentoTubo(c));
 const longitudTubo = c => c.lengthManual ? Number(c.length) || 0 : r3(pasosReales(c) * estado.escala);
 
 /* ---------- 7b. Acomodo de textos: cotas, marcas de soldadura y ángulos no se montan ----------
@@ -1001,7 +1059,10 @@ function renderLienzo() {
       let nrm = { x: -Math.sin(r), y: -Math.cos(r) };
       if (nrm.y > 0.05 || (Math.abs(nrm.y) <= 0.05 && nrm.x > 0)) nrm = { x: -nrm.x, y: -nrm.y };
       let rot = -ang; while (rot < -90) rot += 180; while (rot >= 90) rot -= 180;
-      const texto = `${fmtLong(longitudTubo(c))}${c.lengthManual ? '*' : ''}`, w = texto.length * 6.1 + 4, h = 13;
+      const cc = longitudTubo(c), corte = longitudCorte(c), descuenta = corte < cc - 5e-4, negativo = corte <= 0;
+      const ccTxt = `${fmtLong(cc)}${c.lengthManual ? '*' : ''}`, corteTxt = negativo ? '⚠ corte ≤ 0' : `corte ${enMM() ? Math.round(corte * 1000) : f2(corte)}`;
+      const texto = estado.cotas === 'cc' || (!descuenta && !negativo) ? ccTxt : estado.cotas === 'corte' ? (negativo ? '⚠ corte ≤ 0' : fmtLong(corte)) : `${ccTxt} (${corteTxt})`;
+      const w = texto.length * 6.1 + 4, h = 13;
       const m = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
       const candidatos = (ancho, lados) => { const lista = [];
         for (const d of [10, 19, 28, 38]) for (const f of [0, 0.25, -0.25, 0.4, -0.4, 0.6, -0.6]) {
@@ -1009,7 +1070,7 @@ function renderLienzo() {
           for (const lado of lados) lista.push({ x: m.x + e.x * f * Lpx + nrm.x * lado * d, y: m.y + e.y * f * Lpx + nrm.y * lado * d, pen: (fuera ? 4 : 0) + d / 40 });
         }
         return lista.sort((a, b) => a.pen - b.pen); };
-      if (!c.sinCota) etiquetas.push({ texto, clase: 'cota', w, h, rot, cand: candidatos(w, [1, -1]), prio: 0 });
+      if (!c.sinCota || negativo) etiquetas.push({ texto, clase: negativo ? 'cota err' : 'cota', w, h, rot, cand: candidatos(w, [1, -1]), prio: 0 });
       if (c.pendiente && Number(c.pendiente.valor) > 0) {
         /* pendiente: la flecha apunta hacia donde baja el tramo */
         const baja = c.pendiente.haciaFin === false ? { x: -e.x, y: -e.y } : e, tr = rot * Math.PI / 180;
@@ -1161,6 +1222,8 @@ function aplicarProyecto(o) {
   Object.assign(estado.cabecera, o.cabecera || {});
   estado.escala = Number(o.escala) > 0 ? Number(o.escala) : 0.5;
   estado.unidad = o.unidad === 'm' ? 'm' : 'mm';
+  estado.cotas = ['cc', 'corte', 'ambas'].includes(o.cotas) ? o.cotas : 'ambas';
+  estado.descontar = o.descontar !== false;
   estado.catalogoPropio = Array.isArray(o.catalogoPropio) ? o.catalogoPropio.filter(it => it && /^u_/.test(it.id) && it.nombre) : [];
   for (const t of Object.keys(TIPOS)) if (TIPOS[t].propio) delete TIPOS[t];
   estado.catalogoPropio.forEach(registrarPropio);
@@ -1310,7 +1373,7 @@ function recalculateBOM() {
     if (TIPOS[c.type].noBOM) continue;
     const T = TIPOS[c.type], key = [c.type, c.nps, c.npsRed || '', c.schedule, c.ref || ''].join('|');
     const g = grupos.get(key) || { key, orden: T.orden, nps: npsNum(c.nps), uni: c.type === 'pipe' ? 'ML' : (T.uni || 'UND'), desc: descripcion(c), cant: 0 };
-    g.cant += c.type === 'pipe' ? longitudTubo(c) : 1;
+    g.cant += c.type === 'pipe' ? (estado.descontar ? Math.max(0, longitudCorte(c)) : longitudTubo(c)) : 1;
     grupos.set(key, g);
   }
   const filas = [...grupos.values()].sort((a, b) => a.orden - b.orden || b.nps - a.nps || a.desc.localeCompare(b.desc));
@@ -1540,6 +1603,9 @@ function renderPanelSeleccion() {
       <button class="btn" data-acc="auto" title="Volver a la longitud por grilla">Grilla</button></div>
       ${c.libre && PLANOS[c.libre.plano] && !dirEntre(c.coords[0], c.coords[1]) ? `<label>Ángulo · plano ${PLANOS[c.libre.plano].nombre} (° desde ${PLANOS[c.libre.plano].ref})</label>
       <input data-p="angulo" type="number" step="0.1" inputmode="decimal" value="${c.libre.ang}">` : ''}` : ''}
+    ${c.type === 'pipe' ? `<div style="margin-top:6px;font:600 12px var(--mono);color:${longitudCorte(c) <= 0 ? '#f87171' : 'var(--verde)'}">Corte: ${fmtLong(Math.max(0, longitudCorte(c)))} · descuento acc.: ${fmtLong(descuentoTubo(c))}</div>` : ''}
+    ${c.type !== 'pipe' && c.type !== 'weld' && !TIPOS[c.type].noBOM ? `<label>Largo / descuento al tubo (${txtUnidad()})${c.largo != null ? ' · manual' : TAKEOFF[c.type] ? ' · tabla ASME' : ''}</label>
+      <input data-p="largo" type="number" step="any" min="0" inputmode="decimal" placeholder="vacío = tabla" value="${c.largo != null || largoAccesorio(c) ? aUnidad(largoAccesorio(c)) : ''}">` : ''}
     ${c.type === 'pipe' ? `<label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:12px;color:var(--s200)"><input type="checkbox" data-p="sinCota" style="width:18px;height:18px"${c.sinCota ? ' checked' : ''}> Ocultar cota de este tramo</label>` : ''}
     ${c.type === 'pipe' ? `<label>Pendiente</label><button class="btn" style="width:100%" data-acc="pend">${c.pendiente ? `PEND. ${c.pendiente.valor}% · baja hacia el ${c.pendiente.haciaFin === false ? 'inicio' : 'final'}` : 'Agregar pendiente'}</button>` : ''}
     ${c.type !== 'weld' && !TIPOS[c.type].noBOM ? `<label>Código / ref. fabricante</label><input data-p="ref" maxlength="60" placeholder="Ej: 032U1247" value="${esc(c.ref || '')}">` : ''}
@@ -1557,6 +1623,10 @@ $('panel-sel').addEventListener('change', e => {
     const a = parseFloat(String(e.target.value).replace(',', '.'));
     if (!isFinite(a)) { aviso('Ángulo no válido', 'error'); renderPanelSeleccion(); return; }
     commit(() => cambiarAnguloLibre(c, a));
+  } else if (k === 'largo') {
+    const t = String(e.target.value).trim().replace(',', '.'), v = deUnidad(parseFloat(t));
+    if (t !== '' && !(v >= 0)) { aviso('Largo no válido', 'error'); renderPanelSeleccion(); return; }
+    commit(() => { if (t === '') delete c.largo; else c.largo = r3(v); });
   } else if (k === 'sinCota') {
     commit(() => { if (e.target.checked) c.sinCota = true; else delete c.sinCota; });
   } else if (k === 'ref') {
@@ -1779,6 +1849,7 @@ document.addEventListener('keydown', e => {
 function pintarCabecera() {
   document.querySelectorAll('[data-h]').forEach(i => { i.value = estado.cabecera[i.dataset.h] ?? ''; });
   $('sel-unidad').value = estado.unidad;
+  $('sel-cotas').value = estado.cotas; $('chk-descontar').checked = estado.descontar;
   $('lbl-unidad-paso').textContent = txtUnidad();
   $('grid-scale').step = enMM() ? '50' : '0.05';
   $('grid-scale').value = aUnidad(estado.escala);
@@ -1788,6 +1859,8 @@ function pintarCabecera() {
 document.querySelectorAll('[data-h]').forEach(i => i.addEventListener('input', () => { estado.cabecera[i.dataset.h] = i.value; guardarLocal(); }));
 $('spec-nps').addEventListener('change', () => { estado.cabecera.nps = $('spec-nps').value; pintarCabecera(); guardarLocal(); });
 $('spec-mat').addEventListener('change', () => { estado.cabecera.spec = $('spec-mat').value; pintarCabecera(); guardarLocal(); });
+$('sel-cotas').addEventListener('change', () => { estado.cotas = $('sel-cotas').value; actualizarTodo(); });
+$('chk-descontar').addEventListener('change', () => { estado.descontar = $('chk-descontar').checked; actualizarTodo(); });
 $('sel-unidad').addEventListener('change', () => {
   estado.unidad = $('sel-unidad').value === 'm' ? 'm' : 'mm';
   pintarCabecera(); actualizarTodo();
@@ -1852,9 +1925,10 @@ function exportToExcel() {
   const totML = r2(ultimoBOM.filter(f => f.uni === 'ML' && !f.consumible).reduce((s, f) => s + Number(f.cant || 0), 0));
   const nJuntas = estado.components.filter(c => c.type === 'weld').length;
   let nT = 0;
-  const detalle = [['MARCA', 'CATEGORÍA', 'TIPO', 'NPS', 'NPS MENOR', 'ESPECIFICACIÓN', `LONGITUD (${txtUnidad()})`, 'LONG. MANUAL', 'ÁNGULO / PLANO', 'PENDIENTE', 'DESCRIPCIÓN', 'COORDENADAS RED [p,q]']]
+  const detalle = [['MARCA', 'CATEGORÍA', 'TIPO', 'NPS', 'NPS MENOR', 'ESPECIFICACIÓN', `CENTRO-CENTRO (${txtUnidad()})`, `DESCUENTO / LARGO ACC. (${txtUnidad()})`, `LONG. CORTE (${txtUnidad()})`, 'LONG. MANUAL', 'ÁNGULO / PLANO', 'PENDIENTE', 'DESCRIPCIÓN', 'COORDENADAS RED [p,q]']]
     .concat([...estado.components].filter(c => !TIPOS[c.type].noBOM).sort((a, b) => (a.type === 'weld') - (b.type === 'weld') || (a.type === 'weld' ? numW.get(a.id) - numW.get(b.id) : 0)).map(c => [c.type === 'weld' ? `W${numW.get(c.id)}` : c.type === 'pipe' ? `T${++nT}` : '', c.category, TIPOS[c.type].corto, c.nps, c.npsRed || '', c.schedule,
-      c.type === 'pipe' ? aUnidad(longitudTubo(c)) : '', c.type === 'pipe' ? (c.lengthManual ? 'SÍ' : 'NO') : '',
+      c.type === 'pipe' ? aUnidad(longitudTubo(c)) : '', c.type === 'pipe' ? aUnidad(descuentoTubo(c)) : (largoAccesorio(c) ? aUnidad(largoAccesorio(c)) : ''),
+      c.type === 'pipe' ? aUnidad(Math.max(0, longitudCorte(c))) : '', c.type === 'pipe' ? (c.lengthManual ? 'SÍ' : 'NO') : '',
       c.libre && PLANOS[c.libre.plano] && !dirEntre(c.coords[0], c.coords[1]) ? `${anguloAgudo(c)}° · ${PLANOS[c.libre.plano].corto}` : '',
       c.pendiente ? `${c.pendiente.valor}% hacia el ${c.pendiente.haciaFin === false ? 'inicio' : 'final'}` : '',
       descripcion(c), c.coords.map(P => `[${P[0]}, ${P[1]}]`).join(' → ')]));
@@ -1873,7 +1947,7 @@ function exportToExcel() {
   const fEnc = aoa.length; aoa.push(['ITEM', 'UNI', 'DESCRIPCIÓN TÉCNICA', 'CANTIDAD']);
   const fDat = aoa.length; filasBOM.forEach(f => aoa.push(f));
   aoa.push([]);
-  const fTot = aoa.length; aoa.push(['', '', 'TOTAL TUBERÍA (ML)', totML], ['', '', 'TOTAL JUNTAS SOLDADAS (END)', nJuntas]);
+  const fTot = aoa.length; aoa.push(['', '', estado.descontar ? 'TOTAL TUBERÍA (ML, LONGITUD DE CORTE)' : 'TOTAL TUBERÍA (ML, CENTRO A CENTRO)', totML], ['', '', 'TOTAL JUNTAS SOLDADAS (END)', nJuntas]);
   aoa.push([]); const fPie = aoa.length; aoa.push([`Generado con INDIMON CAD · ${new Date().toLocaleString('es-CO')}`]);
   const ws = XLSX.utils.aoa_to_sheet(aoa), merges = [];
   const linea = { style: 'thin', color: { rgb: '000000' } }, borde = { top: linea, bottom: linea, left: linea, right: linea };
@@ -1911,10 +1985,10 @@ function exportToExcel() {
   ws['!rows'] = aoa.map((_, r) => r === 0 ? { hpt: 26 } : r === 1 ? { hpt: 20 } : r === fEnc ? { hpt: 20 } : r >= fDat && r < fDat + filasBOM.length ? { hpt: 17 } : null);
   /* ----- Hoja 2: detalle de componentes (trazabilidad de juntas y tramos) ----- */
   const ws2 = XLSX.utils.aoa_to_sheet(detalle);
-  ws2['!cols'] = [8, 12, 18, 8, 10, 26, 13, 12, 16, 18, 80, 34].map(w => ({ wch: w }));
+  ws2['!cols'] = [8, 12, 18, 8, 10, 26, 13, 15, 13, 12, 16, 18, 80, 34].map(w => ({ wch: w }));
   for (let c = 0; c < detalle[0].length; c++) {
     ws2[XLSX.utils.encode_cell({ r: 0, c })].s = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '1E293B' } }, border: borde, alignment: centro };
-    for (let r = 1; r < detalle.length; r++) { const ref = XLSX.utils.encode_cell({ r, c }); if (!ws2[ref]) ws2[ref] = { t: 's', v: '' }; ws2[ref].s = { border: borde, alignment: { vertical: 'center', horizontal: c < 10 && c !== 5 ? 'center' : 'left' } }; }
+    for (let r = 1; r < detalle.length; r++) { const ref = XLSX.utils.encode_cell({ r, c }); if (!ws2[ref]) ws2[ref] = { t: 's', v: '' }; ws2[ref].s = { border: borde, alignment: { vertical: 'center', horizontal: c < 12 && c !== 5 ? 'center' : 'left' } }; }
   }
   ws2['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(1, detalle.length - 1), c: detalle[0].length - 1 } }) };
   const wb = XLSX.utils.book_new();
