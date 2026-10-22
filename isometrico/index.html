@@ -544,8 +544,60 @@ const TIPOS = {
   /* juntas */
   weld:          { grupo: 'junta', cat: 'JUNTA', mat: 'junta', modo: 'punto', orden: 70, nombre: 'JUNTA SOLDADA A TOPE', corto: 'Soldadura (END)' }
 };
+/* Catálogo de fabricante: series Danfoss (válvulas, reguladores, filtros e instrumentos).
+   Cada serie usa un símbolo base del catálogo; el código de pedido exacto según diámetro y
+   conexión se anota en "Código / ref. fabricante" del componente. */
+const FABRICANTES = {
+  danfoss: { titulo: 'Danfoss', items: [
+    ['d_ev210b', 'v_solenoid', 'DANFOSS EV210B VÁLVULA SOLENOIDE 2/2 VÍAS ACCIÓN DIRECTA', 'EV210B solenoide'],
+    ['d_ev220b', 'v_solenoid', 'DANFOSS EV220B VÁLVULA SOLENOIDE 2/2 VÍAS SERVOACCIONADA', 'EV220B solenoide'],
+    ['d_ev225b', 'v_solenoid', 'DANFOSS EV225B VÁLVULA SOLENOIDE PARA VAPOR', 'EV225B vapor'],
+    ['d_ev250b', 'v_solenoid', 'DANFOSS EV250B VÁLVULA SOLENOIDE ASISTIDA (DESDE 0 BAR)', 'EV250B asistida'],
+    ['d_ev260b', 'v_solenoid', 'DANFOSS EV260B VÁLVULA SOLENOIDE PROPORCIONAL', 'EV260B proporcional'],
+    ['d_evr', 'v_solenoid', 'DANFOSS EVR VÁLVULA SOLENOIDE PARA REFRIGERACIÓN', 'EVR refrigeración'],
+    ['d_evra', 'v_solenoid', 'DANFOSS EVRA VÁLVULA SOLENOIDE (AMONÍACO / HFC)', 'EVRA solenoide'],
+    ['d_ics', 'v_control', 'DANFOSS ICS VÁLVULA PRINCIPAL SERVOACCIONADA', 'ICS servo'],
+    ['d_icm', 'v_control', 'DANFOSS ICM VÁLVULA MOTORIZADA DE CONTROL', 'ICM motorizada'],
+    ['d_te', 'v_regulator', 'DANFOSS TE VÁLVULA DE EXPANSIÓN TERMOSTÁTICA', 'TE expansión'],
+    ['d_ets', 'v_control', 'DANFOSS ETS VÁLVULA DE EXPANSIÓN ELECTRÓNICA', 'ETS expansión elec.'],
+    ['d_akv', 'v_solenoid', 'DANFOSS AKV VÁLVULA DE EXPANSIÓN ELECTRÓNICA PULSANTE', 'AKV expansión'],
+    ['d_kvp', 'v_regulator', 'DANFOSS KVP REGULADOR DE PRESIÓN DE EVAPORACIÓN', 'KVP reg. evap.'],
+    ['d_kvr', 'v_regulator', 'DANFOSS KVR REGULADOR DE PRESIÓN DE CONDENSACIÓN', 'KVR reg. cond.'],
+    ['d_kvl', 'v_regulator', 'DANFOSS KVL REGULADOR DE PRESIÓN DE CÁRTER', 'KVL reg. cárter'],
+    ['d_gbc', 'v_ball', 'DANFOSS GBC VÁLVULA DE BOLA PARA REFRIGERACIÓN', 'GBC bola'],
+    ['d_sva', 'v_globe', 'DANFOSS SVA VÁLVULA DE CIERRE', 'SVA cierre'],
+    ['d_reg', 'v_needle', 'DANFOSS REG VÁLVULA DE REGULACIÓN MANUAL', 'REG regulación'],
+    ['d_snv', 'v_needle', 'DANFOSS SNV VÁLVULA DE AGUJA DE CIERRE', 'SNV aguja'],
+    ['d_nrv', 'v_check', 'DANFOSS NRV VÁLVULA DE RETENCIÓN', 'NRV retención'],
+    ['d_chv', 'v_check', 'DANFOSS CHV VÁLVULA DE RETENCIÓN', 'CHV retención'],
+    ['d_sfv', 'v_psv', 'DANFOSS SFV VÁLVULA DE SEGURIDAD', 'SFV seguridad'],
+    ['d_fia', 'strainer_y', 'DANFOSS FIA FILTRO', 'FIA filtro'],
+    ['d_dml', 'strainer_t', 'DANFOSS DML FILTRO DESHIDRATADOR', 'DML deshidratador'],
+    ['d_sgi', 'sight', 'DANFOSS SGI VISOR DE LÍQUIDO CON INDICADOR DE HUMEDAD', 'SGI visor'],
+    ['d_abqm', 'v_control', 'DANFOSS AB-QM VÁLVULA DE CONTROL INDEPENDIENTE DE LA PRESIÓN (PICV)', 'AB-QM PICV'],
+    ['d_asvpv', 'v_regulator', 'DANFOSS ASV-PV REGULADOR DE PRESIÓN DIFERENCIAL', 'ASV-PV ΔP'],
+    ['d_asvbd', 'v_ball', 'DANFOSS ASV-BD VÁLVULA DE CIERRE Y MEDICIÓN', 'ASV-BD cierre'],
+    ['d_msvbd', 'v_globe', 'DANFOSS MSV-BD VÁLVULA DE EQUILIBRADO MANUAL', 'MSV-BD equilibrado'],
+    ['d_avp', 'v_regulator', 'DANFOSS AVP REGULADOR DE PRESIÓN DIFERENCIAL AUTOACCIONADO', 'AVP ΔP'],
+    ['d_vb2', 'v_control', 'DANFOSS VB 2 VÁLVULA DE CONTROL DE ASIENTO 2 VÍAS', 'VB 2 control'],
+    ['d_vf3', 'v_3way', 'DANFOSS VF 3 VÁLVULA DE CONTROL DE ASIENTO 3 VÍAS BRIDADA', 'VF 3 3 vías'],
+    ['d_vrb3', 'v_3way', 'DANFOSS VRB 3 VÁLVULA DE CONTROL 3 VÍAS ROSCADA', 'VRB 3 3 vías'],
+    ['d_jip', 'v_ball', 'DANFOSS JIP VÁLVULA DE BOLA PARA REDES DE CALEFACCIÓN', 'JiP bola'],
+    ['d_ra', 'v_globe', 'DANFOSS RA-N VÁLVULA TERMOSTÁTICA DE RADIADOR', 'RA-N termostática'],
+    ['d_vfy', 'v_butterfly', 'DANFOSS VFY-WH VÁLVULA MARIPOSA TIPO WAFER', 'VFY-WH mariposa'],
+    ['d_kp', 'pi', 'DANFOSS KP PRESOSTATO', 'KP presostato'],
+    ['d_mbs', 'pi', 'DANFOSS MBS 3000 TRANSMISOR DE PRESIÓN', 'MBS transmisor P'],
+    ['d_mbt', 'ti', 'DANFOSS MBT SENSOR DE TEMPERATURA', 'MBT sensor T']
+  ] }
+};
+for (const [marca, { items }] of Object.entries(FABRICANTES))
+  items.forEach(([id, base, nombre, corto], i) => {
+    const B = TIPOS[base];
+    TIPOS[id] = { grupo: 'fab_' + marca, cat: B.cat, mat: 'gen', modo: B.modo, orden: 61 + i / 100, nombre, corto, base, uni: 'UND' };
+  });
 const GRUPOS = [['acc_bw', 'Accesorios soldables (BW)'], ['acc_rs', 'Roscados · Socket weld · Derivaciones'], ['brida', 'Bridas'], ['val', 'Válvulas'],
-  ['esp', 'Especiales de línea'], ['inst', 'Instrumentos'], ['sop', 'Soportes'], ['junta', 'Juntas'], ['propio', 'Catálogo propio']];
+  ['esp', 'Especiales de línea'], ['inst', 'Instrumentos'], ['sop', 'Soportes'], ['junta', 'Juntas'],
+  ...Object.entries(FABRICANTES).map(([m, f]) => ['fab_' + m, `Fabricante: ${f.titulo}`]), ['propio', 'Catálogo propio']];
 const CATEGORIAS = ['ACCESORIO', 'BRIDA', 'VÁLVULA', 'ESPECIAL', 'INSTRUMENTO', 'SOPORTE', 'OTRO'];
 const CONSUMIBLES = [
   ['SOLDADURA E6010 Ø 1/8" (PASE DE RAÍZ)', 'KG'],
@@ -1188,7 +1240,8 @@ function colocarSimbolo(tipo, pt, R) {
 }
 
 /* ---------- 11. Motor del Listado de Materiales (BOM) ---------- */
-function descripcion(c) {
+function descripcion(c) { const d = descripcionBase(c); return c.ref ? `${d} — REF. ${c.ref}` : d; }
+function descripcionBase(c) {
   const sp = SPECS[c.schedule] || { sch: '', tubo: c.schedule, acc: c.schedule, forj: c.schedule, brida: c.schedule, val: c.schedule, junta: 'BW' };
   const T = TIPOS[c.type], med = T.reduce && c.npsRed ? `Ø ${c.nps} x ${c.npsRed}` : `Ø ${c.nps}`;
   switch (T.mat) {
@@ -1211,7 +1264,7 @@ function descripcion(c) {
 function recalculateBOM() {
   const grupos = new Map();
   for (const c of estado.components) {
-    const T = TIPOS[c.type], key = [c.type, c.nps, c.npsRed || '', c.schedule].join('|');
+    const T = TIPOS[c.type], key = [c.type, c.nps, c.npsRed || '', c.schedule, c.ref || ''].join('|');
     const g = grupos.get(key) || { key, orden: T.orden, nps: npsNum(c.nps), uni: c.type === 'pipe' ? 'ML' : (T.uni || 'UND'), desc: descripcion(c), cant: 0 };
     g.cant += c.type === 'pipe' ? longitudTubo(c) : 1;
     grupos.set(key, g);
@@ -1443,6 +1496,7 @@ function renderPanelSeleccion() {
       <button class="btn" data-acc="auto" title="Volver a la longitud por grilla">Grilla</button></div>
       ${c.libre && PLANOS[c.libre.plano] && !dirEntre(c.coords[0], c.coords[1]) ? `<label>Ángulo · plano ${PLANOS[c.libre.plano].nombre} (° desde ${PLANOS[c.libre.plano].ref})</label>
       <input data-p="angulo" type="number" step="0.1" inputmode="decimal" value="${c.libre.ang}">` : ''}` : ''}
+    ${c.type !== 'weld' ? `<label>Código / ref. fabricante</label><input data-p="ref" maxlength="60" placeholder="Ej: 032U1247" value="${esc(c.ref || '')}">` : ''}
     <div class="acc">${c.type !== 'pipe' && TIPOS[c.type].modo !== 'punto' ? '<button class="btn" data-acc="rotar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-rotate"/></svg>Rotar</button>' : ''}
       <button class="btn peligro" data-acc="borrar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-trash"/></svg>Borrar</button></div>`;
   p.hidden = false;
@@ -1457,6 +1511,9 @@ $('panel-sel').addEventListener('change', e => {
     const a = parseFloat(String(e.target.value).replace(',', '.'));
     if (!isFinite(a)) { aviso('Ángulo no válido', 'error'); renderPanelSeleccion(); return; }
     commit(() => cambiarAnguloLibre(c, a));
+  } else if (k === 'ref') {
+    const v = e.target.value.trim().toUpperCase();
+    commit(() => { if (v) c.ref = v; else delete c.ref; });
   } else commit(() => { c[k] = e.target.value; });
 });
 $('panel-sel').addEventListener('click', e => {
@@ -1901,7 +1958,7 @@ const claro = s => s.replace(/class="sb"/g, 'fill="#0f172a" stroke="#e2e8f0" str
 const iconoSimbolo = t => { const b = TIPOS[t].base || t; return claro(ICONO_NODO[b] || SIM[b] || ''); };
 const botonHerr = (tool, etiqueta, dibujo, esIcono) => `<button class="herr" data-tool="${esc(tool)}" onclick="setActiveTool('${esc(tool)}')" title="${esc(TIPOS[tool]?.nombre || etiqueta)}">
     ${esIcono ? `<svg class="ico" viewBox="0 0 24 24" style="width:22px;height:22px"><use href="#i-${dibujo}"/></svg>` : `<svg class="sim" viewBox="-20 -20 40 40" style="stroke:#e2e8f0">${dibujo}</svg>`}<span>${esc(etiqueta)}</span></button>`;
-const gruposAbiertos = new Set(['acc_bw', 'val', 'junta', 'propio']);
+const gruposAbiertos = new Set(['acc_bw', 'val', 'junta', 'propio', 'fab_danfoss']);
 function construirCatalogo() {
   const filtro = quitarTildes($('buscar-sim').value).toLowerCase().trim();
   const html = GRUPOS.map(([g, titulo]) => {
