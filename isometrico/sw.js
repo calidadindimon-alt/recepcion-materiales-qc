@@ -1,6 +1,6 @@
 /* Service worker de INDIMON CAD: guarda la app en el equipo para trabajar sin internet.
    Al publicar cambios, suba el número de VERSION para que los equipos descarguen la nueva copia. */
-const VERSION = 'indimon-cad-v7';
+const VERSION = 'indimon-cad-v8';
 const ARCHIVOS = [
   './', './index.html', './manifest.webmanifest', './vendor/xlsx.bundle.js',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'
