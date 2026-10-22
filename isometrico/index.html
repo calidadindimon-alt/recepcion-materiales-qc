@@ -89,7 +89,7 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
 .estado .rapida.activa{border-color:var(--ambar);color:#fde68a}
 
 /* Panel de propiedades del componente seleccionado */
-#panel-sel{position:absolute;right:12px;top:12px;z-index:26;width:250px;background:rgba(2,6,23,.96);border:1px solid #3b82f6;border-radius:12px;padding:10px;font-size:12px;box-shadow:0 8px 30px rgba(0,0,0,.45)}
+#panel-sel{position:absolute;right:12px;top:12px;z-index:26;width:250px;max-height:calc(100% - 90px);overflow:auto;background:rgba(2,6,23,.96);border:1px solid #3b82f6;border-radius:12px;padding:10px;font-size:12px;box-shadow:0 8px 30px rgba(0,0,0,.45)}
 #panel-sel h4{margin:0 0 8px;font-size:12px;color:#93c5fd;text-transform:uppercase;letter-spacing:.05em;display:flex;justify-content:space-between;align-items:center}
 #panel-sel label{display:block;margin:6px 0 2px;color:var(--s400);font-size:10.5px;font-weight:700;text-transform:uppercase}
 #panel-sel select,#panel-sel input{width:100%;background:var(--s800);border:1px solid var(--s700);border-radius:6px;padding:7px;font:600 13px var(--mono)}
@@ -176,6 +176,13 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
 .sn{fill:#000;stroke:#000;stroke-width:1.2}
 .cota{font:700 10.5px Arial;fill:#0f172a;paint-order:stroke;stroke:#fff;stroke-width:3px}
 .cota.err{fill:#dc2626}
+/* estado de las juntas (solo en pantalla; al imprimir y en el mapa QC-F-015 quedan negras/rojas) */
+@media screen{
+  .jt-pendiente .pt{fill:#64748b}.jt-soldada .pt{fill:#1d4ed8}.jt-liberada .pt{fill:#15803d}.jt-rechazada .pt{fill:#dc2626}
+  .wl-pendiente{fill:#475569}.wl-soldada{fill:#1d4ed8}.wl-liberada{fill:#15803d}.wl-rechazada{fill:#dc2626;text-decoration:underline}
+}
+.qc-resumen{font:600 11px var(--mono);color:var(--s300);margin:6px 0 2px;line-height:1.5}
+.rj-lista{max-height:34vh;overflow:auto;border:1px solid var(--s700);border-radius:8px;padding:4px 8px;margin-top:6px}
 .wl{font:700 9.5px Arial;fill:#b91c1c;paint-order:stroke;stroke:#fff;stroke-width:2.5px}
 .tagq{font:800 11px Arial;fill:#0f172a;paint-order:stroke;stroke:#fff;stroke-width:3px}
 .pend{font:italic 800 9.5px Arial;fill:#1d4ed8;paint-order:stroke;stroke:#fff;stroke-width:2.5px}
@@ -189,7 +196,7 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
   .velo[hidden]{display:none}
   .solo-movil{display:inline-flex!important}
   .sec.solo-movil{display:flex!important}
-  #panel-sel{left:8px;right:8px;top:auto;bottom:calc(68px + var(--safe-b));width:auto}
+  #panel-sel{left:8px;right:8px;top:auto;bottom:calc(68px + var(--safe-b));width:auto;max-height:58vh}
 }
 @media (max-width:760px){
   .solo-pc,.marca-sub{display:none!important}
@@ -293,7 +300,16 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
         </div>
 
         <div class="sec">
-          <h3>4. Archivo y aplicación</h3>
+          <h3>4. Calidad: QC-F-004 · QC-F-015</h3>
+          <div class="qc-resumen" id="qc-resumen">Sin juntas</div>
+          <button class="btn ancho" onclick="abrirDatosCalidad()"><svg class="ico" data-ico="file"></svg>Datos de calidad (WPS, lugar, firmas)</button>
+          <button class="btn ancho" onclick="abrirRegistroJuntas()"><svg class="ico" data-ico="check"></svg>Registrar soldadura de juntas</button>
+          <button class="btn ancho verde" onclick="exportarQC004()"><svg class="ico" data-ico="sheet"></svg>QC-F-004 Reporte de soldadura</button>
+          <button class="btn ancho verde" onclick="exportarQC015()"><svg class="ico" data-ico="sheet"></svg>QC-F-015 Mapa de soldadura</button>
+        </div>
+
+        <div class="sec">
+          <h3>5. Archivo y aplicación</h3>
           <button class="btn ancho" onclick="nuevoPlano()"><svg class="ico" data-ico="file"></svg>Nuevo plano</button>
           <button class="btn ancho" onclick="document.getElementById('in-proyecto').click()"><svg class="ico" data-ico="folder"></svg>Abrir proyecto (.json)</button>
           <button class="btn ancho" onclick="guardarProyecto()"><svg class="ico" data-ico="save"></svg>Guardar proyecto (.json)</button>
@@ -659,8 +675,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v13';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-10-22T19:31';      // fecha y hora de la publicación (UTC)
+const APP_VERSION = 'v14';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-10-22T20:16';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -674,7 +690,8 @@ const estado = {
   descontar: true,      // el BOM suma longitud de corte (descontando accesorios), no centro a centro
   apertura: 1.6,        // apertura de raíz en juntas a tope BW (mm)
   sepSW: 1.6,           // separación entre tubo y fondo del socket antes de soldar SW (mm)
-  trazo: { modo: 'iso', plano: 'H' }   // modo: 'iso' o paso angular libre ('15' | '5' | '1'); plano del ángulo libre
+  trazo: { modo: 'iso', plano: 'H' },  // modo: 'iso' o paso angular libre ('15' | '5' | '1'); plano del ángulo libre
+  qc: {}                // datos de calidad para QC-F-004 / QC-F-015 (WPS, PQR, lugar, reporte, contrato, equipo, TAG, firmas…)
 };
 let historial = [], rehacerPila = [];
 let herramienta = 'pipe', rotacionActual = 30, seleccion = null, zoom = 1;
@@ -1276,14 +1293,15 @@ function renderLienzo() {
       continue;
     }
     if (c.type === 'weld') {
-      simbolos += `<g class="cmp${sel}" data-id="${c.id}"><circle class="hit" cx="${P.x}" cy="${P.y}" r="11"/>
-        <circle cx="${P.x}" cy="${P.y}" r="4.2" fill="#000" stroke="#fff" stroke-width="1"/></g>`;
+      const ej = estadoJunta(c);
+      simbolos += `<g class="cmp${sel} jt-${ej}" data-id="${c.id}"><circle class="hit" cx="${P.x}" cy="${P.y}" r="11"/>
+        <circle class="pt" cx="${P.x}" cy="${P.y}" r="4.2" fill="#000" stroke="#fff" stroke-width="1"/></g>`;
       const texto = `W${numW.get(c.id) || '?'}`, w = texto.length * 5.8 + 3, h = 11, cand = [];
       for (const d of [8, 14, 21, 29]) for (const k of [1, 3, 7, 5, 2, 6, 0, 4]) {
         const a = k * Math.PI / 4, ux = Math.cos(a), uy = -Math.sin(a);
         cand.push({ x: P.x + ux * (d + w / 2 * Math.abs(ux)), y: P.y + uy * (d + h / 2 * Math.abs(uy)) });
       }
-      etiquetas.push({ texto, clase: 'wl', w, h, rot: 0, cand, prio: 1, ancla: P, sel: c.id });
+      etiquetas.push({ texto, clase: 'wl wl-' + ej, w, h, rot: 0, cand, prio: 1, ancla: P, sel: c.id });
       continue;
     }
     simbolos += `<g class="cmp${sel}" data-id="${c.id}" transform="${matrizSimbolo(c.rotation, P)}">
@@ -1408,6 +1426,7 @@ function aplicarProyecto(o) {
   estado.unidad = o.unidad === 'm' ? 'm' : 'mm';
   estado.cotas = ['cc', 'corte', 'ambas'].includes(o.cotas) ? o.cotas : 'ambas';
   estado.descontar = o.descontar !== false;
+  estado.qc = o.qc && typeof o.qc === 'object' ? o.qc : {};
   estado.apertura = Number(o.apertura) >= 0 ? Number(o.apertura) : 1.6;
   estado.sepSW = Number(o.sepSW) >= 0 ? Number(o.sepSW) : 1.6;
   estado.catalogoPropio = Array.isArray(o.catalogoPropio) ? o.catalogoPropio.filter(it => it && /^u_/.test(it.id) && it.nombre) : [];
@@ -1419,7 +1438,7 @@ function aplicarProyecto(o) {
   estado.ajustes = o.ajustes && typeof o.ajustes === 'object' ? o.ajustes : {};
 }
 function actualizarTodo() {
-  renderLienzo(); recalculateBOM(); renderPanelSeleccion(); guardarLocal();
+  renderLienzo(); recalculateBOM(); renderPanelSeleccion(); resumenCalidad(); guardarLocal();
 }
 /* Ejecuta una modificación del estado con registro en historial */
 function commit(fn) { registrar(); fn(); actualizarTodo(); }
@@ -1876,6 +1895,248 @@ function descargarPlantillaCatalogo() {
   aviso('Plantilla descargada: llénela en Excel y guárdela como CSV', 'ok', 3500);
 }
 
+/* ---------- 11d. Calidad: registro de juntas, QC-F-004 y QC-F-015 ---------- */
+const ESTADOS_JUNTA = { pendiente: ['Pendiente', '#64748b'], soldada: ['Soldada', '#1d4ed8'], liberada: ['Liberada', '#15803d'], rechazada: ['Rechazada', '#dc2626'] };
+const NDE_TIPOS = ['N/A', 'VT', 'PT', 'MT', 'RT', 'UT'];
+const NDE_RESULTADOS = ['N/A', 'APROBADO', 'RECHAZADO', 'PENDIENTE'];
+/* pendiente → soldada (fecha y soldador) → liberada (visual OK y END aprobado o no aplica); rechazada si falla alguna inspección */
+function estadoJunta(w) {
+  if (w.visual === 'RECHAZADA' || w.ndeRes === 'RECHAZADO') return 'rechazada';
+  if (!w.fecha || !(w.raiz || w.pres)) return 'pendiente';
+  const endOk = !w.nde || w.nde === 'N/A' || w.ndeRes === 'APROBADO';
+  return w.visual === 'OK' && endOk ? 'liberada' : 'soldada';
+}
+const fechaDMY = f => /^\d{4}-\d{2}-\d{2}$/.test(f || '') ? f.split('-').reverse().join('/') : (f || '');
+function soldadurasOrdenadas() {
+  const num = numeracionSoldaduras();
+  return estado.components.filter(c => c.type === 'weld').map(c => ({ c, n: num.get(c.id) || 0 })).sort((a, b) => a.n - b.n);
+}
+/* nombres usados antes (tubero, soldadores) para sugerirlos */
+function datalistPersonal() {
+  const v = new Set();
+  for (const c of estado.components) if (c.type === 'weld') for (const k of ['tubero', 'raiz', 'pres']) if (c[k]) v.add(c[k]);
+  return `<datalist id="dl-personal">${[...v].sort().map(x => `<option value="${esc(x)}">`).join('')}</datalist>`;
+}
+const opcionesSel = (lista, val, vacio) => (vacio !== undefined ? `<option value="">${vacio}</option>` : '') + lista.map(([v, t]) => `<option value="${esc(v)}"${v === val ? ' selected' : ''}>${esc(t)}</option>`).join('');
+function panelJunta(c) {
+  const ej = estadoJunta(c), [nom, col] = ESTADOS_JUNTA[ej];
+  return `<div style="margin:6px 0;font-weight:800;color:${col}">● ${nom}</div>${datalistPersonal()}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+      <div><label>Fecha soldadura</label><input data-pw="fecha" type="date" value="${esc(c.fecha || '')}"></div>
+      <div><label>Taller / campo</label><select data-pw="ubic">${opcionesSel([['S', 'Taller (S)'], ['F', 'Campo (F)']], c.ubic, '—')}</select></div></div>
+    <label>Tubero</label><input data-pw="tubero" list="dl-personal" maxlength="40" value="${esc(c.tubero || '')}">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+      <div><label>Soldador raíz</label><input data-pw="raiz" list="dl-personal" maxlength="40" value="${esc(c.raiz || '')}"></div>
+      <div><label>Soldador present.</label><input data-pw="pres" list="dl-personal" maxlength="40" value="${esc(c.pres || '')}"></div></div>
+    <label>Inspección visual</label><select data-pw="visual">${opcionesSel([['OK', 'OK'], ['RECHAZADA', 'Rechazada']], c.visual, 'Pendiente')}</select>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+      <div><label>END aplicada</label><select data-pw="nde">${opcionesSel(NDE_TIPOS.map(x => [x, x]), c.nde, '—')}</select></div>
+      <div><label>Resultado END</label><select data-pw="ndeRes">${opcionesSel(NDE_RESULTADOS.map(x => [x, x]), c.ndeRes, '—')}</select></div></div>`;
+}
+$('panel-sel').addEventListener('change', e => {
+  const k = e.target.dataset.pw, c = estado.components.find(x => x.id === seleccion); if (!k || !c) return;
+  const v = ['tubero', 'raiz', 'pres'].includes(k) ? e.target.value.trim().toUpperCase() : e.target.value;
+  commit(() => { if (v) c[k] = v; else delete c[k]; });
+});
+function resumenCalidad() {
+  const l = soldadurasOrdenadas(); if (!l.length) { $('qc-resumen').textContent = 'Sin juntas en el plano'; return; }
+  const cuenta = {}; l.forEach(({ c }) => { const e = estadoJunta(c); cuenta[e] = (cuenta[e] || 0) + 1; });
+  $('qc-resumen').innerHTML = `${l.length} juntas · ` + Object.entries(ESTADOS_JUNTA).filter(([k]) => cuenta[k]).map(([k, [t, col]]) => `<span style="color:${col}">${t.toLowerCase()} ${cuenta[k]}</span>`).join(' · ');
+}
+/* Registro de varias juntas a la vez (los campos vacíos no se cambian) */
+function abrirRegistroJuntas() {
+  toggleSidebar(false);
+  const l = soldadurasOrdenadas();
+  if (!l.length) { aviso('No hay juntas: colóquelas o use «Generar juntas soldadas automáticas»', 'error', 3500); return; }
+  const filas = l.map(({ c, n }) => { const [t, col] = ESTADOS_JUNTA[estadoJunta(c)];
+    return `<label style="display:flex;gap:8px;align-items:center;text-transform:none;font-size:13px;margin:4px 0;color:var(--s200)">
+      <input type="checkbox" data-rj="${c.id}" data-estado="${estadoJunta(c)}"${estadoJunta(c) === 'pendiente' ? ' checked' : ''} style="width:18px;height:18px">
+      <b>W${n}</b> · Ø ${esc(c.nps)} · ${c.junta === 'SW' || c.junta === 'FILETE' ? 'FW' : 'BW'} · <span style="color:${col}">${t}</span>${c.raiz ? ` · ${esc(c.raiz)}` : ''}</label>`; }).join('');
+  abrirModal({
+    titulo: 'Registrar soldadura de juntas',
+    html: `${datalistPersonal()}<p>Llene solo lo que quiera cambiar y marque las juntas. Los campos vacíos no se modifican.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label>Fecha soldadura</label><div style="display:flex;gap:4px"><input id="rj-fecha" type="date"><button type="button" class="btn" onclick="document.getElementById('rj-fecha').value='${hoyISO()}'">Hoy</button></div></div>
+        <div><label>Taller / campo</label><select id="rj-ubic">${opcionesSel([['S', 'Taller (S)'], ['F', 'Campo (F)']], '', '— sin cambio —')}</select></div>
+        <div><label>Tubero</label><input id="rj-tubero" list="dl-personal" maxlength="40"></div>
+        <div><label>Soldador raíz</label><input id="rj-raiz" list="dl-personal" maxlength="40"></div>
+        <div><label>Soldador presentación</label><input id="rj-pres" list="dl-personal" maxlength="40"></div>
+        <div><label>Inspección visual</label><select id="rj-visual">${opcionesSel([['OK', 'OK'], ['RECHAZADA', 'Rechazada']], '', '— sin cambio —')}</select></div>
+        <div><label>END aplicada</label><select id="rj-nde">${opcionesSel(NDE_TIPOS.map(x => [x, x]), '', '— sin cambio —')}</select></div>
+        <div><label>Resultado END</label><select id="rj-ndeRes">${opcionesSel(NDE_RESULTADOS.map(x => [x, x]), '', '— sin cambio —')}</select></div>
+      </div>
+      <label>Juntas</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button type="button" class="btn" data-rjsel="todas">Todas</button><button type="button" class="btn" data-rjsel="pendiente">Pendientes</button>
+        <button type="button" class="btn" data-rjsel="soldada">Soldadas</button><button type="button" class="btn" data-rjsel="ninguna">Ninguna</button></div>
+      <div class="rj-lista">${filas}</div>`,
+    okTxt: 'Aplicar a las marcadas',
+    alAbrir: () => {
+      $('modal-cuerpo').onclick = e => {
+        const s = e.target.dataset && e.target.dataset.rjsel; if (!s) return;
+        document.querySelectorAll('[data-rj]').forEach(x => { x.checked = s === 'todas' || (s !== 'ninguna' && x.dataset.estado === s); });
+      };
+    },
+    alAceptar: () => {
+      const ids = [...document.querySelectorAll('[data-rj]:checked')].map(x => x.dataset.rj);
+      if (!ids.length) { aviso('Marque al menos una junta', 'error'); return false; }
+      const cambios = {};
+      for (const k of ['fecha', 'ubic', 'tubero', 'raiz', 'pres', 'visual', 'nde', 'ndeRes']) {
+        let v = $('rj-' + k).value.trim(); if (['tubero', 'raiz', 'pres'].includes(k)) v = v.toUpperCase();
+        if (v) cambios[k] = v;
+      }
+      if (!Object.keys(cambios).length) { aviso('No llenó ningún dato para aplicar', 'error'); return false; }
+      commit(() => estado.components.forEach(c => { if (ids.includes(c.id)) Object.assign(c, cambios); }));
+      aviso(`Se actualizaron ${ids.length} juntas`, 'ok');
+    }
+  });
+}
+/* Datos del encabezado y firmas de los formatos de calidad (cliente, proyecto, línea y nombres vienen del rótulo) */
+const CAMPOS_QC = [['wps', 'WPS'], ['pqr', 'PQR'], ['lugar', 'Lugar'], ['reporte', 'Reporte No.'], ['contrato', 'Contrato No.'], ['equipo', 'Equipo / estructura'],
+  ['tag', 'TAG de la línea'], ['interventoria', 'Interventoría'], ['cargoElaboro', 'Cargo de quien elaboró'], ['cargoAprobo', 'Cargo de quien aprobó'], ['observaciones', 'Observaciones']];
+function abrirDatosCalidad() {
+  toggleSidebar(false);
+  const q = estado.qc || {};
+  abrirModal({
+    titulo: 'Datos de calidad (QC-F-004 / QC-F-015)',
+    html: `<p>Cliente, proyecto, línea y los nombres de elaboró / aprobó se toman del rótulo del plano.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${CAMPOS_QC.map(([k, t]) => `<div${k === 'observaciones' ? ' style="grid-column:1/-1"' : ''}><label>${t}</label><input id="qc-${k}" maxlength="${k === 'observaciones' ? 200 : 60}" value="${esc(q[k] || '')}"></div>`).join('')}</div>`,
+    okTxt: 'Guardar',
+    alAceptar: () => { estado.qc = Object.fromEntries(CAMPOS_QC.map(([k]) => [k, $('qc-' + k).value.trim()]).filter(([, v]) => v)); guardarLocal(); aviso('Datos de calidad guardados', 'ok'); }
+  });
+}
+/* Ruta de la línea (tramos en orden y sentido de recorrido), igual que la numeración de juntas */
+function rutaTuberias() {
+  const pipes = tuberias(), clave = P => P[0].toFixed(4) + ',' + P[1].toFixed(4), ady = new Map();
+  pipes.forEach(c => c.coords.forEach((P, i) => { const k = clave(P); if (!ady.has(k)) ady.set(k, []); ady.get(k).push({ c, i }); }));
+  const usados = new Set(), orden = [];
+  const recorrer = Q => { for (const { c, i } of ady.get(clave(Q)) || []) { if (usados.has(c)) continue; usados.add(c); orden.push({ c, inv: i === 1 }); recorrer(c.coords[1 - i]); } };
+  const libres = pipes.flatMap(c => c.coords).filter(P => (ady.get(clave(P)) || []).length === 1);
+  for (const P of [...libres, ...pipes.map(c => c.coords[0])]) recorrer(P);
+  return orden;
+}
+/* Los dos elementos que une una junta, en el orden del recorrido, con su largo (mm): accesorio = largo de tabla, tubo = corte */
+function elementosJunta(w) {
+  const s = aPantalla(w.coords[0]), idx = new Map(rutaTuberias().map((r, i) => [r.c, { i, inv: r.inv }]));
+  const proy = c => { const a = aPantalla(c.coords[0]), b = aPantalla(c.coords[1]), dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy || 1;
+    const t = Math.max(0, Math.min(1, ((s.x - a.x) * dx + (s.y - a.y) * dy) / L2)); return { t, d: Math.hypot(a.x + t * dx - s.x, a.y + t * dy - s.y) }; };
+  const tubos = tuberias().map(c => ({ c, ...proy(c) })).filter(x => x.d < 4).sort((a, b) => a.d - b.d);
+  const piezas = estado.components.filter(o => o.type !== 'pipe' && o.type !== 'weld' && !TIPOS[o.type].noBOM && TIPOS[o.type].modo !== 'equipo')
+    .map(o => { const q = aPantalla(o.coords[0]); return { o, d: Math.hypot(q.x - s.x, q.y - s.y) }; }).filter(x => x.d < 16).sort((a, b) => a.d - b.d);
+  const mm = v => v > 0 ? Math.round(v * 10000) / 10 : '';
+  const tubo = x => ({ desc: `TUBO ${x.c.nps} ${(SPECS[x.c.schedule]?.corto || x.c.schedule).toUpperCase()}`, mm: mm(longitudCorte(x.c)) });
+  const pieza = o => ({ desc: `${TIPOS[o.type].nombre} ${o.nps}${o.npsRed ? ' X ' + o.npsRed : ''} ${SPECS[o.schedule]?.sch || ''}`.trim(), mm: mm(largoAccesorio(o)) });
+  const avance = x => { const r = idx.get(x.c); return r ? r.i + (r.inv ? 1 - x.t : x.t) : 1e9; };
+  const vacio = { desc: '', mm: '' };
+  if (piezas.length && tubos.length) {
+    const t = tubos[0], r = idx.get(t.c), tt = r && r.inv ? 1 - t.t : t.t;
+    return tt < 0.5 ? [pieza(piezas[0].o), tubo(t)] : [tubo(t), pieza(piezas[0].o)];
+  }
+  if (tubos.length >= 2) { const [a, b] = [tubos[0], tubos[1]].sort((x, y) => avance(x) - avance(y)); return [tubo(a), tubo(b)]; }
+  if (piezas.length >= 2) return [pieza(piezas[0].o), pieza(piezas[1].o)];
+  if (tubos.length) return [tubo(tubos[0]), tubo(tubos[0])];
+  if (piezas.length) return [pieza(piezas[0].o), vacio];
+  return [vacio, vacio];
+}
+function cargarScript(src) { return new Promise((ok, ko) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ko; document.head.appendChild(s); }); }
+async function cargarExcelJS() {
+  if (!window.ExcelJS) { try { await cargarScript('vendor/exceljs.min.js'); } catch (_) { await cargarScript('https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js'); } }
+  if (!window.ExcelJS) throw new Error('no cargó la librería de Excel');
+  return window.ExcelJS;
+}
+async function plantillaQC(nombre) {
+  const emb = window.PLANTILLAS_QC && window.PLANTILLAS_QC[nombre];
+  if (emb) return Uint8Array.from(atob(emb), ch => ch.charCodeAt(0)).buffer;
+  const r = await fetch('plantillas/' + nombre + '.xlsx'); if (!r.ok) throw new Error('no se encontró la plantilla ' + nombre);
+  return r.arrayBuffer();
+}
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+async function exportarQC004() {
+  toggleSidebar(false);
+  const l = soldadurasOrdenadas();
+  if (!l.length) { aviso('No hay juntas para el reporte: colóquelas o use «Generar juntas soldadas automáticas»', 'error', 3500); return; }
+  if (l.length > 120) aviso('El reporte admite 120 juntas (10 hojas): se exportan las primeras 120', 'error', 4000);
+  try {
+    aviso('Generando QC-F-004…', null, 6000);
+    const ExcelJS = await cargarExcelJS(), wb = new ExcelJS.Workbook(); await wb.xlsx.load(await plantillaQC('QC-F-004'));
+    const juntas = l.slice(0, 120), pags = Math.max(1, Math.ceil(juntas.length / 12));
+    wb.worksheets.slice(pags).forEach(w => wb.removeWorksheet(w.id));
+    const cab = estado.cabecera, q = estado.qc || {};
+    wb.worksheets.forEach((ws, p) => {
+      ws.name = pags > 1 ? `QC-F-004 (${p + 1})` : 'QC-F-004';
+      const v = (ref, val) => { ws.getCell(ref).value = val == null ? '' : val; };
+      v('M1', `Página: ${p + 1} de ${pags}`); v('B6', q.wps); v('B7', q.pqr);
+      v('C6', 'REFERENCIA: ' + [cab.proyecto, cab.linea].filter(Boolean).join(' · ')); v('H6', 'LUGAR: ' + (q.lugar || '')); v('M6', 'REPORTE No ' + (q.reporte || ''));
+      juntas.slice(p * 12, p * 12 + 12).forEach(({ c, n }, k) => {
+        const r = 9 + 2 * k, [e1, e2] = elementosJunta(c), cel = (rr, col, val) => {
+          const x = ws.getCell(rr, col); x.value = val == null ? '' : val;
+          if (typeof val === 'string' && val.length > 6) x.alignment = { ...(x.alignment || {}), shrinkToFit: true, wrapText: false };  /* textos largos en celdas angostas */
+        };
+        cel(r, 1, fechaDMY(c.fecha)); cel(r, 2, cab.linea); cel(r, 3, e1.desc); cel(r, 4, `W${n}`); cel(r, 5, c.junta === 'SW' || c.junta === 'FILETE' ? 'FW' : 'BW');
+        cel(r, 6, c.nps); cel(r, 7, e1.mm); cel(r, 9, c.ubic); cel(r, 10, c.tubero); cel(r, 11, c.raiz); cel(r, 12, c.pres); cel(r, 13, c.visual); cel(r, 14, c.nde); cel(r, 15, c.ndeRes);
+        cel(r + 1, 3, e2.desc); cel(r + 1, 7, e2.mm);
+      });
+      v('C33', 'OBSERVACIONES: ' + (q.observaciones || ''));
+      v('B38', cab.elaboro); v('C38', cab.aprobo); v('G38', q.interventoria); v('K38', cab.cliente); v('B39', q.cargoElaboro); v('C39', q.cargoAprobo);
+    });
+    descargarBlob(new Blob([await wb.xlsx.writeBuffer()], { type: XLSX_MIME }), `QC-F-004_${nombreSeguro(cab.linea) || 'ISO'}_${hoyISO()}.xlsx`);
+    aviso(`QC-F-004 generado: ${juntas.length} juntas en ${pags} hoja${pags > 1 ? 's' : ''}`, 'ok', 3000);
+  } catch (err) { aviso('No se pudo generar el QC-F-004: ' + err.message, 'error', 5000); }
+}
+/* Imagen del isométrico (recortada al dibujo, sin grilla) para el mapa de soldadura */
+async function mapaPNG() {
+  const previa = seleccion; seleccion = null; renderLienzo();
+  try {
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    for (const id of ['capa-tuberia', 'capa-simbolos', 'capa-cotas']) {
+      const g = $(id); if (!g.childNodes.length) continue; const b = g.getBBox(); if (!b.width && !b.height) continue;
+      x1 = Math.min(x1, b.x); y1 = Math.min(y1, b.y); x2 = Math.max(x2, b.x + b.width); y2 = Math.max(y2, b.y + b.height);
+    }
+    if (!isFinite(x1)) throw new Error('el plano está vacío');
+    const m = 22; x1 -= m; y1 -= m; x2 += m; y2 += m;
+    const w = x2 - x1, h = y2 - y1, escala = Math.min(4, 2600 / Math.max(w, h));
+    const clon = svg.cloneNode(true);
+    clon.querySelectorAll('#fondo-malla, #capa-norte, #capa-guia, .hit, defs').forEach(n => n.remove());
+    clon.setAttribute('viewBox', `${x1} ${y1} ${w} ${h}`); clon.setAttribute('width', Math.round(w * escala)); clon.setAttribute('height', Math.round(h * escala));
+    const estilo = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+    estilo.textContent = `text{font-family:Arial,Helvetica,sans-serif}.s{fill:none;stroke:#000;stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round}.sb{fill:#fff;stroke:#000;stroke-width:1.6;stroke-linejoin:round}.sn{fill:#000;stroke:#000;stroke-width:1.2}
+      .cota{font:700 10.5px Arial;fill:#0f172a;paint-order:stroke;stroke:#fff;stroke-width:3px}.cota.err{fill:#dc2626}.wl{font:700 9.5px Arial;fill:#b91c1c;paint-order:stroke;stroke:#fff;stroke-width:2.5px}
+      .angl{font:italic 700 9.5px Arial;fill:#334155;paint-order:stroke;stroke:#fff;stroke-width:2.5px}.pend{font:italic 800 9.5px Arial;fill:#1d4ed8;paint-order:stroke;stroke:#fff;stroke-width:2.5px}
+      .tagq{font:800 11px Arial;fill:#0f172a;paint-order:stroke;stroke:#fff;stroke-width:3px}`;
+    clon.insertBefore(estilo, clon.firstChild);
+    const xml = new XMLSerializer().serializeToString(clon), img = new Image();
+    await new Promise((ok, ko) => { img.onload = ok; img.onerror = () => ko(new Error('no se pudo dibujar el plano')); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml); });
+    const cv = document.createElement('canvas'); cv.width = Math.round(w * escala); cv.height = Math.round(h * escala);
+    const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height); ctx.drawImage(img, 0, 0, cv.width, cv.height);
+    const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+    return { buffer: await blob.arrayBuffer(), w: cv.width, h: cv.height };
+  } finally { seleccion = previa; renderLienzo(); }
+}
+async function exportarQC015() {
+  toggleSidebar(false);
+  try {
+    aviso('Generando QC-F-015…', null, 6000);
+    const mapa = await mapaPNG();
+    const ExcelJS = await cargarExcelJS(), wb = new ExcelJS.Workbook(); await wb.xlsx.load(await plantillaQC('QC-F-015'));
+    const ws = wb.worksheets[0], cab = estado.cabecera, q = estado.qc || {};
+    const v = (ref, val) => { ws.getCell(ref).value = val == null ? '' : val; };
+    v('D6', cab.cliente); v('I6', cab.proyecto); v('P6', q.equipo); v('D7', q.contrato); v('I7', cab.linea); v('P7', q.tag);
+    ws.getCell('Q5').value = new Date(); ws.getCell('Q5').numFmt = 'dd/mm/yyyy';
+    v('C33', cab.elaboro); v('G33', cab.aprobo); v('K33', q.interventoria); v('P33', cab.cliente); v('C34', q.cargoElaboro); v('G34', q.cargoAprobo);
+    /* el plano va centrado en el área del mapa (A10:R30) sin deformarse */
+    const anchos = []; for (let c = 1; c <= 18; c++) anchos.push(Math.round((ws.getColumn(c).width || 8.43) * 7 + 5));
+    const altos = []; for (let r = 10; r <= 30; r++) altos.push((ws.getRow(r).height || 15) * 96 / 72);
+    const W = anchos.reduce((a, b) => a + b, 0), H = altos.reduce((a, b) => a + b, 0);
+    const k = Math.min((W - 16) / mapa.w, (H - 16) / mapa.h), ew = mapa.w * k, eh = mapa.h * k;
+    const aCol = px => { let i = 0; while (i < anchos.length - 1 && px > anchos[i]) { px -= anchos[i]; i++; } return i + px / anchos[i]; };
+    const aFila = px => { let i = 0; while (i < altos.length - 1 && px > altos[i]) { px -= altos[i]; i++; } return 9 + i + px / altos[i]; };
+    const id = wb.addImage({ buffer: mapa.buffer, extension: 'png' });
+    ws.addImage(id, { tl: { col: aCol((W - ew) / 2), row: aFila((H - eh) / 2) }, ext: { width: ew, height: eh } });
+    descargarBlob(new Blob([await wb.xlsx.writeBuffer()], { type: XLSX_MIME }), `QC-F-015_${nombreSeguro(cab.linea) || 'ISO'}_${hoyISO()}.xlsx`);
+    aviso('QC-F-015 generado', 'ok', 2500);
+  } catch (err) { aviso('No se pudo generar el QC-F-015: ' + err.message, 'error', 5000); }
+}
+
 /* ---------- 12. Selección y panel de propiedades ---------- */
 function seleccionar(id) {
   seleccion = id;
@@ -1907,6 +2168,7 @@ function renderPanelSeleccion() {
       <input data-p="largo" type="number" step="any" min="0" inputmode="decimal" placeholder="vacío = tabla" value="${c.largo != null || largoAccesorio(c) ? aUnidad(largoAccesorio(c)) : ''}">` : ''}
     ${c.type === 'pipe' ? `<label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:12px;color:var(--s200)"><input type="checkbox" data-p="sinCota" style="width:18px;height:18px"${c.sinCota ? ' checked' : ''}> Ocultar cota de este tramo</label>` : ''}
     ${c.type === 'pipe' ? `<label>Pendiente</label><button class="btn" style="width:100%" data-acc="pend">${c.pendiente ? `PEND. ${c.pendiente.valor}% · baja hacia el ${c.pendiente.haciaFin === false ? 'inicio' : 'final'}` : 'Agregar pendiente'}</button>` : ''}
+    ${c.type === 'weld' ? panelJunta(c) : ''}
     ${c.type === 'weld' ? `<label>Tipo de junta</label><select data-p="junta">${[['BW', 'A tope (BW)'], ['SW', 'Socket weld (filete)'], ['FILETE', 'Filete brida slip-on']].map(([v, t]) => `<option value="${v}"${(c.junta || 'BW') === v ? ' selected' : ''}>${t}</option>`).join('')}</select>` : ''}
     ${T.modo === 'equipo' ? `<label>TAG del equipo</label><input data-p="tag" maxlength="24" placeholder="Ej: P-101, TK-01" value="${esc(c.tag || '')}">` : ''}
     ${c.type !== 'pipe' && c.type !== 'weld' && !TIPOS[c.type].noBOM && T.modo !== 'equipo' ? `<div style="margin-top:6px;font:600 11px var(--mono);color:var(--s300)">Unión: ${tipoUnion(c)}${holgura(c) ? ` · holgura ${fmtLong(holgura(c))} por junta` : ''}</div>` : ''}
@@ -2402,6 +2664,14 @@ async function downloadSelfHtml() {
       const lib = await (await fetch('vendor/xlsx.bundle.js')).text();
       if (lib.length > 1000) html = html.replace(/<script src="vendor\/xlsx\.bundle\.js"[^>]*><\/script>/, () => '<script>' + lib + '</scr' + 'ipt>');
     } catch (_) { /* queda la referencia al CDN como respaldo */ }
+    try {
+      /* formatos de calidad: librería y plantillas incrustadas para usar sin internet */
+      const lib2 = await (await fetch('vendor/exceljs.min.js')).text();
+      const b64 = async n => { const a = new Uint8Array(await (await fetch('plantillas/' + n + '.xlsx')).arrayBuffer()); let s = ''; for (let i = 0; i < a.length; i += 32768) s += String.fromCharCode.apply(null, a.subarray(i, i + 32768)); return btoa(s); };
+      const pl = { 'QC-F-004': await b64('QC-F-004'), 'QC-F-015': await b64('QC-F-015') };
+      const fin = html.lastIndexOf('</' + 'body>');  /* el último: el texto también aparece dentro de este script */
+      if (lib2.length > 1000 && fin > 0) html = html.slice(0, fin) + '<script>' + lib2 + '</scr' + 'ipt><script>window.PLANTILLAS_QC=' + JSON.stringify(pl) + '</scr' + 'ipt>' + html.slice(fin);
+    } catch (_) { /* sin formatos de calidad en el archivo único */ }
   } catch (_) {
     html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
   }
