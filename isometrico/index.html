@@ -1,0 +1,2181 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="INDIMON CAD">
+<meta name="description" content="CAD táctil para bocetos isométricos de tubería y listado de materiales, formato DP-F-009 INDIMON S.A.S.">
+<title>INDIMON CAD · DP-F-009 Bocetos Isométricos</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<!-- SheetJS con estilos (xlsx-js-style) para exportar .xlsx con formato: copia local para trabajo sin internet; si falta, se intenta el CDN -->
+<script src="vendor/xlsx.bundle.js" onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js';document.head.appendChild(s)"></script>
+<style>
+/* =====================================================================
+   ESTILOS DE LA APLICACIÓN (barra, panel lateral, ventanas) — sin CDN
+   ===================================================================== */
+:root{
+  --s950:#020617;--s900:#0f172a;--s800:#1e293b;--s700:#334155;--s600:#475569;--s400:#94a3b8;--s300:#cbd5e1;--s200:#e2e8f0;
+  --ambar:#f59e0b;--ambar2:#fbbf24;--cian:#22d3ee;--verde:#34d399;--rojo:#ef4444;--azul:#2563eb;
+  --mono:ui-monospace,"SFMono-Regular","JetBrains Mono",Menlo,Consolas,monospace;
+  --safe-b:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--s900);color:var(--s200);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,Inter,Arial,sans-serif;overscroll-behavior:none}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.app{display:flex;flex-direction:column;height:100%;height:100dvh}
+
+/* ---------- Barra superior ---------- */
+.barra{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;
+  padding-top:max(6px,env(safe-area-inset-top));background:var(--s950);border-bottom:1px solid var(--s800);z-index:30}
+.grupo{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.marca{background:#dc2626;color:#fff;font-weight:900;letter-spacing:.06em;font-size:13px;padding:5px 9px;border-radius:6px;white-space:nowrap}
+.marca-sub{font:600 11px var(--mono);color:var(--s400);white-space:nowrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:36px;min-width:36px;padding:5px 9px;
+  background:var(--s800);border:1px solid var(--s700);border-radius:7px;font-size:12px;font-weight:700;color:var(--s200);white-space:nowrap}
+.btn:hover{background:var(--s700)} .btn:active{transform:translateY(1px)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.verde{background:#047857;border-color:#059669;color:#fff} .btn.azul{background:var(--azul);border-color:#3b82f6;color:#fff}
+.btn.ambar{background:#d97706;border-color:var(--ambar);color:#0f172a} .btn.peligro{color:#fca5a5}
+.sel{background:var(--s800);border:1px solid var(--s700);border-radius:7px;font:700 12px var(--mono);padding:7px 6px;min-height:36px}
+#spec-nps{color:var(--ambar2)} #spec-mat{color:var(--verde);max-width:190px}
+.solo-pc{display:inline-flex} .solo-movil{display:none!important}
+.txt-btn{display:inline}
+
+/* ---------- Área de trabajo ---------- */
+.trabajo{flex:1;display:flex;min-height:0;position:relative}
+.lateral{width:258px;flex-shrink:0;background:var(--s950);border-right:1px solid var(--s800);overflow-y:auto;display:flex;flex-direction:column;justify-content:space-between;z-index:40}
+.lateral .sec{padding:10px 10px 4px}
+.lateral h3{margin:0 0 6px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--s400)}
+.rejilla{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.rejilla.dos{grid-template-columns:repeat(2,1fr)}
+.herr{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:58px;padding:5px 3px;background:var(--s900);
+  border:1px solid var(--s800);border-radius:8px;font-size:10.5px;font-weight:600;color:var(--s200);text-align:center;line-height:1.15}
+.herr svg.sim{width:30px;height:30px}
+.herr.activa{border-color:var(--ambar);background:rgba(245,158,11,.15);color:#fde68a}
+.fila-opc{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:6px;background:var(--s900);border:1px solid var(--s800);border-radius:7px;padding:6px 8px;font-size:12px}
+.fila-opc input[type=number]{width:70px;background:var(--s800);border:1px solid var(--s700);border-radius:5px;color:var(--cian);font:700 13px var(--mono);text-align:center;padding:3px}
+.fila-opc input[type=checkbox]{width:18px;height:18px;accent-color:var(--ambar)}
+.btn.ancho{width:100%;margin-top:5px;justify-content:flex-start}
+.fila-opc select.sel{min-height:30px;padding:3px 6px;max-width:150px}
+.buscador{width:100%;background:var(--s800);border:1px solid var(--s700);border-radius:7px;padding:8px 9px;font-size:13px;margin-bottom:6px}
+details.grupo-cat{margin-bottom:6px;border:1px solid var(--s800);border-radius:8px;background:rgba(15,23,42,.5)}
+details.grupo-cat>summary{cursor:pointer;list-style:none;padding:8px 9px;font-size:11px;font-weight:800;color:var(--s300);display:flex;justify-content:space-between;gap:6px}
+details.grupo-cat>summary::-webkit-details-marker{display:none}
+details.grupo-cat>summary::after{content:'▸';color:var(--s400)}
+details.grupo-cat[open]>summary::after{content:'▾'}
+details.grupo-cat .rejilla{padding:0 6px 6px}
+.hud{padding:8px 10px;background:var(--s900);border-top:1px solid var(--s800);font:11px var(--mono);color:var(--s400)}
+.hud div{display:flex;justify-content:space-between;margin:2px 0}
+.hud b{color:var(--ambar2)}
+.velo{display:none}
+
+#viewport{flex:1;overflow:auto;background:#334155;padding:16px;position:relative;-webkit-overflow-scrolling:touch}
+#a3-wrapper{margin:0 auto;position:relative}
+
+/* Barra inferior de estado / accesos rápidos */
+.estado{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(10px + var(--safe-b));z-index:25;display:flex;align-items:center;gap:6px;
+  background:rgba(2,6,23,.92);border:1px solid var(--s700);border-radius:12px;padding:5px 6px;max-width:calc(100% - 16px);box-shadow:0 8px 30px rgba(0,0,0,.4)}
+.estado .pista{font-size:12px;color:var(--s300);padding:0 6px;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.estado .rapida.activa{border-color:var(--ambar);color:#fde68a}
+
+/* Panel de propiedades del componente seleccionado */
+#panel-sel{position:absolute;right:12px;top:12px;z-index:26;width:250px;background:rgba(2,6,23,.96);border:1px solid #3b82f6;border-radius:12px;padding:10px;font-size:12px;box-shadow:0 8px 30px rgba(0,0,0,.45)}
+#panel-sel h4{margin:0 0 8px;font-size:12px;color:#93c5fd;text-transform:uppercase;letter-spacing:.05em;display:flex;justify-content:space-between;align-items:center}
+#panel-sel label{display:block;margin:6px 0 2px;color:var(--s400);font-size:10.5px;font-weight:700;text-transform:uppercase}
+#panel-sel select,#panel-sel input{width:100%;background:var(--s800);border:1px solid var(--s700);border-radius:6px;padding:7px;font:600 13px var(--mono)}
+#panel-sel .acc{display:flex;gap:5px;margin-top:9px}
+#panel-sel .acc .btn{flex:1}
+
+/* Avisos y ventanas modales */
+#aviso{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top));transform:translateX(-50%);z-index:90;background:var(--s800);border:1px solid var(--s600);color:#fff;
+  padding:9px 14px;border-radius:9px;font-size:13px;font-weight:600;display:none;max-width:92vw;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.4)}
+.modal{position:fixed;inset:0;background:rgba(2,6,23,.7);z-index:80;display:flex;align-items:center;justify-content:center;padding:14px}
+.modal[hidden]{display:none}
+.modal-card{width:100%;max-width:440px;max-height:90vh;overflow:auto;background:var(--s900);border:1px solid var(--s700);border-radius:14px;padding:16px}
+.modal-card h3{margin:0 0 10px;font-size:15px;color:var(--ambar2)}
+.modal-card label{display:block;font-size:11px;font-weight:700;color:var(--s400);text-transform:uppercase;margin:9px 0 3px}
+.modal-card input,.modal-card select{width:100%;background:var(--s800);border:1px solid var(--s700);border-radius:7px;padding:10px;font-size:16px}
+.modal-card p,.modal-card li{font-size:13px;color:var(--s300);line-height:1.45}
+.modal-acc{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+
+/* =====================================================================
+   HOJA OFICIAL A3 HORIZONTAL (420 × 297 mm  →  1400 × 990 px)
+   ===================================================================== */
+.a3-sheet{width:1400px;height:990px;background:#fff;color:#000;border:2.5px solid #000;display:flex;flex-direction:column;
+  transform-origin:0 0;box-shadow:0 20px 60px rgba(0,0,0,.55);position:absolute;left:0;top:0;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;font-family:Arial,Helvetica,sans-serif;user-select:none;-webkit-user-select:none}
+.a3-sheet input,.a3-sheet select{user-select:text;-webkit-user-select:text}
+.rotulo{border-bottom:2px solid #000;flex-shrink:0}
+.r1{display:grid;grid-template-columns:340px 1fr 330px;height:72px;border-bottom:1px solid #000}
+.celda-logo{display:flex;align-items:center;gap:8px;padding:0 10px;border-right:1px solid #000}
+.logo-txt{font-size:25px;font-weight:900;letter-spacing:-.02em;line-height:1}
+.logo-txt .g{color:#94a3b8}.logo-txt .r{color:#dc2626}
+.lema{font-size:9px;font-style:italic;font-weight:700;color:#334155;margin-top:2px}
+.nit{font-size:9.5px;font-weight:700;margin-top:2px}
+.celda-titulo{display:flex;flex-direction:column;align-items:center;justify-content:center;border-right:1px solid #000;text-align:center}
+.celda-titulo .t1{font-size:11px;font-weight:700;letter-spacing:.12em}
+.celda-titulo .t2{font-size:25px;font-weight:900;letter-spacing:.04em}
+.celda-cod{display:grid;grid-template-columns:110px 1fr;grid-template-rows:repeat(3,1fr);font-size:11px}
+.celda-cod>div{border-bottom:1px solid #000;display:flex;align-items:center;padding:0 7px;font-weight:700}
+.celda-cod>div:nth-child(odd){border-right:1px solid #000;background:#f1f5f9}
+.celda-cod>div:nth-last-child(-n+2){border-bottom:0}
+.celda-cod input{width:34px;border:0;background:transparent;font:700 11px Arial;text-align:center;outline:none}
+.r2,.r3{display:grid;border-bottom:1px solid #000}
+.r2{grid-template-columns:3fr 3fr 2fr 1.3fr 1.4fr;height:44px}
+.r3{grid-template-columns:1.25fr 3fr 1.9fr 2.6fr;height:40px;border-bottom:0}
+.campo{display:flex;flex-direction:column;border-right:1px solid #000;min-width:0}
+.campo:last-child{border-right:0}
+.campo label{font-size:8.5px;font-weight:800;letter-spacing:.05em;padding:3px 6px 0;color:#1e293b;text-transform:uppercase}
+.tech-input{flex:1;width:100%;min-width:0;border:0;outline:none;background:transparent;padding:0 6px;font:700 13px Arial;color:#0f172a}
+.tech-input:focus{background:rgba(254,240,138,.55)}
+.dibujo{flex:1;position:relative;border-bottom:2px solid #000;overflow:hidden;min-height:0}
+#iso-svg{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
+#iso-svg.modo-pan{cursor:grab} #iso-svg.modo-sel{cursor:default}
+.etq-dibujo{position:absolute;left:8px;top:6px;font:800 10px Arial;letter-spacing:.1em;color:#64748b;pointer-events:none}
+.bom{height:238px;display:flex;flex-direction:column;border-bottom:2px solid #000;flex-shrink:0}
+.bom-titulo{height:22px;display:flex;align-items:center;justify-content:center;background:#e2e8f0;border-bottom:1px solid #000;font-size:11px;font-weight:900;letter-spacing:.1em}
+.bom-cols{flex:1;display:grid;grid-template-columns:1fr 1fr;min-height:0}
+.bom-cols>div{overflow:hidden}
+.bom-cols>div:first-child{border-right:2px solid #000}
+.bom table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10.5px}
+.bom th{background:#f1f5f9;font-size:9.5px;font-weight:800;height:18px;border:1px solid #000;border-top:0}
+.bom td{border:1px solid #000;padding:0 4px;height:var(--fila,17px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bom tr>*:first-child{border-left:0}.bom tr>*:last-child{border-right:0}
+.bom td.c{text-align:center;font-weight:700}
+.bom td.r{text-align:right;font:700 11px var(--mono);padding:0}
+.bom td input,.bom td select{width:100%;height:100%;border:0;outline:none;background:transparent;font:inherit;color:inherit;padding:0 4px}
+.bom td.r input{text-align:right}
+.bom td select{appearance:none;-webkit-appearance:none;text-align:center;text-align-last:center;cursor:pointer}
+.bom td input:focus{background:rgba(254,240,138,.55)}
+.bom tr.ajustado td.r input{color:#b45309}
+.bom .quitar{border:0;background:none;color:#dc2626;font-weight:900;padding:0 3px;cursor:pointer}
+.pie{height:54px;display:grid;grid-template-columns:2.2fr 1fr 1fr 1fr;flex-shrink:0}
+.pie .campo label{padding-top:4px}
+.firma-linea{border-top:1px solid #000;margin:0 10px 4px;font-size:8px;text-align:center;color:#475569}
+
+/* Elementos del lienzo SVG */
+.cmp{cursor:pointer}
+.cmp .hit{stroke:transparent;fill:transparent;pointer-events:all}
+.cmp.selec{filter:drop-shadow(0 0 3px rgba(37,99,235,.95))}
+.cmp.selec .tubo{stroke:#1d4ed8}
+.s{fill:none;stroke:#000;stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round}
+.sb{fill:#fff;stroke:#000;stroke-width:1.6;stroke-linejoin:round}
+.sn{fill:#000;stroke:#000;stroke-width:1.2}
+.cota{font:700 10.5px Arial;fill:#0f172a;paint-order:stroke;stroke:#fff;stroke-width:3px}
+.cota.err{fill:#dc2626}
+.wl{font:700 9.5px Arial;fill:#b91c1c;paint-order:stroke;stroke:#fff;stroke-width:2.5px}
+.pend{font:italic 800 9.5px Arial;fill:#1d4ed8;paint-order:stroke;stroke:#fff;stroke-width:2.5px}
+.angl{font:italic 700 9.5px Arial;fill:#334155;paint-order:stroke;stroke:#fff;stroke-width:2.5px}
+
+/* ---------- Adaptación a tableta y móvil ---------- */
+@media (max-width:1023px){
+  .lateral{position:fixed;top:0;bottom:0;left:0;transform:translateX(-100%);transition:transform .2s;padding-top:env(safe-area-inset-top);padding-bottom:var(--safe-b)}
+  .lateral.abierta{transform:none;box-shadow:12px 0 40px rgba(0,0,0,.5)}
+  .velo{display:block;position:fixed;inset:0;background:rgba(2,6,23,.55);z-index:35}
+  .velo[hidden]{display:none}
+  .solo-movil{display:inline-flex!important}
+  .sec.solo-movil{display:flex!important}
+  #panel-sel{left:8px;right:8px;top:auto;bottom:calc(68px + var(--safe-b));width:auto}
+}
+@media (max-width:760px){
+  .solo-pc,.marca-sub{display:none!important}
+  .txt-btn{display:none}
+  #viewport{padding:8px}
+  #spec-mat{max-width:128px}
+  .estado .pista{max-width:150px}
+}
+
+/* =====================================================================
+   IMPRESIÓN / PDF — A3 horizontal exacto, sin controles
+   ===================================================================== */
+@media print{
+  @page{size:A3 landscape;margin:0}
+  html,body{width:420mm;height:297mm;overflow:hidden!important;background:#fff!important}
+  .no-print,.velo{display:none!important}
+  .app,.trabajo{display:block;height:auto}
+  #viewport{overflow:visible!important;padding:0!important;background:#fff!important}
+  #a3-wrapper{width:420mm!important;height:297mm!important;margin:0!important;overflow:hidden}
+  .a3-sheet{transform:translate(4.6mm,4.4mm) scale(1.095)!important;box-shadow:none!important}
+  .tech-input:focus{background:transparent}
+  .capa-guia{display:none!important}
+  input[type=date]::-webkit-calendar-picker-indicator{display:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ==================== BARRA SUPERIOR ==================== -->
+  <header class="barra no-print">
+    <div class="grupo">
+      <button class="btn solo-movil" onclick="toggleSidebar()" aria-label="Abrir simbología"><svg class="ico" data-ico="menu"></svg><span class="txt-btn">Simbología</span></button>
+      <span class="marca">INDÍMON CAD</span>
+      <span class="marca-sub">DP-F-009</span>
+    </div>
+
+    <!-- Selectores técnicos: diámetro, especificación, rotación por defecto -->
+    <div class="grupo">
+      <select id="spec-nps" class="sel" title="Diámetro nominal (NPS) para los nuevos componentes"></select>
+      <select id="spec-mat" class="sel" title="Especificación de material para los nuevos componentes"></select>
+      <button class="btn" onclick="cycleSymbolRotation()" title="Rotación por defecto de símbolos sueltos (R)"><svg class="ico" data-ico="rotate"></svg><span id="rot-label" style="font-family:var(--mono)">30°</span></button>
+    </div>
+
+    <div class="grupo">
+      <button class="btn" onclick="undoAction()" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"><svg class="ico" data-ico="undo"></svg></button>
+      <button class="btn" onclick="redoAction()" title="Rehacer (Ctrl+Y)" aria-label="Rehacer"><svg class="ico" data-ico="redo"></svg></button>
+      <button class="btn peligro" onclick="deleteSelected()" title="Borrar seleccionado (Supr)" aria-label="Borrar seleccionado"><svg class="ico" data-ico="trash"></svg></button>
+      <button class="btn solo-pc" onclick="adjustZoom(1/1.2)" aria-label="Alejar"><svg class="ico" data-ico="zoomOut"></svg></button>
+      <button class="btn" id="zoom-indicator" onclick="fitSheetToScreen()" title="Ajustar hoja completa" style="font-family:var(--mono)">100%</button>
+      <button class="btn solo-pc" onclick="adjustZoom(1.2)" aria-label="Acercar"><svg class="ico" data-ico="zoomIn"></svg></button>
+      <button class="btn verde" onclick="exportToExcel()" title="Exportar listado de materiales a Excel"><svg class="ico" data-ico="sheet"></svg><span class="txt-btn">Excel</span></button>
+      <button class="btn azul" onclick="imprimirA3()" title="Imprimir o guardar PDF A3 horizontal"><svg class="ico" data-ico="printer"></svg><span class="txt-btn">PDF A3</span></button>
+      <button class="btn ambar" id="btn-instalar" onclick="instalarApp()" title="Instalar como aplicación" hidden><svg class="ico" data-ico="download"></svg><span class="txt-btn">Instalar</span></button>
+    </div>
+  </header>
+
+  <div class="trabajo">
+    <div class="velo no-print" id="velo" hidden onclick="toggleSidebar(false)"></div>
+
+    <!-- ==================== PANEL LATERAL DE HERRAMIENTAS ==================== -->
+    <aside id="tools-sidebar" class="lateral no-print">
+      <div>
+        <div class="sec solo-movil" style="justify-content:space-between;align-items:center;border-bottom:1px solid var(--s800);padding-bottom:8px">
+          <b style="font-size:12px;color:var(--ambar2)">HERRAMIENTAS PIPING</b>
+          <button class="btn" onclick="toggleSidebar(false)" aria-label="Cerrar"><svg class="ico" data-ico="x"></svg></button>
+        </div>
+
+        <div class="sec">
+          <h3>1. Control y trazado</h3>
+          <div class="rejilla" id="herr-control"></div>
+          <div class="fila-opc"><span>Unidad de cotas</span><select id="sel-unidad" class="sel" style="min-height:30px;padding:3px 6px;color:var(--cian)"><option value="mm">Milímetros (mm)</option><option value="m">Metros (m)</option></select></div>
+          <div class="fila-opc"><span>Paso de grilla (<b id="lbl-unidad-paso">mm</b>)</span><input id="grid-scale" type="number" step="any" min="0.001" value="500" inputmode="decimal"></div>
+          <label class="fila-opc"><span>Confirmar longitud al trazar</span><input type="checkbox" id="chk-manual-len" checked></label>
+          <div class="fila-opc"><span>Cotas del plano</span><select id="sel-cotas" class="sel" style="color:var(--cian)">
+            <option value="ambas">Centro-centro + corte</option><option value="cc">Centro a centro</option><option value="corte">Longitud de corte</option></select></div>
+          <label class="fila-opc"><span>Descontar accesorios en el BOM</span><input type="checkbox" id="chk-descontar" checked></label>
+          <div class="fila-opc"><span>Ángulo de trazado</span><select id="sel-trazo" class="sel" style="color:var(--ambar2)">
+            <option value="iso">ISO 30°/90°/150°</option><option value="15">Libre · cada 15°</option><option value="5">Libre · cada 5°</option><option value="1">Libre · cada 1°</option></select></div>
+          <div class="fila-opc" id="fila-plano" hidden><span>Plano del ángulo</span><select id="sel-plano" class="sel" style="color:var(--ambar2)">
+            <option value="H">Horizontal (desde N)</option><option value="NZ">Vertical N-S</option><option value="EZ">Vertical E-O</option></select></div>
+        </div>
+
+        <div class="sec">
+          <h3>2. Catálogo de simbología</h3>
+          <input id="buscar-sim" class="buscador" type="search" placeholder="Buscar: codo, bola, brida, filtro…" autocomplete="off" aria-label="Buscar símbolo">
+          <div id="catalogo"></div>
+          <button class="btn ancho" onclick="abrirCatalogoPropio()"><svg class="ico" data-ico="plus"></svg>Agregar ítem al catálogo</button>
+          <button class="btn ancho" onclick="document.getElementById('in-catalogo').click()"><svg class="ico" data-ico="folder"></svg>Importar catálogo (.csv)</button>
+          <button class="btn ancho" onclick="descargarPlantillaCatalogo()"><svg class="ico" data-ico="sheet"></svg>Plantilla de catálogo (.csv)</button>
+          <input type="file" id="in-catalogo" accept=".csv,text/csv,.txt" hidden>
+        </div>
+
+        <div class="sec">
+          <h3>3. Juntas y BOM</h3>
+          <button class="btn ancho ambar" onclick="generarJuntas()"><svg class="ico" data-ico="check"></svg>Generar juntas soldadas automáticas</button>
+          <button class="btn ancho" onclick="openConsumableModal()"><svg class="ico" data-ico="plus"></svg>Añadir consumible al BOM</button>
+          <button class="btn ancho peligro" onclick="clearCanvas()"><svg class="ico" data-ico="trash"></svg>Limpiar todo el plano</button>
+        </div>
+
+        <div class="sec">
+          <h3>4. Archivo y aplicación</h3>
+          <button class="btn ancho" onclick="nuevoPlano()"><svg class="ico" data-ico="file"></svg>Nuevo plano</button>
+          <button class="btn ancho" onclick="document.getElementById('in-proyecto').click()"><svg class="ico" data-ico="folder"></svg>Abrir proyecto (.json)</button>
+          <button class="btn ancho" onclick="guardarProyecto()"><svg class="ico" data-ico="save"></svg>Guardar proyecto (.json)</button>
+          <button class="btn ancho" onclick="downloadSelfHtml()"><svg class="ico" data-ico="code"></svg>Descargar app (.html sin internet)</button>
+          <button class="btn ancho ambar" onclick="instalarApp(true)"><svg class="ico" data-ico="download"></svg>Instalar app (Android · iOS · PC)</button>
+          <input type="file" id="in-proyecto" accept=".json,application/json" hidden>
+        </div>
+      </div>
+
+      <div class="hud">
+        <div><span>Eje isométrico:</span><b id="hud-angle">—</b></div>
+        <div><span>Longitud tramo:</span><b id="hud-length" style="color:var(--verde)">0 mm</b></div>
+        <div><span>Imantación:</span><b id="hud-snap" style="color:var(--cian)">GRILLA ISO</b></div>
+        <div><span>Componentes:</span><b id="hud-count" style="color:var(--s200)">0</b></div>
+      </div>
+    </aside>
+
+    <!-- ==================== VIEWPORT CON LA HOJA A3 ==================== -->
+    <main id="viewport">
+      <div id="a3-wrapper">
+        <div id="a3-container" class="a3-sheet">
+
+          <!-- 1. RÓTULO INSTITUCIONAL DP-F-009 -->
+          <div class="rotulo">
+            <div class="r1">
+              <div class="celda-logo">
+                <svg viewBox="0 0 64 64" width="56" height="56" aria-hidden="true">
+                  <circle cx="32" cy="32" r="29" fill="#f8fafc" stroke="#334155" stroke-width="2"/>
+                  <path d="M12 32 H52 M32 12 V52 M18 18 L46 46 M18 46 L46 18" stroke="#cbd5e1" stroke-width="1"/>
+                  <path d="M20 26 C20 17, 44 17, 44 26 Z" fill="#dc2626" stroke="#1e293b" stroke-width="1.8"/>
+                  <rect x="18" y="25" width="28" height="3" rx="1.5" fill="#b91c1c"/>
+                  <circle cx="32" cy="36" r="11" fill="#94a3b8" stroke="#1e293b" stroke-width="1.8"/>
+                  <circle cx="28" cy="34" r="2" fill="#0f172a"/><circle cx="36" cy="34" r="2" fill="#0f172a"/>
+                  <rect x="29" y="40" width="3" height="4.5" fill="#fff" stroke="#1e293b" stroke-width="1"/>
+                  <rect x="32" y="40" width="3" height="4.5" fill="#fff" stroke="#1e293b" stroke-width="1"/>
+                </svg>
+                <div>
+                  <div class="logo-txt"><span class="g">I</span>ND<span class="r">Í</span>M<span class="r">O</span>N <span style="font-size:13px">S.A.S.</span></div>
+                  <div class="lema">Una solución eficiente a su alcance</div>
+                  <div class="nit">NIT: 900602215-5</div>
+                </div>
+              </div>
+              <div class="celda-titulo">
+                <div class="t1">FORMATO · DISEÑO Y PROYECTOS</div>
+                <div class="t2">BOCETOS ISOMÉTRICOS</div>
+              </div>
+              <div class="celda-cod">
+                <div>CÓDIGO</div><div>DP-F-009</div>
+                <div>VERSIÓN</div><div>01</div>
+                <div>PÁGINA</div><div><input data-h="pagina" aria-label="Página">&nbsp;DE&nbsp;<input data-h="paginas" aria-label="Total de páginas"></div>
+              </div>
+            </div>
+            <div class="r2">
+              <div class="campo"><label>Cliente</label><input class="tech-input" data-h="cliente"></div>
+              <div class="campo"><label>Proyecto</label><input class="tech-input" data-h="proyecto"></div>
+              <div class="campo"><label>Dibujo / Línea N°</label><input class="tech-input" data-h="linea"></div>
+              <div class="campo"><label>Fecha</label><input class="tech-input" type="date" data-h="fecha"></div>
+              <div class="campo"><label>Consecutivo</label><input class="tech-input" data-h="consecutivo"></div>
+            </div>
+            <div class="r3">
+              <div class="campo"><label>Diámetro nominal (NPS)</label><input class="tech-input" data-h="nps"></div>
+              <div class="campo"><label>Especificación de material</label><input class="tech-input" data-h="spec"></div>
+              <div class="campo"><label>Escala</label><input class="tech-input" id="txt-escala" readonly tabindex="-1"></div>
+              <div class="campo"><label>Fluido / Servicio · Prueba</label><input class="tech-input" data-h="servicio"></div>
+            </div>
+          </div>
+
+          <!-- 2. LIENZO CAD (SVG VECTORIAL) -->
+          <div class="dibujo" id="zona-dibujo">
+            <span class="etq-dibujo" id="etq-dibujo">ISOMÉTRICO — SIN ESCALA (COTAS EN MILÍMETROS)</span>
+            <svg id="iso-svg" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <pattern id="malla-iso" patternUnits="userSpaceOnUse"></pattern>
+              </defs>
+              <rect id="fondo-malla" x="0" y="0" width="100%" height="100%" fill="url(#malla-iso)"/>
+              <g id="capa-norte"></g>
+              <g id="capa-tuberia"></g>
+              <g id="capa-simbolos"></g>
+              <g id="capa-cotas"></g>
+              <g id="capa-guia" class="capa-guia"></g>
+            </svg>
+          </div>
+
+          <!-- 3. LISTADO DE MATERIALES (BOM) -->
+          <div class="bom">
+            <div class="bom-titulo">LISTADO DE MATERIALES (BOM)</div>
+            <div class="bom-cols" id="bom-cols"></div>
+          </div>
+
+          <!-- 4. PIE: NOTAS Y FIRMAS -->
+          <div class="pie">
+            <div class="campo"><label>Notas / Observaciones</label><input class="tech-input" data-h="notas"></div>
+            <div class="campo"><label>Elaboró</label><input class="tech-input" data-h="elaboro"><div class="firma-linea">Nombre y firma</div></div>
+            <div class="campo"><label>Revisó</label><input class="tech-input" data-h="reviso"><div class="firma-linea">Nombre y firma</div></div>
+            <div class="campo"><label>Aprobó</label><input class="tech-input" data-h="aprobo"><div class="firma-linea">Nombre y firma</div></div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Panel de propiedades del componente seleccionado -->
+    <div id="panel-sel" class="no-print" hidden></div>
+
+    <!-- Barra de estado + accesos rápidos (táctil) -->
+    <div class="estado no-print">
+      <button class="btn rapida solo-movil" data-rapida="pan" onclick="setActiveTool('pan')" aria-label="Mover hoja"><svg class="ico" data-ico="move"></svg></button>
+      <button class="btn rapida solo-movil" data-rapida="select" onclick="setActiveTool('select')" aria-label="Seleccionar"><svg class="ico" data-ico="pointer"></svg></button>
+      <button class="btn rapida solo-movil" data-rapida="pipe" onclick="setActiveTool('pipe')" aria-label="Tubería"><svg class="ico" data-ico="pipe"></svg></button>
+      <button class="btn" id="btn-modo-trazo" onclick="ciclarModoTrazo()" title="Ángulo de trazado: ISO o libre (A)" style="font-family:var(--mono)">ISO</button>
+      <button class="btn" id="btn-plano" onclick="ciclarPlano()" title="Plano del ángulo libre (P)" hidden>Plano H</button>
+      <span class="pista" id="pista">Tubería: toque y arrastre</span>
+      <button class="btn ambar" id="btn-terminar" onclick="terminarTrazo()" hidden><svg class="ico" data-ico="check"></svg>Terminar</button>
+      <button class="btn" onclick="enfocarLienzo()" title="Acercar al área de dibujo"><svg class="ico" data-ico="target"></svg><span class="txt-btn">Lienzo</span></button>
+    </div>
+  </div>
+</div>
+
+<div id="aviso" class="no-print" role="status"></div>
+<div id="modal" class="modal no-print" hidden>
+  <form class="modal-card" id="modal-form" onsubmit="return false" novalidate>
+    <h3 id="modal-titulo"></h3>
+    <div id="modal-cuerpo"></div>
+    <div class="modal-acc">
+      <button type="button" class="btn" id="modal-cancelar">Cancelar</button>
+      <button type="submit" class="btn ambar" id="modal-ok">Aceptar</button>
+    </div>
+  </form>
+</div>
+
+<script>
+'use strict';
+/* =========================================================================
+   INDIMON CAD · DP-F-009 — Motor isométrico, simbología piping y BOM
+   -------------------------------------------------------------------------
+   Modelo matemático: la malla isométrica es una red triangular generada por
+   dos vectores base de longitud igual al paso de grilla (PASO_PX):
+     U = paso·( cos30°, −sin30°)  → eje Norte-Sur  (30° / 210°)
+     V = paso·(−cos30°, −sin30°)  → eje Este-Oeste (150° / 330°)
+     U + V = paso·(0, −1)         → eje vertical / elevación (90° / 270°)
+   Todo punto del dibujo se guarda en coordenadas de red [p, q] (enteras o
+   medias), así las tuberías quedan exactamente sobre los ejes isométricos y
+   la longitud en pasos es exacta. La pantalla se obtiene con
+     pantalla = ORIGEN + p·U + q·V
+   ========================================================================= */
+
+/* ---------- 1. Constantes geométricas ---------- */
+const PASO_PX = 28;
+const C30 = Math.sqrt(3) / 2;
+const U = { x: C30 * PASO_PX, y: -0.5 * PASO_PX };
+const V = { x: -C30 * PASO_PX, y: -0.5 * PASO_PX };
+const DIRS = [
+  { ang: 30, d: [1, 0] }, { ang: 90, d: [1, 1] }, { ang: 150, d: [0, 1] },
+  { ang: 210, d: [-1, 0] }, { ang: 270, d: [-1, -1] }, { ang: 330, d: [0, -1] }
+];
+const ROTACIONES = [30, 90, 150, 210, 270, 330];
+const HOJA = { w: 1400, h: 990 };
+let ORIGEN = { x: 0, y: 0 }, LIENZO = { w: 0, h: 0 };
+
+/* ---------- 2. Catálogos técnicos ---------- */
+const NPS_LISTA = ['1/4"', '3/8"', '1/2"', '3/4"', '1"', '1-1/4"', '1-1/2"', '2"', '2-1/2"', '3"', '4"', '6"', '8"', '10"', '12"', '14"', '16"', '18"', '20"', '24"'];
+/* Especificaciones de material: tubo, accesorios BW, forjados (roscados / socket weld), bridas, válvulas y tipo de junta */
+const SPECS = {
+  'SCH 40 ASTM A106 Gr.B':    { corto: 'SCH 40 A106 Gr.B',    sch: 'SCH 40',  tubo: 'ASTM A106 Gr.B SIN COSTURA, EXTREMOS BISELADOS', acc: 'ASTM A234 WPB, BW', forj: 'ASTM A105 3000#, SW/NPT', brida: 'ASTM A105 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A216 WCB', junta: 'BW' },
+  'SCH STD ASTM A106 Gr.B':   { corto: 'SCH STD A106 Gr.B',   sch: 'SCH STD', tubo: 'ASTM A106 Gr.B SIN COSTURA, EXTREMOS BISELADOS', acc: 'ASTM A234 WPB, BW', forj: 'ASTM A105 3000#, SW/NPT', brida: 'ASTM A105 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A216 WCB', junta: 'BW' },
+  'SCH 80 ASTM A106 Gr.B':    { corto: 'SCH 80 A106 Gr.B',    sch: 'SCH 80',  tubo: 'ASTM A106 Gr.B SIN COSTURA, EXTREMOS BISELADOS', acc: 'ASTM A234 WPB, BW', forj: 'ASTM A105 3000#, SW/NPT', brida: 'ASTM A105 300# RF', val: 'CLASE 300 RF, CUERPO ASTM A216 WCB', junta: 'BW' },
+  'SCH 160 ASTM A106 Gr.B':   { corto: 'SCH 160 A106 Gr.B',   sch: 'SCH 160', tubo: 'ASTM A106 Gr.B SIN COSTURA, EXTREMOS BISELADOS', acc: 'ASTM A234 WPB, BW', forj: 'ASTM A105 6000#, SW/NPT', brida: 'ASTM A105 600# RF', val: 'CLASE 600 RF, CUERPO ASTM A216 WCB', junta: 'BW' },
+  'SCH 40 ASTM A53 Gr.B':     { corto: 'SCH 40 A53 Gr.B',     sch: 'SCH 40',  tubo: 'ASTM A53 Gr.B ERW, EXTREMOS BISELADOS', acc: 'ASTM A234 WPB, BW', forj: 'ASTM A105 3000#, SW/NPT', brida: 'ASTM A105 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A216 WCB', junta: 'BW' },
+  'SCH 40 ASTM A333 Gr.6':    { corto: 'SCH 40 A333 Gr.6 (baja T)', sch: 'SCH 40', tubo: 'ASTM A333 Gr.6 SIN COSTURA, BAJA TEMPERATURA', acc: 'ASTM A420 WPL6, BW', forj: 'ASTM A350 LF2 3000#, SW/NPT', brida: 'ASTM A350 LF2 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A352 LCB', junta: 'BW' },
+  'SCH 80 ASTM A335 P11':     { corto: 'SCH 80 A335 P11 (Cr-Mo)', sch: 'SCH 80', tubo: 'ASTM A335 P11 SIN COSTURA, ALEACIÓN Cr-Mo', acc: 'ASTM A234 WP11, BW', forj: 'ASTM A182 F11 3000#, SW', brida: 'ASTM A182 F11 300# RF', val: 'CLASE 300 RF, CUERPO ASTM A217 WC6', junta: 'BW' },
+  'SCH 10S ASTM A312 TP304L': { corto: 'SCH 10S Inox 304L',   sch: 'SCH 10S', tubo: 'ASTM A312 TP304L, EXTREMOS BISELADOS', acc: 'ASTM A403 WP304L, BW', forj: 'ASTM A182 F304L 3000#, SW/NPT', brida: 'ASTM A182 F304L 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A351 CF3', junta: 'BW' },
+  'SCH 40S ASTM A312 TP304L': { corto: 'SCH 40S Inox 304L',   sch: 'SCH 40S', tubo: 'ASTM A312 TP304L, EXTREMOS BISELADOS', acc: 'ASTM A403 WP304L, BW', forj: 'ASTM A182 F304L 3000#, SW/NPT', brida: 'ASTM A182 F304L 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A351 CF3', junta: 'BW' },
+  'SCH 80S ASTM A312 TP304L': { corto: 'SCH 80S Inox 304L',   sch: 'SCH 80S', tubo: 'ASTM A312 TP304L, EXTREMOS BISELADOS', acc: 'ASTM A403 WP304L, BW', forj: 'ASTM A182 F304L 3000#, SW/NPT', brida: 'ASTM A182 F304L 300# RF', val: 'CLASE 300 RF, CUERPO ASTM A351 CF3', junta: 'BW' },
+  'SCH 10S ASTM A312 TP316L': { corto: 'SCH 10S Inox 316L',   sch: 'SCH 10S', tubo: 'ASTM A312 TP316L, EXTREMOS BISELADOS', acc: 'ASTM A403 WP316L, BW', forj: 'ASTM A182 F316L 3000#, SW/NPT', brida: 'ASTM A182 F316L 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A351 CF3M', junta: 'BW' },
+  'SCH 40S ASTM A312 TP316L': { corto: 'SCH 40S Inox 316L',   sch: 'SCH 40S', tubo: 'ASTM A312 TP316L, EXTREMOS BISELADOS', acc: 'ASTM A403 WP316L, BW', forj: 'ASTM A182 F316L 3000#, SW/NPT', brida: 'ASTM A182 F316L 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A351 CF3M', junta: 'BW' },
+  'SANITARIA ASTM A270 316L': { corto: 'Sanitaria A270 316L', sch: 'CAL. 16', tubo: 'ASTM A270 TP316L PULIDO SANITARIO', acc: 'ASME BPE 316L, EXTREMOS PARA SOLDAR', forj: 'ASME BPE 316L CLAMP', brida: 'FÉRULA CLAMP ASME BPE 316L', val: 'SANITARIA CLAMP, CUERPO 316L', junta: 'BW' },
+  'SCH 40 ASTM A53 Galv':     { corto: 'SCH 40 Galvanizado',  sch: 'SCH 40',  tubo: 'ASTM A53 Gr.B GALVANIZADO, ROSCADO NPT', acc: 'HIERRO MALEABLE GALV. 150#, ROSCADO NPT', forj: 'HIERRO MALEABLE GALV. 150#, ROSCADO NPT', brida: 'ROSCADA ASTM A105 GALV. 150# FF', val: 'ROSCADA NPT 600 WOG, BRONCE', junta: 'ROSCA' },
+  'SCH 80 ASTM A53 Galv':     { corto: 'SCH 80 Galvanizado',  sch: 'SCH 80',  tubo: 'ASTM A53 Gr.B GALVANIZADO, ROSCADO NPT', acc: 'HIERRO MALEABLE GALV. 300#, ROSCADO NPT', forj: 'ASTM A105 GALV. 3000#, NPT', brida: 'ROSCADA ASTM A105 GALV. 150# FF', val: 'ROSCADA NPT 800#, ACERO', junta: 'ROSCA' },
+  'PVC SCH 40 ASTM D1785':    { corto: 'PVC SCH 40',          sch: 'SCH 40',  tubo: 'PVC ASTM D1785, EXTREMOS LISOS', acc: 'PVC SCH 40 ASTM D2466, SOLDADO CON CEMENTO', forj: 'PVC SCH 80 ASTM D2464, ROSCADO', brida: 'PVC SCH 80 150# FF', val: 'PVC, EXTREMOS SOLDABLES', junta: 'CEMENTO' },
+  'PVC SCH 80 ASTM D1785':    { corto: 'PVC SCH 80',          sch: 'SCH 80',  tubo: 'PVC ASTM D1785, EXTREMOS LISOS', acc: 'PVC SCH 80 ASTM D2467, SOLDADO CON CEMENTO', forj: 'PVC SCH 80 ASTM D2464, ROSCADO', brida: 'PVC SCH 80 150# FF', val: 'PVC, EXTREMOS SOLDABLES', junta: 'CEMENTO' },
+  'CPVC SCH 80 ASTM F441':    { corto: 'CPVC SCH 80',         sch: 'SCH 80',  tubo: 'CPVC ASTM F441, EXTREMOS LISOS', acc: 'CPVC SCH 80 ASTM F439, SOLDADO CON CEMENTO', forj: 'CPVC SCH 80, ROSCADO', brida: 'CPVC SCH 80 150# FF', val: 'CPVC, EXTREMOS SOLDABLES', junta: 'CEMENTO' },
+  'HDPE PE100 SDR11':         { corto: 'HDPE PE100 SDR11',    sch: 'SDR 11',  tubo: 'HDPE PE100 PN16, TERMOFUSIÓN', acc: 'HDPE PE100 SDR11, TERMOFUSIÓN', forj: 'HDPE PE100, ELECTROFUSIÓN', brida: 'PORTABRIDA HDPE + BRIDA LOCA ACERO GALV.', val: 'CLASE 150 FF', junta: 'FUSION' },
+  'COBRE TIPO L ASTM B88':    { corto: 'Cobre tipo L',        sch: 'TIPO L',  tubo: 'COBRE ASTM B88 TIPO L, RÍGIDO', acc: 'COBRE FORJADO ASME B16.22, SOLDADURA CAPILAR', forj: 'BRONCE ASME B16.18, ROSCADO', brida: 'BRONCE 150#', val: 'BRONCE, EXTREMOS SOLDABLES', junta: 'CAPILAR' }
+};
+const TIPO_JUNTA = { BW: 'JUNTA SOLDADA A TOPE', ROSCA: 'JUNTA ROSCADA', CEMENTO: 'JUNTA CEMENTADA', FUSION: 'JUNTA POR TERMOFUSIÓN', CAPILAR: 'JUNTA SOLDADURA CAPILAR' };
+/* modo: 'nodo' = se ubica en un nodo y orienta sus brazos con las tuberías conectadas;
+         'linea' = va sobre el eje de una tubería; 'extremo' = prefiere el final de un tramo;
+         'punto' = marca puntual (soldadura)
+   mat:  regla de descripción para el BOM (ver descripcion())
+   grupo: sección del catálogo en el panel lateral */
+const TIPOS = {
+  pipe:          { cat: 'TUBERÍA',     mat: 'tubo',  nombre: 'TUBERÍA', corto: 'Tubería', orden: 0 },
+  /* accesorios soldables a tope */
+  elbow90:       { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'nodo',    orden: 1,  nombre: 'CODO 90° RADIO LARGO', corto: 'Codo 90° RL' },
+  elbow90_sr:    { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'nodo',    orden: 2,  nombre: 'CODO 90° RADIO CORTO', corto: 'Codo 90° RC' },
+  elbow45:       { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'nodo',    orden: 3,  nombre: 'CODO 45° RADIO LARGO', corto: 'Codo 45°' },
+  elbow180:      { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'extremo', orden: 4,  nombre: 'CODO 180° RETORNO', corto: 'Codo 180°' },
+  tee:           { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'nodo',    orden: 5,  nombre: 'TEE RECTA', corto: 'Tee recta' },
+  tee_red:       { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'nodo',    orden: 6,  nombre: 'TEE REDUCTORA', corto: 'Tee reductora', reduce: true },
+  cross:         { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'nodo',    orden: 7,  nombre: 'CRUZ RECTA', corto: 'Cruz' },
+  reducer:       { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'linea',   orden: 8,  nombre: 'REDUCCIÓN CONCÉNTRICA', corto: 'Red. concéntrica', reduce: true },
+  reducer_ecc:   { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'linea',   orden: 9,  nombre: 'REDUCCIÓN EXCÉNTRICA', corto: 'Red. excéntrica', reduce: true },
+  cap:           { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'extremo', orden: 10, nombre: 'CAP (TAPÓN)', corto: 'Cap / Tapón' },
+  stub_end:      { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'extremo', orden: 11, nombre: 'STUB END (PARA BRIDA LOCA)', corto: 'Stub end' },
+  /* roscados, socket weld y derivaciones */
+  union:         { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 12, nombre: 'UNIVERSAL (UNIÓN)', corto: 'Universal' },
+  coupling:      { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 13, nombre: 'ACOPLE / COPLA COMPLETA', corto: 'Copla' },
+  half_coupling: { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 14, nombre: 'MEDIA COPLA', corto: 'Media copla', reduce: true },
+  nipple:        { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 15, nombre: 'NIPLE', corto: 'Niple' },
+  swage:         { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 16, nombre: 'NIPLE REDUCTOR (SWAGE)', corto: 'Swage', reduce: true },
+  bushing:       { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 17, nombre: 'BUJE REDUCTOR', corto: 'Buje', reduce: true },
+  plug:          { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'extremo', orden: 18, nombre: 'TAPÓN MACHO', corto: 'Tapón macho' },
+  weldolet:      { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 19, nombre: 'WELDOLET', corto: 'Weldolet', reduce: true },
+  sockolet:      { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 20, nombre: 'SOCKOLET', corto: 'Sockolet', reduce: true },
+  threadolet:    { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 21, nombre: 'THREADOLET', corto: 'Threadolet', reduce: true },
+  /* bridas */
+  flange_wn:     { grupo: 'brida', cat: 'BRIDA', mat: 'brida', modo: 'extremo', orden: 22, nombre: 'BRIDA WELDING NECK', corto: 'Brida WN', conSch: true },
+  flange_so:     { grupo: 'brida', cat: 'BRIDA', mat: 'brida', modo: 'extremo', orden: 23, nombre: 'BRIDA SLIP-ON', corto: 'Brida SO' },
+  flange_sw:     { grupo: 'brida', cat: 'BRIDA', mat: 'brida', modo: 'extremo', orden: 24, nombre: 'BRIDA SOCKET WELD', corto: 'Brida SW', conSch: true },
+  flange_th:     { grupo: 'brida', cat: 'BRIDA', mat: 'brida', modo: 'extremo', orden: 25, nombre: 'BRIDA ROSCADA', corto: 'Brida roscada' },
+  flange_lj:     { grupo: 'brida', cat: 'BRIDA', mat: 'brida', modo: 'extremo', orden: 26, nombre: 'BRIDA LOCA (LAP JOINT)', corto: 'Brida loca' },
+  flange_bl:     { grupo: 'brida', cat: 'BRIDA', mat: 'brida', modo: 'extremo', orden: 27, nombre: 'BRIDA CIEGA', corto: 'Brida ciega' },
+  flange_or:     { grupo: 'brida', cat: 'BRIDA', mat: 'brida', modo: 'linea',   orden: 28, nombre: 'BRIDA DE ORIFICIO (PAR)', corto: 'Brida orificio', conSch: true },
+  spectacle:     { grupo: 'brida', cat: 'BRIDA', mat: 'brida', modo: 'linea',   orden: 29, nombre: 'FIGURA 8 (SPECTACLE BLIND)', corto: 'Figura 8' },
+  /* válvulas */
+  v_gate:        { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 30, nombre: 'VÁLVULA DE COMPUERTA', corto: 'V. Compuerta' },
+  v_globe:       { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 31, nombre: 'VÁLVULA DE GLOBO', corto: 'V. Globo' },
+  v_ball:        { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 32, nombre: 'VÁLVULA DE BOLA', corto: 'V. Bola' },
+  v_butterfly:   { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 33, nombre: 'VÁLVULA MARIPOSA', corto: 'V. Mariposa' },
+  v_check:       { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 34, nombre: 'VÁLVULA CHEQUE (RETENCIÓN)', corto: 'V. Cheque' },
+  v_check_wafer: { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 35, nombre: 'VÁLVULA CHEQUE WAFER (DOBLE PLATO)', corto: 'Cheque wafer' },
+  v_plug:        { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 36, nombre: 'VÁLVULA MACHO (PLUG)', corto: 'V. Macho' },
+  v_needle:      { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 37, nombre: 'VÁLVULA DE AGUJA', corto: 'V. Aguja' },
+  v_diaphragm:   { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 38, nombre: 'VÁLVULA DE DIAFRAGMA', corto: 'V. Diafragma' },
+  v_angle:       { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 39, nombre: 'VÁLVULA ANGULAR', corto: 'V. Angular' },
+  v_3way:        { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 40, nombre: 'VÁLVULA DE TRES VÍAS', corto: 'V. 3 vías' },
+  v_control:     { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 41, nombre: 'VÁLVULA DE CONTROL', corto: 'V. Control' },
+  v_regulator:   { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 42, nombre: 'VÁLVULA REGULADORA DE PRESIÓN', corto: 'V. Reguladora' },
+  v_solenoid:    { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 43, nombre: 'VÁLVULA SOLENOIDE', corto: 'V. Solenoide' },
+  v_psv:         { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 44, nombre: 'VÁLVULA DE ALIVIO / SEGURIDAD (PSV)', corto: 'V. Alivio PSV' },
+  v_foot:        { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'extremo', orden: 45, nombre: 'VÁLVULA DE PIE CON CANASTILLA', corto: 'V. de pie' },
+  /* especiales de línea */
+  strainer_y:    { grupo: 'esp', cat: 'ESPECIAL', mat: 'esp', modo: 'linea', orden: 46, nombre: 'FILTRO TIPO Y', corto: 'Filtro Y' },
+  strainer_t:    { grupo: 'esp', cat: 'ESPECIAL', mat: 'esp', modo: 'linea', orden: 47, nombre: 'FILTRO TIPO CANASTA', corto: 'Filtro canasta' },
+  exp_joint:     { grupo: 'esp', cat: 'ESPECIAL', mat: 'esp', modo: 'linea', orden: 48, nombre: 'JUNTA DE EXPANSIÓN', corto: 'Junta expansión' },
+  sight:         { grupo: 'esp', cat: 'ESPECIAL', mat: 'esp', modo: 'linea', orden: 49, nombre: 'VISOR DE FLUJO', corto: 'Visor de flujo' },
+  trap:          { grupo: 'esp', cat: 'ESPECIAL', mat: 'esp', modo: 'linea', orden: 50, nombre: 'TRAMPA DE VAPOR', corto: 'Trampa vapor' },
+  vent:          { grupo: 'esp', cat: 'ESPECIAL', mat: 'esp', modo: 'linea', orden: 51, nombre: 'VENTEO CON VÁLVULA', corto: 'Venteo' },
+  drain:         { grupo: 'esp', cat: 'ESPECIAL', mat: 'esp', modo: 'linea', orden: 52, nombre: 'DRENAJE CON VÁLVULA', corto: 'Drenaje' },
+  /* instrumentos */
+  pi:            { grupo: 'inst', cat: 'INSTRUMENTO', mat: 'inst', modo: 'linea', orden: 53, nombre: 'MANÓMETRO', corto: 'Manómetro PI' },
+  ti:            { grupo: 'inst', cat: 'INSTRUMENTO', mat: 'inst', modo: 'linea', orden: 54, nombre: 'TERMÓMETRO CON TERMOPOZO', corto: 'Termómetro TI' },
+  fi:            { grupo: 'inst', cat: 'INSTRUMENTO', mat: 'inst', modo: 'linea', orden: 55, nombre: 'MEDIDOR DE CAUDAL', corto: 'Caudalímetro FI' },
+  /* soportes */
+  sup_shoe:      { grupo: 'sop', cat: 'SOPORTE', mat: 'sop', modo: 'linea', orden: 56, nombre: 'SOPORTE APOYO TIPO ZAPATA', corto: 'Apoyo / zapata' },
+  sup_guide:     { grupo: 'sop', cat: 'SOPORTE', mat: 'sop', modo: 'linea', orden: 57, nombre: 'SOPORTE GUÍA', corto: 'Guía' },
+  sup_anchor:    { grupo: 'sop', cat: 'SOPORTE', mat: 'sop', modo: 'linea', orden: 58, nombre: 'ANCLAJE', corto: 'Anclaje' },
+  sup_hanger:    { grupo: 'sop', cat: 'SOPORTE', mat: 'sop', modo: 'linea', orden: 59, nombre: 'SOPORTE COLGANTE', corto: 'Colgante' },
+  sup_spring:    { grupo: 'sop', cat: 'SOPORTE', mat: 'sop', modo: 'linea', orden: 60, nombre: 'SOPORTE DE RESORTE', corto: 'Resorte' },
+  /* juntas */
+  weld:          { grupo: 'junta', cat: 'JUNTA', mat: 'junta', modo: 'punto', orden: 70, nombre: 'JUNTA SOLDADA A TOPE', corto: 'Soldadura (END)' },
+  /* anotaciones del plano (no van al BOM) */
+  flow:          { grupo: 'anot', cat: 'ANOTACIÓN', mat: 'anot', modo: 'linea', orden: 90, nombre: 'FLECHA DE DIRECCIÓN DE FLUJO', corto: 'Flecha de flujo', noBOM: true },
+  slope:         { grupo: 'anot', cat: 'ANOTACIÓN', mat: 'anot', modo: 'linea', orden: 91, nombre: 'PENDIENTE DEL TRAMO', corto: 'Pendiente', noBOM: true, propiedad: true }
+};
+/* Catálogo de fabricante: series Danfoss (válvulas, reguladores, filtros e instrumentos).
+   Cada serie usa un símbolo base del catálogo; el código de pedido exacto según diámetro y
+   conexión se anota en "Código / ref. fabricante" del componente. */
+const FABRICANTES = {
+  danfoss: { titulo: 'Danfoss', items: [
+    ['d_ev210b', 'v_solenoid', 'DANFOSS EV210B VÁLVULA SOLENOIDE 2/2 VÍAS ACCIÓN DIRECTA', 'EV210B solenoide'],
+    ['d_ev220b', 'v_solenoid', 'DANFOSS EV220B VÁLVULA SOLENOIDE 2/2 VÍAS SERVOACCIONADA', 'EV220B solenoide'],
+    ['d_ev225b', 'v_solenoid', 'DANFOSS EV225B VÁLVULA SOLENOIDE PARA VAPOR', 'EV225B vapor'],
+    ['d_ev250b', 'v_solenoid', 'DANFOSS EV250B VÁLVULA SOLENOIDE ASISTIDA (DESDE 0 BAR)', 'EV250B asistida'],
+    ['d_ev260b', 'v_solenoid', 'DANFOSS EV260B VÁLVULA SOLENOIDE PROPORCIONAL', 'EV260B proporcional'],
+    ['d_evr', 'v_solenoid', 'DANFOSS EVR VÁLVULA SOLENOIDE PARA REFRIGERACIÓN', 'EVR refrigeración'],
+    ['d_evra', 'v_solenoid', 'DANFOSS EVRA VÁLVULA SOLENOIDE (AMONÍACO / HFC)', 'EVRA solenoide'],
+    ['d_ics', 'v_control', 'DANFOSS ICS VÁLVULA PRINCIPAL SERVOACCIONADA', 'ICS servo'],
+    ['d_icm', 'v_control', 'DANFOSS ICM VÁLVULA MOTORIZADA DE CONTROL', 'ICM motorizada'],
+    ['d_te', 'v_regulator', 'DANFOSS TE VÁLVULA DE EXPANSIÓN TERMOSTÁTICA', 'TE expansión'],
+    ['d_ets', 'v_control', 'DANFOSS ETS VÁLVULA DE EXPANSIÓN ELECTRÓNICA', 'ETS expansión elec.'],
+    ['d_akv', 'v_solenoid', 'DANFOSS AKV VÁLVULA DE EXPANSIÓN ELECTRÓNICA PULSANTE', 'AKV expansión'],
+    ['d_kvp', 'v_regulator', 'DANFOSS KVP REGULADOR DE PRESIÓN DE EVAPORACIÓN', 'KVP reg. evap.'],
+    ['d_kvr', 'v_regulator', 'DANFOSS KVR REGULADOR DE PRESIÓN DE CONDENSACIÓN', 'KVR reg. cond.'],
+    ['d_kvl', 'v_regulator', 'DANFOSS KVL REGULADOR DE PRESIÓN DE CÁRTER', 'KVL reg. cárter'],
+    ['d_gbc', 'v_ball', 'DANFOSS GBC VÁLVULA DE BOLA PARA REFRIGERACIÓN', 'GBC bola'],
+    ['d_sva', 'v_globe', 'DANFOSS SVA VÁLVULA DE CIERRE', 'SVA cierre'],
+    ['d_reg', 'v_needle', 'DANFOSS REG VÁLVULA DE REGULACIÓN MANUAL', 'REG regulación'],
+    ['d_snv', 'v_needle', 'DANFOSS SNV VÁLVULA DE AGUJA DE CIERRE', 'SNV aguja'],
+    ['d_nrv', 'v_check', 'DANFOSS NRV VÁLVULA DE RETENCIÓN', 'NRV retención'],
+    ['d_chv', 'v_check', 'DANFOSS CHV VÁLVULA DE RETENCIÓN', 'CHV retención'],
+    ['d_sfv', 'v_psv', 'DANFOSS SFV VÁLVULA DE SEGURIDAD', 'SFV seguridad'],
+    ['d_fia', 'strainer_y', 'DANFOSS FIA FILTRO', 'FIA filtro'],
+    ['d_dml', 'strainer_t', 'DANFOSS DML FILTRO DESHIDRATADOR', 'DML deshidratador'],
+    ['d_sgi', 'sight', 'DANFOSS SGI VISOR DE LÍQUIDO CON INDICADOR DE HUMEDAD', 'SGI visor'],
+    ['d_abqm', 'v_control', 'DANFOSS AB-QM VÁLVULA DE CONTROL INDEPENDIENTE DE LA PRESIÓN (PICV)', 'AB-QM PICV'],
+    ['d_asvpv', 'v_regulator', 'DANFOSS ASV-PV REGULADOR DE PRESIÓN DIFERENCIAL', 'ASV-PV ΔP'],
+    ['d_asvbd', 'v_ball', 'DANFOSS ASV-BD VÁLVULA DE CIERRE Y MEDICIÓN', 'ASV-BD cierre'],
+    ['d_msvbd', 'v_globe', 'DANFOSS MSV-BD VÁLVULA DE EQUILIBRADO MANUAL', 'MSV-BD equilibrado'],
+    ['d_avp', 'v_regulator', 'DANFOSS AVP REGULADOR DE PRESIÓN DIFERENCIAL AUTOACCIONADO', 'AVP ΔP'],
+    ['d_vb2', 'v_control', 'DANFOSS VB 2 VÁLVULA DE CONTROL DE ASIENTO 2 VÍAS', 'VB 2 control'],
+    ['d_vf3', 'v_3way', 'DANFOSS VF 3 VÁLVULA DE CONTROL DE ASIENTO 3 VÍAS BRIDADA', 'VF 3 3 vías'],
+    ['d_vrb3', 'v_3way', 'DANFOSS VRB 3 VÁLVULA DE CONTROL 3 VÍAS ROSCADA', 'VRB 3 3 vías'],
+    ['d_jip', 'v_ball', 'DANFOSS JIP VÁLVULA DE BOLA PARA REDES DE CALEFACCIÓN', 'JiP bola'],
+    ['d_ra', 'v_globe', 'DANFOSS RA-N VÁLVULA TERMOSTÁTICA DE RADIADOR', 'RA-N termostática'],
+    ['d_vfy', 'v_butterfly', 'DANFOSS VFY-WH VÁLVULA MARIPOSA TIPO WAFER', 'VFY-WH mariposa'],
+    ['d_kp', 'pi', 'DANFOSS KP PRESOSTATO', 'KP presostato'],
+    ['d_mbs', 'pi', 'DANFOSS MBS 3000 TRANSMISOR DE PRESIÓN', 'MBS transmisor P'],
+    ['d_mbt', 'ti', 'DANFOSS MBT SENSOR DE TEMPERATURA', 'MBT sensor T']
+  ] }
+};
+for (const [marca, { items }] of Object.entries(FABRICANTES))
+  items.forEach(([id, base, nombre, corto], i) => {
+    const B = TIPOS[base];
+    TIPOS[id] = { grupo: 'fab_' + marca, cat: B.cat, mat: 'gen', modo: B.modo, orden: 61 + i / 100, nombre, corto, base, uni: 'UND' };
+  });
+const GRUPOS = [['acc_bw', 'Accesorios soldables (BW)'], ['acc_rs', 'Roscados · Socket weld · Derivaciones'], ['brida', 'Bridas'], ['val', 'Válvulas'],
+  ['esp', 'Especiales de línea'], ['inst', 'Instrumentos'], ['sop', 'Soportes'], ['junta', 'Juntas'], ['anot', 'Anotaciones (flujo y pendiente)'],
+  ...Object.entries(FABRICANTES).map(([m, f]) => ['fab_' + m, `Fabricante: ${f.titulo}`]), ['propio', 'Catálogo propio']];
+const CATEGORIAS = ['ACCESORIO', 'BRIDA', 'VÁLVULA', 'ESPECIAL', 'INSTRUMENTO', 'SOPORTE', 'OTRO'];
+const CONSUMIBLES = [
+  ['SOLDADURA E6010 Ø 1/8" (PASE DE RAÍZ)', 'KG'],
+  ['SOLDADURA E7018 Ø 1/8" (RELLENO Y PRESENTACIÓN)', 'KG'],
+  ['VARILLA TIG ER70S-2 Ø 3/32"', 'KG'],
+  ['VARILLA TIG ER308L Ø 3/32"', 'KG'],
+  ['VARILLA TIG ER316L Ø 3/32"', 'KG'],
+  ['GAS ARGÓN UAP (CILINDRO 9 m³)', 'UND'],
+  ['KIT TINTAS PENETRANTES (LIMPIADOR, PENETRANTE, REVELADOR)', 'GLB'],
+  ['DISCO DE CORTE 4-1/2"', 'UND'],
+  ['DISCO FLAP DE PULIR 4-1/2"', 'UND'],
+  ['EMPAQUE ESPIROMETÁLICO 150# RF', 'UND'],
+  ['ESPÁRRAGO ASTM A193 B7 CON 2 TUERCAS A194 2H', 'UND'],
+  ['CINTA TEFLÓN 3/4"', 'UND'],
+  ['PINTURA ANTICORROSIVA (PRIMER + ACABADO)', 'GLB']
+];
+const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
+
+/* ---------- 3. Estado global único (single source of truth) ---------- */
+const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
+const estado = {
+  cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
+              servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
+  escala: 0.5,          // metros por paso de grilla (valor interno siempre en metros)
+  unidad: 'mm',         // unidad de presentación de cotas y longitudes: 'mm' o 'm' 
+  components: [],       // { id, category, type, nps, schedule, length, lengthManual, coords, rotation, npsRed }
+  consumibles: [],      // { id, uni, desc, cant }
+  ajustes: {},          // ajustes manuales de cantidad en el BOM, por clave de grupo
+  catalogoPropio: [],   // ítems agregados por el usuario: { id, nombre, cat, simbolo, desc, uni }
+  cotas: 'ambas',       // texto de cotas: 'cc' (centro a centro), 'corte' o 'ambas'
+  descontar: true,      // el BOM suma longitud de corte (descontando accesorios), no centro a centro
+  trazo: { modo: 'iso', plano: 'H' }   // modo: 'iso' o paso angular libre ('15' | '5' | '1'); plano del ángulo libre
+};
+let historial = [], rehacerPila = [];
+let herramienta = 'pipe', rotacionActual = 30, seleccion = null, zoom = 1;
+let trazo = null;            // trazado de tubería en curso
+let ultimoBOM = [];
+
+const $ = id => document.getElementById(id);
+const svg = $('iso-svg'), vp = $('viewport'), hoja = $('a3-container'), envoltura = $('a3-wrapper');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nuevoId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const r2 = n => Math.round(n * 100) / 100;
+const r3 = n => Math.round(n * 1000) / 1000;
+/* Conversión de unidades: internamente todo está en metros; se muestra en mm o m */
+const enMM = () => estado.unidad === 'mm';
+const aUnidad = m => enMM() ? Math.round(m * 1000) : r3(m);
+const deUnidad = v => enMM() ? v / 1000 : v;
+const txtUnidad = () => enMM() ? 'mm' : 'm';
+const fmtLong = m => enMM() ? `${Math.round(m * 1000)} mm` : `${f2(m)} m`;
+const f2 = n => Number(n).toFixed(2);
+const npsNum = s => { const t = String(s).replace('"', '').trim(); const m = t.match(/^(\d+)-(\d+)\/(\d+)$/);
+  if (m) return +m[1] + m[2] / m[3]; const f = t.match(/^(\d+)\/(\d+)$/); return f ? f[1] / f[2] : parseFloat(t) || 0; };
+const hoyISO = () => { const d = new Date(), z = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; };
+
+/* ---------- 4. Geometría isométrica ---------- */
+const aPantalla = ([p, q]) => ({ x: ORIGEN.x + p * U.x + q * V.x, y: ORIGEN.y + p * U.y + q * V.y });
+function aRed(x, y) {
+  const a = (x - ORIGEN.x) / (C30 * PASO_PX);   // p − q
+  const b = -(y - ORIGEN.y) / (0.5 * PASO_PX);  // p + q
+  return [(a + b) / 2, (b - a) / 2];
+}
+/* Nodo de la red triangular más cercano: está entre las 4 esquinas de la celda */
+function nodoMasCercano(x, y) {
+  const [p, q] = aRed(x, y); let mejor = null, dmin = Infinity;
+  for (const pp of [Math.floor(p), Math.ceil(p)]) for (const qq of [Math.floor(q), Math.ceil(q)]) {
+    const s = aPantalla([pp, qq]), d = Math.hypot(s.x - x, s.y - y);
+    if (d < dmin) { dmin = d; mejor = [pp, qq]; }
+  }
+  return mejor;
+}
+const igual = (A, B) => Math.abs(A[0] - B[0]) < 1e-6 && Math.abs(A[1] - B[1]) < 1e-6;
+const unitAng = ang => ({ x: Math.cos(ang * Math.PI / 180), y: -Math.sin(ang * Math.PI / 180) });
+const normAng = a => ((a % 360) + 360) % 360;
+const esVertical = ang => Math.abs(Math.sin(ang * Math.PI / 180)) > 0.97;
+const casiAng = (a, b) => { const d = Math.abs(normAng(a) - normAng(b)); return d < 0.05 || d > 359.95; };
+const red6 = P => P.map(v => Math.round(v * 1e6) / 1e6);
+/* Ángulo en pantalla (0° = derecha, antihorario) del vector A→B */
+function angPantalla(A, B) {
+  const a = aPantalla(A), b = aPantalla(B);
+  return normAng(Math.round(Math.atan2(a.y - b.y, b.x - a.x) * 180 / Math.PI * 1000) / 1000);
+}
+/* Si B está sobre un eje isométrico desde A devuelve { ang, d, pasos }, si no null */
+function dirEntre(A, B) {
+  const dp = B[0] - A[0], dq = B[1] - A[1];
+  for (const D of DIRS) {
+    const [a, b] = D.d;
+    const n = a !== 0 ? dp / a : dq / b;
+    if (n <= 1e-6) continue;
+    if (Math.abs(dp - n * a) > 1e-6 || Math.abs(dq - n * b) > 1e-6) continue;
+    return { ang: D.ang, d: D.d, pasos: n };
+  }
+  return null;
+}
+/* Planos para tubería a ángulo libre. Ejes reales en coordenadas de red:
+   Norte = [1,0] (30°), Este = [0,−1] (330°), Arriba = [1,1] (90°). Ambos ejes de cada plano son
+   ortonormales en 3D, así la longitud medida en el plano es la longitud real del tramo. */
+const PLANOS = {
+  H:  { a1: [1, 0],  a2: [0, -1], nombre: 'horizontal', ref: 'N', corto: 'Plano H' },
+  NZ: { a1: [1, 0],  a2: [1, 1],  nombre: 'vertical N-S', ref: 'N', corto: 'Plano N-S' },
+  EZ: { a1: [0, -1], a2: [1, 1],  nombre: 'vertical E-O', ref: 'E', corto: 'Plano E-O' }
+};
+function enPlano(plano, dp, dq) {
+  const { a1, a2 } = PLANOS[plano] || PLANOS.H, det = a1[0] * a2[1] - a2[0] * a1[1];
+  return { x: (dp * a2[1] - a2[0] * dq) / det, y: (a1[0] * dq - a1[1] * dp) / det };
+}
+function desdePlano(plano, A, L, ang) {
+  const { a1, a2 } = PLANOS[plano] || PLANOS.H, c = Math.cos(ang * Math.PI / 180), s = Math.sin(ang * Math.PI / 180);
+  return red6([A[0] + L * (c * a1[0] + s * a2[0]), A[1] + L * (c * a1[1] + s * a2[1])]);
+}
+const angEnPlano = (plano, A, B) => { const v = enPlano(plano, B[0] - A[0], B[1] - A[1]); return normAng(Math.round(Math.atan2(v.y, v.x) * 1800 / Math.PI) / 10); };
+/* Longitud real del tramo en pasos de grilla (ejes ISO exactos; tramos libres medidos en su plano) */
+function pasosReales(c) {
+  const [A, B] = c.coords, di = dirEntre(A, B);
+  if (di) return di.pasos;
+  if (c.libre && PLANOS[c.libre.plano]) { const v = enPlano(c.libre.plano, B[0] - A[0], B[1] - A[1]); return Math.hypot(v.x, v.y); }
+  const a = aPantalla(A), b = aPantalla(B); return Math.hypot(b.x - a.x, b.y - a.y) / PASO_PX;
+}
+/* Ángulo agudo entre un tramo libre y el eje de referencia de su plano (el que se rotula en el plano) */
+const anguloAgudo = c => { const v = enPlano(c.libre.plano, c.coords[1][0] - c.coords[0][0], c.coords[1][1] - c.coords[0][1]);
+  return Math.round(Math.atan2(Math.abs(v.y), Math.abs(v.x)) * 1800 / Math.PI) / 10; };
+const puntoEnTubo = (c, k) => { const [A, B] = c.coords, L = pasosReales(c) || 1; return red6([A[0] + (B[0] - A[0]) * k / L, A[1] + (B[1] - A[1]) * k / L]); };
+/* Perpendicular por defecto: tramo horizontal → vertical; tramo vertical → eje N-S */
+const perpDefecto = ang => esVertical(ang) ? 30 : 90;
+
+/* ---------- 5. Imantación (snapping) ---------- */
+const tuberias = () => estado.components.filter(c => c.type === 'pipe');
+function puertos() {
+  const lista = [];
+  for (const c of estado.components) for (const P of c.coords) if (!lista.some(Q => igual(P, Q))) lista.push(P);
+  return lista;
+}
+function puertoCercano(pt, R) {
+  let mejor = null, dmin = R;
+  for (const P of puertos()) { const s = aPantalla(P), d = Math.hypot(s.x - pt.x, s.y - pt.y); if (d <= dmin) { dmin = d; mejor = P; } }
+  return mejor;
+}
+function snapInicio(pt, R) {
+  const P = puertoCercano(pt, R);
+  return P ? { P, iman: true } : { P: nodoMasCercano(pt.x, pt.y), iman: false };
+}
+/* Bloqueo axial: proyecta el vector inicio→cursor sobre el eje isométrico más cercano
+   (30/90/150/210/270/330°) y lo ajusta a un número entero de pasos de grilla */
+function bloqueoAxial(A, pt, R) {
+  const P = puertoCercano(pt, R);
+  if (P && !igual(P, A)) { const di = dirEntre(A, P); if (di) return { fin: P, ...di, iman: true }; }
+  const s = aPantalla(A), w = { x: pt.x - s.x, y: pt.y - s.y };
+  let mejor = DIRS[0], dmax = -Infinity;
+  for (const D of DIRS) { const u = unitAng(D.ang), dot = w.x * u.x + w.y * u.y; if (dot > dmax) { dmax = dot; mejor = D; } }
+  /* longitud en medios pasos: permite tramos cortos entre accesorios (ej. 250 mm con paso de 500 mm) */
+  const n = Math.max(0, Math.round(dmax / PASO_PX * 2) / 2);
+  return { fin: red6([A[0] + n * mejor.d[0], A[1] + n * mejor.d[1]]), ang: mejor.ang, d: mejor.d, pasos: n, iman: false };
+}
+/* Trazo a ángulo libre: el cursor se proyecta sobre el plano elegido (horizontal o vertical);
+   el ángulo se ajusta al paso elegido (15°, 5° o 1°) y la longitud a medios pasos de grilla */
+function bloqueoLibre(A, pt, R) {
+  const plano = estado.trazo.plano, paso = Number(estado.trazo.modo) || 15;
+  const P = puertoCercano(pt, R);
+  let fin = A, iman = false;
+  if (P && !igual(P, A)) { fin = P; iman = true; }
+  else {
+    const [p, q] = aRed(pt.x, pt.y), v = enPlano(plano, p - A[0], q - A[1]);
+    const L = Math.round(Math.hypot(v.x, v.y) * 2) / 2;
+    const ang = normAng(Math.round(Math.atan2(v.y, v.x) * 180 / Math.PI / paso) * paso);
+    if (L > 0) fin = desdePlano(plano, A, L, ang);
+  }
+  const di = dirEntre(A, fin), v = enPlano(plano, fin[0] - A[0], fin[1] - A[1]);
+  return { fin, pasos: di ? di.pasos : Math.hypot(v.x, v.y), ang: igual(A, fin) ? 0 : angPantalla(A, fin), angPlano: angEnPlano(plano, A, fin), plano, iman, libre: !di };
+}
+const resolverFin = (A, pt, R) => estado.trazo.modo === 'iso' ? bloqueoAxial(A, pt, R) : bloqueoLibre(A, pt, R);
+/* Tubería más cercana al cursor: posición en medios pasos y ángulo del eje */
+function tuberiaCercana(pt, R) {
+  let mejor = null, dmin = R;
+  for (const c of tuberias()) {
+    const A = aPantalla(c.coords[0]), B = aPantalla(c.coords[1]);
+    const dx = B.x - A.x, dy = B.y - A.y, L2 = dx * dx + dy * dy; if (!L2) continue;
+    const t = Math.max(0, Math.min(1, ((pt.x - A.x) * dx + (pt.y - A.y) * dy) / L2));
+    const d = Math.hypot(pt.x - (A.x + t * dx), pt.y - (A.y + t * dy));
+    if (d < dmin) { dmin = d; mejor = { c, t }; }
+  }
+  if (!mejor) return null;
+  const L = pasosReales(mejor.c); if (!(L > 0)) return null;
+  const k = Math.round(mejor.t * L * 2) / 2;
+  return { c: mejor.c, k, pasos: L, ang: angPantalla(mejor.c.coords[0], mejor.c.coords[1]), P: puntoEnTubo(mejor.c, k) };
+}
+/* Direcciones (ángulos) de las tuberías que salen de un nodo P */
+function brazos(P) {
+  const angs = [], add = a => { if (!angs.some(b => casiAng(a, b))) angs.push(normAng(a)); }, s = aPantalla(P);
+  for (const c of tuberias()) {
+    const [A, B] = c.coords;
+    if (igual(A, P)) add(angPantalla(A, B));
+    else if (igual(B, P)) add(angPantalla(B, A));
+    else {
+      const a = aPantalla(A), b = aPantalla(B), dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy; if (!L2) continue;
+      const t = ((s.x - a.x) * dx + (s.y - a.y) * dy) / L2;
+      if (t > 0 && t < 1 && Math.hypot(a.x + t * dx - s.x, a.y + t * dy - s.y) < 0.5) { const g = angPantalla(A, B); add(g); add(g + 180); }
+    }
+  }
+  return angs;
+}
+const radioCaptura = e => ((e && e.pointerType === 'touch') ? 22 : 12) / zoom;
+function puntoSVG(e) {
+  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+  return pt.matrixTransform(svg.getScreenCTM().inverse());
+}
+
+/* ---------- 6. Simbología vectorial (coordenadas locales: x = eje del tubo) ---------- */
+const MONO_V = '<polygon points="-11,-7 -11,7 11,-7 11,7" class="sb"/>';
+const SIM = {
+  v_gate:   MONO_V + '<path d="M0 0V-13M-6 -13H6" class="s"/>',
+  v_globe:  MONO_V + '<circle r="4" class="sn"/><path d="M0 -4V-13M-6 -13H6" class="s"/>',
+  v_ball:   MONO_V + '<circle r="4.5" class="sb"/><path d="M0 -4.5V-12H9" class="s"/>',
+  v_check:  '<polygon points="-11,-7 -11,7 11,-7 11,7" class="sb"/><polygon points="11,-7 11,7 0,0" class="sn"/><path d="M-9 -12H7M3 -15L7 -12L3 -9" class="s"/>',
+  v_needle: MONO_V + '<path d="M0 0V-14M-5 -14H5" class="s"/><polygon points="-3.5,-5 3.5,-5 0,1" class="sn"/>',
+  reducer:     '<polygon points="-10,-7 10,-3.5 10,3.5 -10,7" class="sb"/>',
+  reducer_ecc: '<polygon points="-10,-7 10,-7 10,0 -10,7" class="sb"/>',
+  flange_wn: '<polygon points="-11,-2.5 -2,-6 -2,6 -11,2.5" class="sb"/><path d="M-2 -10V10M2 -10V10" class="s" style="stroke-width:2.2"/><circle cx="-11" r="2.2" class="sn"/>',
+  flange_so: '<path d="M-2 -10V10M2 -10V10" class="s" style="stroke-width:2.2"/><circle cx="-4.5" cy="-4" r="1.8" class="sn"/><circle cx="-4.5" cy="4" r="1.8" class="sn"/>',
+  cap: '<path d="M0 -7A7 7 0 0 1 0 7Z" class="sb"/><circle r="2.2" class="sn"/>',
+  elbow180: '<path d="M-10 0H0A7 7 0 0 0 0 -14H-10" class="s" style="stroke-width:3.5"/><circle cx="-10" r="2.2" class="sn"/><circle cx="-10" cy="-14" r="2.2" class="sn"/>',
+  stub_end: '<path d="M-10 -4H0V-8H3V8H0V4H-10Z" class="sb"/>',
+  union: '<rect x="-5" y="-6" width="10" height="12" class="sb"/><path d="M0 -6V6" class="s"/>',
+  coupling: '<rect x="-5" y="-5" width="10" height="10" class="sb"/>',
+  half_coupling: '<rect x="-4" y="-12" width="8" height="12" class="sb"/>',
+  nipple: '<rect x="-9" y="-3.5" width="18" height="7" class="sb"/><path d="M-6 -3.5L-4 3.5M-2 -3.5L0 3.5M2 -3.5L4 3.5" class="s" style="stroke-width:1"/>',
+  swage: '<polygon points="-10,-6 -3,-6 3,-3.5 10,-3.5 10,3.5 3,3.5 -3,6 -10,6" class="sb"/>',
+  bushing: '<rect x="-6" y="-6" width="5" height="12" class="sb"/><rect x="-1" y="-3.5" width="6" height="7" class="sb"/>',
+  plug: '<path d="M0 -6V6" class="s" style="stroke-width:2.4"/><rect x="0" y="-3.5" width="6" height="7" class="sn"/>',
+  weldolet: '<polygon points="-7,0 7,0 3.5,-9 -3.5,-9" class="sb"/><path d="M0 -9V-15" class="s"/>',
+  sockolet: '<polygon points="-7,0 7,0 3.5,-9 -3.5,-9" class="sb"/><rect x="-3.5" y="-14" width="7" height="5" class="sb"/>',
+  threadolet: '<polygon points="-7,0 7,0 3.5,-9 -3.5,-9" class="sb"/><path d="M0 -9V-15M-3 -11.5H3M-3 -13.5H3" class="s" style="stroke-width:1"/>',
+  flange_sw: '<path d="M-2 -10V10M2 -10V10" class="s" style="stroke-width:2.2"/><rect x="-8" y="-3" width="5" height="6" class="sb"/>',
+  flange_th: '<path d="M-2 -10V10M2 -10V10" class="s" style="stroke-width:2.2"/><path d="M-10 -4L-7 -2L-10 0L-7 2L-10 4" class="s" style="stroke-width:1"/>',
+  flange_lj: '<path d="M-2 -10V10M2 -10V10" class="s" style="stroke-width:2.2"/><path d="M-1 -6H-10M-1 6H-10" class="s" style="stroke-width:1"/>',
+  flange_bl: '<path d="M-2 -10V10" class="s" style="stroke-width:2.2"/><rect x="1" y="-10" width="4" height="20" class="sn"/>',
+  flange_or: '<path d="M-5 -10V10M-1.5 -10V10M1.5 -10V10M5 -10V10" class="s" style="stroke-width:1.8"/><path d="M0 -14V-10" class="s" style="stroke-width:1"/>',
+  spectacle: '<path d="M0 -8V8" class="s" style="stroke-width:3"/><path d="M0 -8V-12" class="s"/><circle cy="-17" r="5" class="sb"/>',
+  v_butterfly: '<path d="M-5 -9V9M5 -9V9M-5 9L5 -9M0 0V-14M-5 -14H5" class="s"/>',
+  v_check_wafer: '<path d="M-3 -9V9M3 -9V9" class="s" style="stroke-width:2"/><path d="M-9 -12H6M3 -15L7 -12L3 -9" class="s" style="stroke-width:1.2"/>',
+  v_plug: MONO_V + '<rect x="-3" y="-3" width="6" height="6" class="sb"/><path d="M0 -3V-12H8" class="s"/>',
+  v_diaphragm: MONO_V + '<path d="M-7 -7A7 7 0 0 1 7 -7Z" class="sb"/><path d="M0 -10V-15M-5 -15H5" class="s"/>',
+  v_angle: '<polygon points="-11,-7 -11,7 0,0" class="sb"/><polygon points="-7,11 7,11 0,0" class="sb"/><circle r="2.8" class="sn"/><path d="M0 -2V-12M-5 -12H5" class="s"/>',
+  v_3way: MONO_V + '<polygon points="-7,11 7,11 0,0" class="sb"/><path d="M0 0V-13M-6 -13H6" class="s"/>',
+  v_control: MONO_V + '<path d="M0 0V-10" class="s"/><path d="M-8 -10A8 8 0 0 1 8 -10Z" class="sb"/>',
+  v_regulator: MONO_V + '<path d="M0 0V-9" class="s"/><path d="M-8 -9A8 8 0 0 1 8 -9Z" class="sb"/><path d="M8 -7H13V3" class="s" style="stroke-width:1"/>',
+  v_solenoid: MONO_V + '<path d="M0 0V-8" class="s"/><rect x="-5" y="-17" width="10" height="9" class="sb"/><text y="-9.8" font-size="7" font-weight="800" text-anchor="middle">S</text>',
+  v_psv: '<polygon points="-11,-7 -11,7 0,0" class="sb"/><polygon points="-7,11 7,11 0,0" class="sb"/><path d="M0 0V-5L-4 -7L4 -10L-4 -13L4 -16L0 -18V-21" class="s" style="stroke-width:1.2"/>',
+  v_foot: '<polygon points="-11,-7 -11,7 0,0" class="sb"/><path d="M0 -7V7M3 -7V7M6 -7V7" class="s" style="stroke-width:1"/>',
+  strainer_y: '<rect x="-9" y="-5" width="18" height="10" class="sb"/><path d="M0 5L8 14" class="s" style="stroke-width:5"/>',
+  strainer_t: '<rect x="-8" y="-8" width="16" height="16" class="sb"/><path d="M-5 -5L5 5M-5 5L5 -5" class="s" style="stroke-width:1"/>',
+  exp_joint: '<path d="M-10 -7V7M10 -7V7" class="s" style="stroke-width:2"/><path d="M-10 -5L-6 5L-2 -5L2 5L6 -5L10 5" class="s" style="stroke-width:1.2"/>',
+  sight: '<circle r="6.5" class="sb"/><circle r="3" class="s"/>',
+  trap: '<circle r="7" class="sb"/><text y="3" font-size="9" font-weight="800" text-anchor="middle">T</text>',
+  vent: '<path d="M0 0V-10" class="s"/><polygon points="-4,-10 4,-10 -4,-18 4,-18" class="sb"/><path d="M0 -18V-21" class="s"/>',
+  drain: '<path d="M0 0V10" class="s"/><polygon points="-4,10 4,10 -4,18 4,18" class="sb"/><path d="M0 18V21" class="s"/>',
+  pi: '<path d="M0 0V-9" class="s"/><circle cy="-15" r="6.5" class="sb"/><text y="-12.6" font-size="6.5" font-weight="800" text-anchor="middle">PI</text>',
+  ti: '<path d="M0 0V-9" class="s"/><circle cy="-15" r="6.5" class="sb"/><text y="-12.6" font-size="6.5" font-weight="800" text-anchor="middle">TI</text>',
+  fi: '<rect x="-9" y="-6" width="18" height="12" class="sb"/><text y="2.6" font-size="7.5" font-weight="800" text-anchor="middle">FI</text>',
+  sup_shoe: '<polygon points="-6,3 6,3 4,10 -4,10" class="sb"/><path d="M-10 10H10M-8 10L-11 13M-3 10L-6 13M2 10L-1 13M7 10L4 13" class="s" style="stroke-width:1"/>',
+  sup_guide: '<path d="M-7 -6H7M-7 6H7" class="s" style="stroke-width:2.2"/><path d="M-10 11H10" class="s"/>',
+  sup_anchor: '<path d="M-6 -6L6 6M-6 6L6 -6" class="s" style="stroke-width:2.2"/><path d="M-10 11H10" class="s"/>',
+  sup_hanger: '<path d="M0 -5V-18M-6 -18H6M-5 -4H5" class="s"/>',
+  flow: '<path d="M-13 0H2" class="s" style="stroke-width:2"/><polygon points="12,0 0,-6 0,6" class="sn"/>',
+  slope: '<polygon points="-12,4 12,4 12,-6" class="sb"/><text x="3" y="2.5" font-size="7" font-weight="800" text-anchor="middle">%</text>',
+  sup_spring: '<path d="M-5 -4H5M0 -4V-7L-4 -9L4 -11L-4 -13L4 -15L0 -17V-20M-6 -20H6" class="s" style="stroke-width:1.2"/>'
+};
+/* Iconos del panel (vista frontal simple) */
+const ICONO_NODO = {
+  elbow90: '<path d="M-14 8 0 0 0 -16" class="s"/><circle cx="-14" cy="8" r="2.4" class="sn"/><circle cx="0" cy="-16" r="2.4" class="sn"/>',
+  elbow45: '<path d="M-14 8 0 0 10 -12" class="s"/><circle cx="-14" cy="8" r="2.4" class="sn"/><circle cx="10" cy="-12" r="2.4" class="sn"/>',
+  tee: '<path d="M-14 8 14 -8M0 0V-15" class="s"/><circle cx="-14" cy="8" r="2.4" class="sn"/><circle cx="14" cy="-8" r="2.4" class="sn"/><circle cx="0" cy="-15" r="2.4" class="sn"/>',
+  tee_red: '<path d="M-14 8 14 -8M0 0V-15" class="s"/><circle cx="-14" cy="8" r="2.4" class="sn"/><circle cx="14" cy="-8" r="2.4" class="sn"/><circle cx="0" cy="-15" r="1.6" class="sn"/><text x="5" y="-9" font-size="9" font-weight="700">R</text>',
+  weld: '<path d="M-15 0H15" class="s"/><circle r="4.5" class="sn"/>',
+  elbow90_sr: '<path d="M-14 8 0 0 0 -16" class="s"/><circle cx="-14" cy="8" r="2.4" class="sn"/><circle cx="0" cy="-16" r="2.4" class="sn"/><text x="4" y="10" font-size="8" font-weight="700">RC</text>',
+  cross: '<path d="M-14 8 14 -8M0 -15V15" class="s"/><circle cx="-14" cy="8" r="2.4" class="sn"/><circle cx="14" cy="-8" r="2.4" class="sn"/><circle cy="-15" r="2.4" class="sn"/><circle cy="15" r="2.4" class="sn"/>'
+};
+/* Matriz local→pantalla: eje x sobre el tubo; eje y vertical (o N-S si el tubo es vertical) → símbolo en 2.5D */
+function matrizSimbolo(ang, s) {
+  const e = unitAng(ang), n = esVertical(ang) ? { x: C30, y: 0.5 } : { x: 0, y: 1 };
+  return `matrix(${e.x.toFixed(4)},${e.y.toFixed(4)},${n.x.toFixed(4)},${n.y.toFixed(4)},${s.x.toFixed(2)},${s.y.toFixed(2)})`;
+}
+
+/* ---------- 7. Render del lienzo ---------- */
+function prepararLienzo() {
+  const z = $('zona-dibujo');
+  LIENZO = { w: z.clientWidth, h: z.clientHeight };
+  svg.setAttribute('viewBox', `0 0 ${LIENZO.w} ${LIENZO.h}`);
+  /* origen de la red cerca del centro-izquierda del área de dibujo */
+  ORIGEN = { x: Math.round(LIENZO.w * 0.45), y: Math.round(LIENZO.h * 0.62) };
+  /* malla isométrica paramétrica con <pattern>: celda 2·cos30·paso × paso */
+  const W = 2 * C30 * PASO_PX, H = PASO_PX, pat = $('malla-iso');
+  pat.setAttribute('width', W.toFixed(4)); pat.setAttribute('height', H);
+  pat.setAttribute('patternTransform', `translate(${ORIGEN.x} ${ORIGEN.y})`);
+  pat.innerHTML = `<g stroke="#b6e3f4" stroke-width="0.55" fill="none">
+      <line x1="0" y1="0" x2="0" y2="${H}"/><line x1="${W / 2}" y1="0" x2="${W / 2}" y2="${H}"/>
+      <line x1="0" y1="${H}" x2="${W}" y2="0"/><line x1="0" y1="0" x2="${W}" y2="${H}"/></g>
+    <circle cx="0" cy="0" r="0.9" fill="#7dd3fc"/><circle cx="${W / 2}" cy="${H / 2}" r="0.9" fill="#7dd3fc"/>`;
+  /* rosa de orientación: Norte sobre el eje de 30° */
+  const n = { x: LIENZO.w - 70, y: 60 }, u = unitAng(30);
+  $('capa-norte').innerHTML = `<g stroke="#000" stroke-width="1.6" fill="none">
+      <line x1="${n.x - u.x * 26}" y1="${n.y - u.y * 26}" x2="${n.x + u.x * 26}" y2="${n.y + u.y * 26}"/>
+      <polygon points="${n.x + u.x * 30},${n.y + u.y * 30} ${n.x + u.x * 18 + 0.5 * 5},${n.y + u.y * 18 + C30 * 5} ${n.x + u.x * 18 - 0.5 * 5},${n.y + u.y * 18 - C30 * 5}" fill="#000"/></g>
+    <circle cx="${n.x}" cy="${n.y}" r="30" fill="none" stroke="#000" stroke-width="1"/>
+    <text x="${n.x + u.x * 42}" y="${n.y + u.y * 42}" font-size="15" font-weight="900" text-anchor="middle" dominant-baseline="middle">N</text>`;
+}
+/* Medidas de accesorios en mm según NPS, para la longitud de corte del tubo (las cotas del
+   isométrico son centro a centro):
+   - codos 90° RL / RC y 45°: centro a extremo A/B — ASME B16.9
+   - tee y cruz: centro a extremo C — ASME B16.9 (tee reductora: se usa C del tamaño mayor)
+   - reducción: largo total H — ASME B16.9 (por diámetro mayor)
+   - cap: largo E — ASME B16.9
+   - brida WN 150#: largo a través del cubo Y — ASME B16.5
+   - válvulas 150# RF: cara a cara — ASME B16.10 (compuerta/bola patrón largo, globo, cheque) y mariposa wafer típica
+   Solo se aplican por defecto en especificaciones soldadas a tope (BW); cualquier valor se puede corregir
+   en el panel del componente («Largo / descuento»). */
+const N_TAB = ['1/2"', '3/4"', '1"', '1-1/4"', '1-1/2"', '2"', '2-1/2"', '3"', '4"', '6"', '8"', '10"', '12"', '14"', '16"', '18"', '20"', '24"'];
+const tablaMM = valores => Object.fromEntries(N_TAB.map((n, i) => [n, valores[i]]).filter(([, v]) => v != null));
+const TAKEOFF = {
+  elbow90:     tablaMM([38, 29, 38, 48, 57, 76, 95, 114, 152, 229, 305, 381, 457, 533, 610, 686, 762, 914]),
+  elbow90_sr:  tablaMM([null, null, 25, 32, 38, 51, 64, 76, 102, 152, 203, 254, 305, 356, 406, 457, 508, 610]),
+  elbow45:     tablaMM([16, 11, 22, 25, 29, 35, 44, 51, 64, 95, 127, 159, 190, 222, 254, 286, 318, 381]),
+  tee:         tablaMM([25, 29, 38, 48, 57, 64, 76, 86, 105, 143, 178, 216, 254, 279, 305, 343, 381, 432]),
+  reducer:     tablaMM([null, 38, 51, 51, 64, 76, 89, 89, 102, 140, 152, 178, 203, 330, 356, 381, 508, 508]),
+  cap:         tablaMM([25, 25, 38, 38, 38, 38, 38, 51, 64, 89, 102, 127, 152, 165, 178, 203, 229, 267]),
+  flange_wn:   tablaMM([48, 52, 56, 57, 62, 62, 68, 68, 75, 87, 100, 100, 113, 125, 125, 138, 143, 151]),
+  v_gate:      tablaMM([108, 117, 127, 140, 165, 178, 190, 203, 229, 267, 292, 330, 356, 381, 406, 432, 457, 508]),
+  v_globe:     tablaMM([108, 117, 127, 140, 165, 203, 216, 241, 292, 406, 495, 622, 698]),
+  v_check:     tablaMM([108, 117, 127, 140, 165, 203, 216, 241, 292, 356, 495, 622, 698, 787, 864, 978, 978, 1295]),
+  v_butterfly: tablaMM([null, null, null, null, null, 43, 46, 46, 52, 56, 60, 68, 78, 92, 102, 114, 127, 154])
+};
+TAKEOFF.tee_red = TAKEOFF.tee; TAKEOFF.cross = TAKEOFF.tee; TAKEOFF.reducer_ecc = TAKEOFF.reducer; TAKEOFF.elbow180 = TAKEOFF.elbow90; TAKEOFF.v_ball = TAKEOFF.v_gate;
+/* Roscados NPT: penetración de rosca E (mm, apriete normal) y centro a extremo A de accesorios
+   de hierro maleable clase 150 (ASME B16.3). El descuento al tubo es A − E. */
+const ROSCA_E = { '1/4"': 10, '3/8"': 10, '1/2"': 13, '3/4"': 14, '1"': 17, '1-1/4"': 18, '1-1/2"': 18, '2"': 19, '2-1/2"': 24, '3"': 25, '4"': 27 };
+const N_ROS = ['1/4"', '3/8"', '1/2"', '3/4"', '1"', '1-1/4"', '1-1/2"', '2"', '2-1/2"', '3"', '4"'];
+const tablaRosca = v => Object.fromEntries(N_ROS.map((n, i) => [n, v[i]]).filter(([, x]) => x != null));
+const B163_A90 = tablaRosca([21, 24, 28, 33, 38, 44, 49, 57, 69, 78, 96]);   // codo 90°, tee y cruz
+const B163_A45 = tablaRosca([19, 20, 22, 25, 28, 33, 36, 43, 50, 55, 66]);   // codo 45°
+/* Válvulas roscadas: largo cara a cara típico de catálogo (bronce 125# / bola 2 piezas paso total).
+   Varía según fabricante: verificar y corregir en el panel. El descuento es L − 2E. */
+const ROSCA_VALV = {
+  v_gate:  tablaRosca([null, null, 52, 58, 68, 75, 81, 91]),
+  v_ball:  tablaRosca([null, null, 58, 68, 82, 95, 105, 125]),
+  v_globe: tablaRosca([null, null, 62, 72, 85, 100, 110, 130]),
+  v_check: tablaRosca([null, null, 62, 72, 82, 95, 105, 120])
+};
+/* Danfoss: largo de cuerpo L (mm) según hoja técnica del fabricante (DN15=1/2", DN20=3/4", DN25=1",
+   DN32=1-1/4", DN40=1-1/2", DN50=2"…). rosca: descuento L − 2E; wafer: va entre bridas (descuento L). */
+const LARGO_FAB = {
+  d_ev220b: { rosca: true, mm: { '1/2"': 80, '3/4"': 90, '1"': 109, '1-1/4"': 120, '1-1/2"': 130, '2"': 162 } },
+  d_abqm:   { rosca: true, mm: { '1/2"': 65, '3/4"': 82, '1"': 104, '1-1/4"': 130, '2"': 130 } },
+  d_asvpv:  { rosca: true, mm: { '1/2"': 65, '2"': 130 } },
+  d_asvbd:  { rosca: true, mm: { '1/2"': 65 } },
+  d_msvbd:  { rosca: true, mm: { '1/2"': 65, '2"': 130 } },
+  d_vfy:    { rosca: false, mm: { '2"': 43, '2-1/2"': 46, '3"': 46, '4"': 52, '6"': 56, '8"': 60 } }
+};
+/* Origen del largo por defecto de un accesorio (para el panel); null si no hay dato */
+function fuenteLargo(c) {
+  const fab = LARGO_FAB[c.type];
+  if (fab) return fab.mm[c.nps] ? 'hoja Danfoss' : null;
+  const j = SPECS[c.schedule]?.junta || 'BW';
+  if (j === 'ROSCA') return ROSCA_VALV[c.type]?.[c.nps] ? 'típico roscado' : ({ elbow90: 1, elbow90_sr: 1, tee: 1, tee_red: 1, cross: 1, elbow45: 1 }[c.type] && ROSCA_E[c.nps] ? 'ASME B16.3' : null);
+  return j === 'BW' && TAKEOFF[c.type]?.[c.nps] ? 'ASME' : null;
+}
+/* Largo que un accesorio le quita al tubo (m): valor del usuario o de la tabla que corresponda */
+function largoAccesorio(c) {
+  if (c.largo != null && c.largo !== '') return Math.max(0, Number(c.largo) || 0);
+  const E = ROSCA_E[c.nps] || 0, fab = LARGO_FAB[c.type];
+  if (fab) { const L = fab.mm[c.nps] || 0; return L ? Math.max(0, fab.rosca ? L - 2 * E : L) / 1000 : 0; }
+  const junta = SPECS[c.schedule]?.junta || 'BW';
+  if (junta === 'ROSCA') {
+    if (ROSCA_VALV[c.type]) { const L = ROSCA_VALV[c.type][c.nps] || 0; return L ? Math.max(0, L - 2 * E) / 1000 : 0; }
+    const A = (c.type === 'elbow45' ? B163_A45 : ['elbow90', 'elbow90_sr', 'tee', 'tee_red', 'cross'].includes(c.type) ? B163_A90 : {})[c.nps] || 0;
+    return A ? Math.max(0, A - E) / 1000 : 0;
+  }
+  if (junta !== 'BW') return 0;
+  const tabla = TAKEOFF[c.type]; if (!tabla) return 0;
+  return (tabla[c.nps] || 0) / 1000;
+}
+/* Descuento de accesorios sobre un tramo: codos/tees en sus extremos (y tee pasante 2×C),
+   piezas en línea completas si están dentro del tramo o repartidas si están en una unión */
+function descuentoTubo(c) {
+  const [A, B] = c.coords, a = aPantalla(A), b = aPantalla(B), dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy || 1;
+  let total = 0;
+  for (const o of estado.components) {
+    if (o.type === 'pipe' || o.type === 'weld' || TIPOS[o.type].noBOM) continue;
+    const L = largoAccesorio(o); if (!(L > 0)) continue;
+    const P = o.coords[0], enExtremo = igual(P, A) || igual(P, B);
+    let interior = false;
+    if (!enExtremo) { const s = aPantalla(P), t = ((s.x - a.x) * dx + (s.y - a.y) * dy) / L2; interior = t > 0 && t < 1 && Math.hypot(a.x + t * dx - s.x, a.y + t * dy - s.y) < 0.5; }
+    if (!enExtremo && !interior) continue;
+    if (TIPOS[o.type].modo === 'nodo') total += interior ? 2 * L : L;
+    else if (interior) total += L;
+    else total += L / Math.max(1, tuberias().filter(p => igual(p.coords[0], P) || igual(p.coords[1], P)).length);
+  }
+  return total;
+}
+const longitudCorte = c => r3(longitudTubo(c) - descuentoTubo(c));
+const longitudTubo = c => c.lengthManual ? Number(c.length) || 0 : r3(pasosReales(c) * estado.escala);
+
+/* ---------- 7b. Acomodo de textos: cotas, marcas de soldadura y ángulos no se montan ----------
+   Cada texto tiene varias posiciones candidatas; se elige la primera que no tape tuberías,
+   símbolos ni otros textos (o la de menor choque si todas chocan). */
+function dentroRect(px, py, L, m) {
+  const r = L.rot * Math.PI / 180, dx = px - L.cx, dy = py - L.cy;
+  const lx = dx * Math.cos(r) + dy * Math.sin(r), ly = -dx * Math.sin(r) + dy * Math.cos(r);
+  return Math.abs(lx) <= L.w / 2 + m && Math.abs(ly) <= L.h / 2 + m;
+}
+function muestrasRect(L) {
+  const r = L.rot * Math.PI / 180, c = Math.cos(r), s = Math.sin(r), pts = [];
+  for (const i of [-1, -0.5, 0, 0.5, 1]) for (const j of [-1, 0, 1]) { const lx = i * L.w / 2, ly = j * L.h / 2; pts.push({ x: L.cx + lx * c - ly * s, y: L.cy + lx * s + ly * c }); }
+  return pts;
+}
+function acomodarEtiquetas(etiquetas, obst) {
+  const puestas = [];
+  for (const E of etiquetas) {
+    let mejor = null, costoMin = Infinity;
+    for (const p of E.cand) {
+      const L = { cx: p.x, cy: p.y, w: E.w, h: E.h, rot: E.rot }, rad = (E.w + E.h) / 2 + 3, pts = muestrasRect(L);
+      let costo = p.pen || 0;
+      for (const o of obst) if (Math.abs(o.x - L.cx) < rad && Math.abs(o.y - L.cy) < rad && dentroRect(o.x, o.y, L, 1.5)) costo++;
+      if (pts.some(q => q.x < 2 || q.y < 14 || q.x > LIENZO.w - 2 || q.y > LIENZO.h - 2)) costo += 40;
+      for (const Q of puestas) {
+        if (Math.abs(Q.cx - L.cx) > (Q.w + L.w) / 2 + 4 && Math.abs(Q.cy - L.cy) > (Q.h + L.h) / 2 + 4 && Math.abs(Q.cx - L.cx) + Math.abs(Q.cy - L.cy) > Q.w + L.w + 8) continue;
+        if (pts.some(q => dentroRect(q.x, q.y, Q, 1)) || muestrasRect(Q).some(q => dentroRect(q.x, q.y, L, 1))) costo += 25;
+      }
+      if (costo < costoMin) { costoMin = costo; mejor = L; if (costo < 0.3) break; }
+    }
+    E.pos = mejor; puestas.push(mejor);
+  }
+}
+/* Numeración de juntas siguiendo el recorrido de la línea (desde un extremo libre) */
+function numeracionSoldaduras() {
+  const welds = estado.components.filter(c => c.type === 'weld'), mapa = new Map();
+  if (!welds.length) return mapa;
+  const pipes = tuberias(), clave = P => P[0].toFixed(4) + ',' + P[1].toFixed(4), ady = new Map();
+  pipes.forEach(c => c.coords.forEach((P, i) => { const k = clave(P); if (!ady.has(k)) ady.set(k, []); ady.get(k).push({ c, i }); }));
+  const usados = new Set(), orden = [];
+  const recorrer = Q => { for (const { c, i } of ady.get(clave(Q)) || []) { if (usados.has(c)) continue; usados.add(c); orden.push({ c, inv: i === 1 }); recorrer(c.coords[1 - i]); } };
+  const libres = pipes.flatMap(c => c.coords).filter(P => (ady.get(clave(P)) || []).length === 1);
+  for (const P of [...libres, ...pipes.map(c => c.coords[0])]) recorrer(P);
+  const llave = welds.map((w, n) => {
+    const s = aPantalla(w.coords[0]); let mejor = [1e9, n];
+    orden.forEach(({ c, inv }, j) => {
+      let a = aPantalla(c.coords[0]), b = aPantalla(c.coords[1]); if (inv) [a, b] = [b, a];
+      const dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((s.x - a.x) * dx + (s.y - a.y) * dy) / L2));
+      if (Math.hypot(a.x + t * dx - s.x, a.y + t * dy - s.y) < 14 && (j < mejor[0] || (j === mejor[0] && t < mejor[1]))) mejor = [j, t];
+    });
+    return { w, k: mejor };
+  }).sort((x, y) => x.k[0] - y.k[0] || x.k[1] - y.k[1]);
+  llave.forEach((x, n) => mapa.set(x.w.id, n + 1));
+  return mapa;
+}
+
+function renderLienzo() {
+  let tubos = '', simbolos = '', textos = '';
+  const etiquetas = [], obst = [], numW = numeracionSoldaduras();
+  const anillo = (P, r, n) => { for (let i = 0; i < n; i++) obst.push({ x: P.x + r * Math.cos(i * 2 * Math.PI / n), y: P.y + r * Math.sin(i * 2 * Math.PI / n) }); };
+  /* obstáculos: trazos de tubería y símbolos */
+  for (const c of estado.components) {
+    if (c.type === 'pipe') {
+      const A = aPantalla(c.coords[0]), B = aPantalla(c.coords[1]), n = Math.max(1, Math.ceil(Math.hypot(B.x - A.x, B.y - A.y) / 5));
+      for (let i = 0; i <= n; i++) obst.push({ x: A.x + (B.x - A.x) * i / n, y: A.y + (B.y - A.y) * i / n });
+    } else { const P = aPantalla(c.coords[0]); obst.push(P); anillo(P, c.type === 'weld' ? 4 : 9, c.type === 'weld' ? 4 : 8); }
+  }
+  anillo({ x: LIENZO.w - 70, y: 60 }, 30, 12);
+  for (const c of estado.components) {
+    const sel = c.id === seleccion ? ' selec' : '';
+    if (c.type === 'pipe') {
+      const A = aPantalla(c.coords[0]), B = aPantalla(c.coords[1]);
+      /* tramo a ángulo libre: triángulo de desvío sombreado (práctica normal en isométricos) */
+      if (c.libre && PLANOS[c.libre.plano] && !dirEntre(c.coords[0], c.coords[1])) {
+        const pl = PLANOS[c.libre.plano], v = enPlano(c.libre.plano, c.coords[1][0] - c.coords[0][0], c.coords[1][1] - c.coords[0][1]);
+        if (Math.abs(v.x) > 1e-3 && Math.abs(v.y) > 1e-3) {
+          const C = aPantalla([c.coords[0][0] + v.x * pl.a1[0], c.coords[0][1] + v.x * pl.a1[1]]);
+          let rayado = '';
+          const n = Math.max(2, Math.floor(Math.hypot(C.x - A.x, C.y - A.y) / 6));
+          for (let i = 1; i < n; i++) { const f = i / n; rayado += `M${(A.x + (C.x - A.x) * f).toFixed(1)} ${(A.y + (C.y - A.y) * f).toFixed(1)}L${(A.x + (B.x - A.x) * f).toFixed(1)} ${(A.y + (B.y - A.y) * f).toFixed(1)}`; }
+          tubos += `<path d="M${A.x} ${A.y}L${C.x.toFixed(1)} ${C.y.toFixed(1)}L${B.x} ${B.y}" fill="none" stroke="#475569" stroke-width=".8" stroke-dasharray="4 3" pointer-events="none"/>
+            <path d="${rayado}" stroke="#94a3b8" stroke-width=".6" pointer-events="none"/>`;
+          /* se rotula el ángulo agudo entre el tramo y el cateto del triángulo (como en el plano a mano) */
+          const agudo = anguloAgudo(c);
+          const u = unitAng(angPantalla(c.coords[0], c.coords[1])), txt = `${agudo}°`;
+          const cand = [14, 22, 30].flatMap(d => [-1, 1].map(lado => ({ x: A.x + u.x * (d + 10) - u.y * lado * 9, y: A.y + u.y * (d + 10) + u.x * lado * 9 })));
+          etiquetas.push({ texto: txt, clase: 'angl', w: txt.length * 5.6 + 3, h: 11, rot: 0, cand, prio: 2 });
+        }
+      }
+      tubos += `<g class="cmp${sel}" data-id="${c.id}"><line class="hit" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke-width="14"/>
+        <line class="tubo" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="#000" stroke-width="3" stroke-linecap="round"/></g>`;
+      const ang = angPantalla(c.coords[0], c.coords[1]), r = ang * Math.PI / 180, Lpx = Math.hypot(B.x - A.x, B.y - A.y);
+      const e = { x: Math.cos(r), y: -Math.sin(r) };
+      let nrm = { x: -Math.sin(r), y: -Math.cos(r) };
+      if (nrm.y > 0.05 || (Math.abs(nrm.y) <= 0.05 && nrm.x > 0)) nrm = { x: -nrm.x, y: -nrm.y };
+      let rot = -ang; while (rot < -90) rot += 180; while (rot >= 90) rot -= 180;
+      const cc = longitudTubo(c), corte = longitudCorte(c), descuenta = corte < cc - 5e-4, negativo = corte <= 0;
+      const ccTxt = `${fmtLong(cc)}${c.lengthManual ? '*' : ''}`, corteTxt = negativo ? '⚠ corte ≤ 0' : `corte ${enMM() ? Math.round(corte * 1000) : f2(corte)}`;
+      const texto = estado.cotas === 'cc' || (!descuenta && !negativo) ? ccTxt : estado.cotas === 'corte' ? (negativo ? '⚠ corte ≤ 0' : fmtLong(corte)) : `${ccTxt} (${corteTxt})`;
+      const w = texto.length * 6.1 + 4, h = 13;
+      const m = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
+      const candidatos = (ancho, lados) => { const lista = [];
+        for (const d of [10, 19, 28, 38]) for (const f of [0, 0.25, -0.25, 0.4, -0.4, 0.6, -0.6]) {
+          const fuera = Math.abs(f) * Lpx + ancho / 2 > Lpx / 2 + 4;   // el texto se sale del tramo: se permite con penalización
+          for (const lado of lados) lista.push({ x: m.x + e.x * f * Lpx + nrm.x * lado * d, y: m.y + e.y * f * Lpx + nrm.y * lado * d, pen: (fuera ? 4 : 0) + d / 40 });
+        }
+        return lista.sort((a, b) => a.pen - b.pen); };
+      if (!c.sinCota || negativo) etiquetas.push({ texto, clase: negativo ? 'cota err' : 'cota', w, h, rot, cand: candidatos(w, [1, -1]), prio: 0 });
+      if (c.pendiente && Number(c.pendiente.valor) > 0) {
+        /* pendiente: la flecha apunta hacia donde baja el tramo */
+        const baja = c.pendiente.haciaFin === false ? { x: -e.x, y: -e.y } : e, tr = rot * Math.PI / 180;
+        const derecha = baja.x * Math.cos(tr) + baja.y * Math.sin(tr) > 0, v = String(c.pendiente.valor).replace('.', ',');
+        const tp = `PEND. ${v}%`, wp = tp.length * 5.9 + 20, cp = candidatos(wp, [-1, 1]);
+        etiquetas.push({ texto: tp, clase: 'pend', w: wp, h: 12, rot, cand: cp, prio: 0.5, flecha: derecha ? 1 : -1 });
+      }
+      continue;
+    }
+    const P = aPantalla(c.coords[0]), T = TIPOS[c.type], dib = T.base || c.type;
+    if (T.modo === 'nodo') {
+      simbolos += simboloNodo(c, P, sel);
+      const tag = { elbow45: '45°', elbow90_sr: 'RC', tee_red: 'TR' }[dib];
+      if (tag) {
+        const cand = [];
+        for (const d of [12, 18, 25]) for (const k of [7, 5, 1, 3, 6, 2, 0, 4]) { const a = k * Math.PI / 4; cand.push({ x: P.x + Math.cos(a) * d, y: P.y - Math.sin(a) * d }); }
+        etiquetas.push({ texto: tag, clase: 'angl', w: tag.length * 5.6 + 3, h: 11, rot: 0, cand, prio: 3 });
+      }
+      continue;
+    }
+    if (c.type === 'weld') {
+      simbolos += `<g class="cmp${sel}" data-id="${c.id}"><circle class="hit" cx="${P.x}" cy="${P.y}" r="11"/>
+        <circle cx="${P.x}" cy="${P.y}" r="4.2" fill="#000" stroke="#fff" stroke-width="1"/></g>`;
+      const texto = `W${numW.get(c.id) || '?'}`, w = texto.length * 5.8 + 3, h = 11, cand = [];
+      for (const d of [8, 14, 21, 29]) for (const k of [1, 3, 7, 5, 2, 6, 0, 4]) {
+        const a = k * Math.PI / 4, ux = Math.cos(a), uy = -Math.sin(a);
+        cand.push({ x: P.x + ux * (d + w / 2 * Math.abs(ux)), y: P.y + uy * (d + h / 2 * Math.abs(uy)) });
+      }
+      etiquetas.push({ texto, clase: 'wl', w, h, rot: 0, cand, prio: 1, ancla: P, sel: c.id });
+      continue;
+    }
+    simbolos += `<g class="cmp${sel}" data-id="${c.id}" transform="${matrizSimbolo(c.rotation, P)}">
+      <rect class="hit" x="-14" y="-16" width="28" height="28"/>${SIM[dib] || SIM.coupling}</g>`;
+  }
+  etiquetas.sort((a, b) => a.prio - b.prio);
+  acomodarEtiquetas(etiquetas, obst);
+  for (const E of etiquetas) {
+    const L = E.pos;
+    if (E.ancla && Math.hypot(L.cx - E.ancla.x, L.cy - E.ancla.y) > 16) {
+      /* línea guía hacia la junta cuando la marca quedó alejada */
+      const dx = L.cx - E.ancla.x, dy = L.cy - E.ancla.y, d = Math.hypot(dx, dy), corte = Math.min(Math.abs(L.w / 2 / (dx / d || 1e-9)), Math.abs(L.h / 2 / (dy / d || 1e-9)));
+      textos += `<line x1="${E.ancla.x.toFixed(1)}" y1="${E.ancla.y.toFixed(1)}" x2="${(L.cx - dx / d * corte).toFixed(1)}" y2="${(L.cy - dy / d * corte).toFixed(1)}" stroke="#b91c1c" stroke-width=".7"/>`;
+    }
+    const tf = `translate(${L.cx.toFixed(1)} ${L.cy.toFixed(1)}) rotate(${L.rot.toFixed(2)})`;
+    if (E.flecha) {
+      /* pendiente: texto + flecha dibujada que apunta hacia donde baja el tramo */
+      const s = E.flecha, xt = -s * 8, xa = s * (L.w / 2 - 15), xb = s * (L.w / 2 - 2);
+      textos += `<g transform="${tf}"><text class="${E.clase}" x="${xt}" text-anchor="middle" dominant-baseline="central">${esc(E.texto)}</text>
+        <path d="M${xa} 0H${xb - s * 4}" stroke="#1d4ed8" stroke-width="1.4"/><polygon points="${xb},0 ${xb - s * 6},-3.2 ${xb - s * 6},3.2" fill="#1d4ed8"/></g>`;
+    } else textos += `<text class="${E.clase}" text-anchor="middle" dominant-baseline="central" transform="${tf}">${esc(E.texto)}</text>`;
+  }
+  $('capa-tuberia').innerHTML = tubos;
+  $('capa-simbolos').innerHTML = simbolos;
+  $('capa-cotas').innerHTML = textos;
+  $('hud-count').textContent = estado.components.length;
+}
+/* Brazos de codos, tees y cruces: se orientan con las tuberías realmente conectadas al nodo */
+function brazosAccesorio(c) {
+  const br = brazos(c.coords[0]), tipo = TIPOS[c.type].base || c.type;
+  if (tipo === 'elbow90' || tipo === 'elbow90_sr' || tipo === 'elbow45') {
+    const a1 = br[0] ?? c.rotation;
+    let a2 = br.find(a => !casiAng(a, a1) && !casiAng(a, a1 + 180));
+    if (a2 === undefined) {
+      const p = perpDefecto(a1);
+      if (tipo !== 'elbow45') a2 = p;
+      else { const u = unitAng(a1 + 180), v = unitAng(p); a2 = Math.atan2(-(u.y + v.y), u.x + v.x) * 180 / Math.PI; }
+    }
+    return { tipo, run: null, brazos: [a1, a2] };
+  }
+  /* tee y cruz: corrida = par de brazos opuestos; ramal = el restante */
+  let run = null;
+  for (const a of br) if (br.some(b => casiAng(b, a + 180))) { run = a; break; }
+  if (run === null) run = br[0] ?? c.rotation;
+  const ramal = br.find(a => !casiAng(a, run) && !casiAng(a, run + 180)) ?? perpDefecto(run);
+  const lista = [run, run + 180, ramal];
+  if (tipo === 'cross') lista.push(ramal + 180);
+  return { tipo, run, brazos: lista };
+}
+function simboloNodo(c, P, sel) {
+  const L = 0.42 * PASO_PX, { tipo, brazos: arms } = brazosAccesorio(c);
+  const pto = ang => { const u = unitAng(ang); return { x: P.x + u.x * L, y: P.y + u.y * L }; };
+  const punto = q => `<circle cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="2.5" fill="#000" stroke="#fff" stroke-width=".8"/>`;
+  const fin = arms.map(pto);
+  let cuerpo;
+  if (arms.length === 2) {
+    cuerpo = `<path d="M${fin[0].x.toFixed(1)} ${fin[0].y.toFixed(1)}Q${P.x} ${P.y} ${fin[1].x.toFixed(1)} ${fin[1].y.toFixed(1)}" fill="none" stroke="#000" stroke-width="5.5"/>`;
+  } else {
+    cuerpo = `<path d="M${fin[0].x.toFixed(1)} ${fin[0].y.toFixed(1)}L${fin[1].x.toFixed(1)} ${fin[1].y.toFixed(1)}${fin.slice(2).map(q => `M${P.x} ${P.y}L${q.x.toFixed(1)} ${q.y.toFixed(1)}`).join('')}" fill="none" stroke="#000" stroke-width="5.5"/>`;
+  }
+  return `<g class="cmp${sel}" data-id="${c.id}"><circle class="hit" cx="${P.x}" cy="${P.y}" r="13"/>${cuerpo}${fin.map(punto).join('')}</g>`;
+}
+
+/* ---------- 8. Guías visuales (fantasma de trazado e indicador de imán) ---------- */
+function indicadorSnap(P, iman) {
+  const s = aPantalla(P);
+  return `<circle cx="${s.x}" cy="${s.y}" r="${iman ? 7 : 5}" fill="none" stroke="${iman ? '#16a34a' : '#f97316'}" stroke-width="2"/>
+          <circle cx="${s.x}" cy="${s.y}" r="1.6" fill="${iman ? '#16a34a' : '#f97316'}"/>`;
+}
+function actualizarHUD(ang, pasos, iman, manual) {
+  $('hud-angle').textContent = ang == null ? '—' : typeof ang === 'string' ? ang : normAng(Math.round(ang)) + '°';
+  $('hud-length').textContent = fmtLong(manual ?? (pasos || 0) * estado.escala);
+  $('hud-snap').textContent = iman ? 'NODO (IMÁN)' : 'GRILLA ISO';
+}
+function dibujarFantasma(pt, R) {
+  const g = $('capa-guia');
+  if (!trazo) { const s = snapInicio(pt, R); g.innerHTML = indicadorSnap(s.P, s.iman); actualizarHUD(null, 0, s.iman); return; }
+  const r = resolverFin(trazo.inicio, pt, R), A = aPantalla(trazo.inicio), B = aPantalla(r.fin);
+  const angTxt = r.libre ? `∠${f2(r.angPlano).replace(/\.00$/, '')}° ${PLANOS[r.plano].corto}` : `${Math.round(r.ang)}°`;
+  g.innerHTML = `<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="#f59e0b" stroke-width="3" stroke-dasharray="7 5" stroke-linecap="round"/>
+    ${indicadorSnap(trazo.inicio, true)}${indicadorSnap(r.fin, r.iman)}
+    <text x="${B.x + 10}" y="${B.y - 10}" font-size="12" font-weight="800" fill="#b45309" paint-order="stroke" stroke="#fff" stroke-width="3">${fmtLong(r.pasos * estado.escala)} · ${angTxt}</text>`;
+  actualizarHUD(angTxt, r.pasos, r.iman);
+}
+function previsualizarSimbolo(pt, R) {
+  const pos = posicionSimbolo(herramienta, pt, R);
+  $('capa-guia').innerHTML = indicadorSnap(pos.P, pos.iman);
+  actualizarHUD(pos.rot, 0, pos.iman);
+}
+const limpiarGuia = () => { $('capa-guia').innerHTML = ''; };
+
+/* ---------- 9. Historial (deshacer / rehacer) y persistencia ---------- */
+const instantanea = () => JSON.stringify({ components: estado.components, consumibles: estado.consumibles, ajustes: estado.ajustes });
+function registrar() { historial.push(instantanea()); if (historial.length > 200) historial.shift(); rehacerPila = []; }
+function restaurar(s) { const o = JSON.parse(s); estado.components = o.components; estado.consumibles = o.consumibles; estado.ajustes = o.ajustes; seleccion = null; actualizarTodo(); }
+function undoAction() {
+  if (trazo) { terminarTrazo(); return; }
+  if (!historial.length) { aviso('Nada para deshacer'); return; }
+  rehacerPila.push(instantanea()); restaurar(historial.pop());
+}
+function redoAction() {
+  if (!rehacerPila.length) { aviso('Nada para rehacer'); return; }
+  historial.push(instantanea()); restaurar(rehacerPila.pop());
+}
+let tGuardar;
+function guardarLocal() {
+  clearTimeout(tGuardar);
+  tGuardar = setTimeout(() => {
+    try { localStorage.setItem(CLAVE_LOCAL, JSON.stringify(estado)); }
+    catch (e) { aviso('No se pudo guardar el borrador en este equipo', 'error'); }
+  }, 250);
+}
+function cargarLocal() {
+  try {
+    const o = JSON.parse(localStorage.getItem(CLAVE_LOCAL) || 'null');
+    if (o && Array.isArray(o.components)) aplicarProyecto(o);
+  } catch (e) { /* borrador dañado: se ignora */ }
+}
+function aplicarProyecto(o) {
+  Object.assign(estado.cabecera, o.cabecera || {});
+  estado.escala = Number(o.escala) > 0 ? Number(o.escala) : 0.5;
+  estado.unidad = o.unidad === 'm' ? 'm' : 'mm';
+  estado.cotas = ['cc', 'corte', 'ambas'].includes(o.cotas) ? o.cotas : 'ambas';
+  estado.descontar = o.descontar !== false;
+  estado.catalogoPropio = Array.isArray(o.catalogoPropio) ? o.catalogoPropio.filter(it => it && /^u_/.test(it.id) && it.nombre) : [];
+  for (const t of Object.keys(TIPOS)) if (TIPOS[t].propio) delete TIPOS[t];
+  estado.catalogoPropio.forEach(registrarPropio);
+  if (o.trazo && typeof o.trazo === 'object') estado.trazo = { modo: ['iso', '15', '5', '1'].includes(o.trazo.modo) ? o.trazo.modo : 'iso', plano: PLANOS[o.trazo.plano] ? o.trazo.plano : 'H' };
+  estado.components = (o.components || []).filter(c => TIPOS[c.type] && Array.isArray(c.coords));
+  estado.consumibles = Array.isArray(o.consumibles) ? o.consumibles : [];
+  estado.ajustes = o.ajustes && typeof o.ajustes === 'object' ? o.ajustes : {};
+}
+function actualizarTodo() {
+  renderLienzo(); recalculateBOM(); renderPanelSeleccion(); guardarLocal();
+}
+/* Ejecuta una modificación del estado con registro en historial */
+function commit(fn) { registrar(); fn(); actualizarTodo(); }
+
+/* ---------- 10. Creación de componentes ---------- */
+function crearComponente(tipo, coords, rot, extra) {
+  return Object.assign({ id: nuevoId(), category: TIPOS[tipo].cat, type: tipo, nps: $('spec-nps').value, schedule: $('spec-mat').value,
+    length: 0, lengthManual: false, coords, rotation: normAng(rot) }, extra || {});
+}
+function crearTuberia(A, B, info) {
+  const c = crearComponente('pipe', [A, B], angPantalla(A, B));
+  if (info && info.libre && !dirEntre(A, B)) c.libre = { plano: info.plano, ang: info.angPlano };
+  c.length = longitudTubo(c);
+  commit(() => estado.components.push(c));
+  if ($('chk-manual-len').checked) pedirLongitud(c.id);
+}
+function pedirLongitud(id) {
+  const c = estado.components.find(x => x.id === id); if (!c) return;
+  const pasos = pasosReales(c), pl = c.libre && PLANOS[c.libre.plano];
+  abrirModal({
+    titulo: `Longitud real del tramo (${f2(pasos).replace(/\.00$/, '')} paso${pasos === 1 ? '' : 's'} de grilla)`,
+    html: `<label>Longitud en ${enMM() ? 'milímetros (mm)' : 'metros (m)'}</label><input id="m-long" type="number" step="any" min="0" inputmode="decimal" value="${aUnidad(longitudTubo(c))}">
+           ${pl ? `<label>Ángulo en plano ${pl.nombre} (grados desde ${pl.ref})</label><input id="m-ang" type="number" step="0.1" inputmode="decimal" value="${c.libre.ang}">` : ''}
+           <p>Deje el valor sugerido para usar la escala de la grilla (${fmtLong(estado.escala)} por paso). Escriba la cota medida en campo para fijarla.</p>`,
+    alAbrir: () => { const i = $('m-long'); i.focus(); i.select(); },
+    alAceptar: () => {
+      const v = deUnidad(parseFloat(String($('m-long').value).replace(',', '.')));
+      if (!(v > 0)) { aviso('Escriba una longitud mayor que cero', 'error'); return false; }
+      if (pl) { const a = parseFloat(String($('m-ang').value).replace(',', '.')); if (isFinite(a)) cambiarAnguloLibre(c, a); }
+      const auto = r3(pasos * estado.escala);
+      c.lengthManual = Math.abs(v - auto) > 5e-4; c.length = c.lengthManual ? r3(v) : auto;
+      actualizarTodo();
+    }
+  });
+}
+/* Cambia el ángulo de un tramo libre conservando su inicio y su longitud; arrastra el trazo en curso */
+function cambiarAnguloLibre(c, a) {
+  if (!c.libre || casiAng(a, c.libre.ang)) return;
+  const viejo = c.coords[1], nuevo = desdePlano(c.libre.plano, c.coords[0], pasosReales(c), normAng(a));
+  c.coords[1] = nuevo; c.libre.ang = normAng(Math.round(a * 10) / 10); c.rotation = angPantalla(c.coords[0], nuevo);
+  if (trazo && igual(trazo.inicio, viejo)) trazo.inicio = nuevo;
+}
+/* Calcula dónde y con qué orientación queda un símbolo según el cursor */
+function posicionSimbolo(tipo, pt, R) {
+  const T = TIPOS[tipo];
+  if (T.modo === 'nodo' || T.modo === 'punto') {
+    const pp = puertoCercano(pt, R);
+    if (pp) { const br = brazos(pp); return { P: pp, rot: br[0] ?? rotacionActual, iman: true }; }
+    const tb = tuberiaCercana(pt, R * 1.5);
+    if (tb) {
+      if (T.modo === 'punto') return { P: tb.P, rot: tb.ang, iman: true };
+      return { P: puntoEnTubo(tb.c, Math.round(tb.k)), rot: tb.ang, iman: true };
+    }
+    return { P: nodoMasCercano(pt.x, pt.y), rot: rotacionActual, iman: false };
+  }
+  const tb = tuberiaCercana(pt, R * 1.5);
+  if (tb) {
+    let rot = tb.ang;
+    if (T.modo === 'extremo') {
+      /* en los extremos el símbolo mira hacia afuera del tramo */
+      if (tb.k <= 0.5 * tb.pasos) { if (tb.k <= 1) return { P: tb.c.coords[0], rot: tb.ang + 180, iman: true }; }
+      else if (tb.pasos - tb.k <= 1) return { P: tb.c.coords[1], rot: tb.ang, iman: true };
+    }
+    return { P: tb.P, rot, iman: true };
+  }
+  const pp = puertoCercano(pt, R);
+  if (pp) { const br = brazos(pp); return { P: pp, rot: br[0] ?? rotacionActual, iman: true }; }
+  return { P: nodoMasCercano(pt.x, pt.y), rot: rotacionActual, iman: false };
+}
+function pedirPendiente(c) {
+  const p = c.pendiente || {};
+  abrirModal({
+    titulo: 'Pendiente del tramo',
+    html: `<label>Pendiente (%)</label><input id="m-pend" type="number" step="any" min="0" inputmode="decimal" value="${p.valor ?? 1}">
+      <label>El tramo baja hacia</label><select id="m-pend-s"><option value="fin"${p.haciaFin !== false ? ' selected' : ''}>El final del tramo (sentido en que se trazó)</option>
+      <option value="ini"${p.haciaFin === false ? ' selected' : ''}>El inicio del tramo</option></select>
+      <p>Se rotula como «PEND. 1% →» con la flecha hacia donde baja. Escriba 0 para quitarla. Referencia: 1% = 10 mm por metro.</p>`,
+    alAbrir: () => { const i = $('m-pend'); i.focus(); i.select(); },
+    alAceptar: () => {
+      const v = parseFloat(String($('m-pend').value).replace(',', '.'));
+      if (!(v >= 0)) { aviso('Pendiente no válida', 'error'); return false; }
+      commit(() => { if (v > 0) c.pendiente = { valor: Math.round(v * 1000) / 1000, haciaFin: $('m-pend-s').value === 'fin' }; else delete c.pendiente; });
+    }
+  });
+}
+function colocarSimbolo(tipo, pt, R) {
+  if (TIPOS[tipo].propiedad) {
+    const tb = tuberiaCercana(pt, R * 1.5);
+    if (!tb) { aviso('Toque sobre un tramo de tubería', 'error'); return; }
+    pedirPendiente(tb.c); return;
+  }
+  const pos = posicionSimbolo(tipo, pt, R), T = TIPOS[tipo], s = aPantalla(pos.P);
+  /* evita duplicados: misma pieza en el mismo punto (las juntas, con radio mayor) */
+  const dup = estado.components.find(o => o.type === tipo && (() => { const q = aPantalla(o.coords[0]); return Math.hypot(q.x - s.x, q.y - s.y) < (tipo === 'weld' ? 7 : 3); })());
+  if (dup) { aviso(`Ya hay ${T.corto.toLowerCase()} en ese punto`, 'error', 1800); return; }
+  const c = crearComponente(tipo, [pos.P], pos.rot);
+  if (!T.reduce) { commit(() => estado.components.push(c)); aviso(`${T.corto} colocado`, 'ok', 900); return; }
+  const i = NPS_LISTA.indexOf(c.nps), sugerido = NPS_LISTA[Math.max(0, i - 1)];
+  abrirModal({
+    titulo: `${T.corto}: diámetro reducido`,
+    html: `<label>Diámetro mayor</label><input value="Ø ${esc(c.nps)}" disabled>
+           <label>Diámetro menor (${/tee|olet|copla/i.test(tipo + T.corto) ? 'ramal' : 'salida'})</label>
+           <select id="m-red">${NPS_LISTA.map(n => `<option${n === sugerido ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>`,
+    alAceptar: () => {
+      c.npsRed = $('m-red').value;
+      if (npsNum(c.npsRed) >= npsNum(c.nps)) { aviso('El diámetro menor debe ser inferior al mayor', 'error'); return false; }
+      commit(() => estado.components.push(c));
+    }
+  });
+}
+
+/* ---------- 11. Motor del Listado de Materiales (BOM) ---------- */
+function descripcion(c) { const d = descripcionBase(c); return c.ref ? `${d} — REF. ${c.ref}` : d; }
+function descripcionBase(c) {
+  const sp = SPECS[c.schedule] || { sch: '', tubo: c.schedule, acc: c.schedule, forj: c.schedule, brida: c.schedule, val: c.schedule, junta: 'BW' };
+  const T = TIPOS[c.type], med = T.reduce && c.npsRed ? `Ø ${c.nps} x ${c.npsRed}` : `Ø ${c.nps}`;
+  switch (T.mat) {
+    case 'tubo':  return `TUBERÍA ${med} ${sp.sch} ${sp.tubo}`;
+    case 'acc':   return `${T.nombre} ${med} ${sp.sch} ${sp.acc}`;
+    case 'forj':  return `${T.nombre} ${med} ${sp.forj || sp.acc}`;
+    case 'brida': return `${T.nombre} ${med} ${T.conSch ? sp.sch + ' ' : ''}${sp.brida}`;
+    case 'val':
+    case 'esp':   return `${T.nombre} ${med} ${sp.val}`;
+    case 'inst':  return `${T.nombre}, CONEXIÓN 1/2" NPT, PARA LÍNEA ${med}`;
+    case 'sop':   return `${T.nombre} PARA TUBERÍA ${med}`;
+    case 'gen':   return `${T.nombre} ${med}${T.desc ? ' ' + T.desc : ''}`;
+    default: {
+      const j = sp.junta || 'BW';
+      return `${TIPO_JUNTA[j] || TIPO_JUNTA.BW} ${med}${j === 'BW' ? ` ${sp.sch} — INSPECCIÓN END (VT/PT)` : ''}`;
+    }
+  }
+}
+/* Agrupa componentes idénticos (tipo + diámetro + especificación): tubería en ML, el resto en UND */
+function recalculateBOM() {
+  const grupos = new Map();
+  for (const c of estado.components) {
+    if (TIPOS[c.type].noBOM) continue;
+    const T = TIPOS[c.type], key = [c.type, c.nps, c.npsRed || '', c.schedule, c.ref || ''].join('|');
+    const g = grupos.get(key) || { key, orden: T.orden, nps: npsNum(c.nps), uni: c.type === 'pipe' ? 'ML' : (T.uni || 'UND'), desc: descripcion(c), cant: 0 };
+    g.cant += c.type === 'pipe' ? (estado.descontar ? Math.max(0, longitudCorte(c)) : longitudTubo(c)) : 1;
+    grupos.set(key, g);
+  }
+  const filas = [...grupos.values()].sort((a, b) => a.orden - b.orden || b.nps - a.nps || a.desc.localeCompare(b.desc));
+  for (const f of filas) {
+    f.calc = f.uni === 'ML' ? r2(f.cant) : f.cant;
+    f.ajustado = estado.ajustes[f.key] != null;
+    f.cant = f.ajustado ? estado.ajustes[f.key] : f.calc;
+  }
+  for (const k of estado.consumibles) filas.push({ key: 'CONS|' + k.id, id: k.id, uni: k.uni, desc: k.desc, cant: k.cant, consumible: true });
+  ultimoBOM = filas;
+  renderBOM(filas);
+}
+function renderBOM(filas) {
+  const porCol = Math.max(11, Math.ceil(filas.length / 2));
+  const alto = Math.max(9, Math.min(17, Math.floor((238 - 22 - 18 - 2) / porCol)));
+  const cols = [filas.slice(0, porCol), filas.slice(porCol)];
+  let n = 0;
+  $('bom-cols').style.setProperty('--fila', alto + 'px');
+  $('bom-cols').style.fontSize = alto < 14 ? '9px' : '';
+  $('bom-cols').innerHTML = cols.map(col => {
+    const cuerpo = col.map(f => {
+      n++;
+      const cant = f.uni === 'ML' || f.uni === 'm' ? f2(f.cant) : String(f.cant);
+      if (f.consumible) return `<tr data-key="${esc(f.key)}"><td class="c">${n}</td>
+        <td class="c"><select data-cons="uni" aria-label="Unidad">${UNIDADES.map(u => `<option${u === f.uni ? ' selected' : ''}>${u}</option>`).join('')}</select></td>
+        <td><div style="display:flex;height:100%"><input data-cons="desc" value="${esc(f.desc)}" aria-label="Descripción"><button class="quitar no-print" data-quitar="${f.id}" title="Quitar consumible">×</button></div></td>
+        <td class="r"><input data-cons="cant" value="${esc(cant)}" inputmode="decimal" aria-label="Cantidad"></td></tr>`;
+      return `<tr data-key="${esc(f.key)}" class="${f.ajustado ? 'ajustado' : ''}"><td class="c">${n}</td><td class="c">${f.uni}</td>
+        <td title="${esc(f.desc)}">${esc(f.desc)}</td>
+        <td class="r"><input data-ajuste="1" value="${esc(cant)}" inputmode="decimal" title="${f.ajustado ? 'Ajuste manual (calculado: ' + f.calc + '). Deje vacío para volver al cálculo.' : 'Cantidad calculada; puede ajustarla'}" aria-label="Cantidad"></td></tr>`;
+    }).join('');
+    const vacias = Array.from({ length: Math.max(0, porCol - col.length) }, () => { n++; return `<tr><td class="c" style="color:#94a3b8">${n}</td><td></td><td></td><td></td></tr>`; }).join('');
+    return `<div><table><colgroup><col style="width:38px"><col style="width:52px"><col><col style="width:78px"></colgroup>
+      <thead><tr><th>ITEM</th><th>UNI</th><th>DESCRIPCIÓN TÉCNICA</th><th>CANTIDAD</th></tr></thead><tbody>${cuerpo}${vacias}</tbody></table></div>`;
+  }).join('');
+}
+$('bom-cols').addEventListener('change', e => {
+  const tr = e.target.closest('tr[data-key]'); if (!tr) return;
+  const key = tr.dataset.key, v = String(e.target.value).trim().replace(',', '.');
+  if (e.target.dataset.ajuste) {
+    commit(() => {
+      if (v === '') delete estado.ajustes[key];
+      else if (isNaN(Number(v)) || Number(v) < 0) aviso('Cantidad no válida', 'error');
+      else estado.ajustes[key] = Number(v);
+    });
+    return;
+  }
+  const campo = e.target.dataset.cons; if (!campo) return;
+  const k = estado.consumibles.find(x => 'CONS|' + x.id === key); if (!k) return;
+  commit(() => { k[campo] = campo === 'cant' ? (Number(v) >= 0 ? Number(v) : k.cant) : e.target.value; });
+});
+$('bom-cols').addEventListener('click', e => {
+  const id = e.target.dataset.quitar; if (!id) return;
+  commit(() => { estado.consumibles = estado.consumibles.filter(x => x.id !== id); });
+});
+function openConsumableModal() {
+  toggleSidebar(false);
+  abrirModal({
+    titulo: 'Añadir consumible al listado',
+    html: `<label>Consumible</label><select id="m-cons"><option value="">— Otro (escribir) —</option>${CONSUMIBLES.map((c, i) => `<option value="${i}">${esc(c[0])}</option>`).join('')}</select>
+      <label>Descripción</label><input id="m-desc" placeholder="Ej: Soldadura E7018 Ø 1/8&quot;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div><label>Unidad</label><select id="m-uni">${UNIDADES.map(u => `<option>${u}</option>`).join('')}</select></div>
+      <div><label>Cantidad</label><input id="m-cant" type="number" step="any" min="0" value="1" inputmode="decimal"></div></div>`,
+    alAbrir: () => { $('m-cons').onchange = () => { const c = CONSUMIBLES[$('m-cons').value]; if (c) { $('m-desc').value = c[0]; $('m-uni').value = c[1]; } }; },
+    alAceptar: () => {
+      const desc = $('m-desc').value.trim(), cant = Number(String($('m-cant').value).replace(',', '.'));
+      if (!desc) { aviso('Escriba la descripción', 'error'); return false; }
+      if (!(cant >= 0)) { aviso('Cantidad no válida', 'error'); return false; }
+      commit(() => estado.consumibles.push({ id: nuevoId(), uni: $('m-uni').value, desc: desc.toUpperCase(), cant }));
+    }
+  });
+}
+
+/* ---------- 11b. Juntas soldadas automáticas ----------
+   Coloca juntas en: uniones tubo-tubo, extremos de codos/tees/cruces, reducciones, bridas,
+   caps, stub ends, codos 180° y olets. Solo para especificaciones soldadas a tope (BW). */
+const JUNTAS_LOCALES = {
+  reducer: [[-10, 0], [10, 0]], reducer_ecc: [[-10, 0], [10, 0]], flange_wn: [[-11, 0]], flange_so: [[-4, 0]], flange_sw: [[-8, 0]],
+  cap: [[0, 0]], stub_end: [[-10, 0]], elbow180: [[-10, 0], [-10, -14]], weldolet: [[0, 0]], flange_or: [[-9, 0], [9, 0]], exp_joint: [[-10, 0], [10, 0]]
+};
+function generarJuntas() {
+  toggleSidebar(false);
+  const esBW = c => (SPECS[c.schedule]?.junta || 'BW') === 'BW';
+  const existentes = estado.components.filter(c => c.type === 'weld').map(c => aPantalla(c.coords[0]));
+  const nuevas = [], omitidas = new Set();
+  const agregar = (scr, origen) => {
+    if (!esBW(origen)) { omitidas.add(SPECS[origen.schedule]?.corto || origen.schedule); return; }
+    if ([...existentes, ...nuevas.map(n => n.s)].some(q => Math.hypot(q.x - scr.x, q.y - scr.y) < 7)) return;
+    nuevas.push({ s: scr, origen });
+  };
+  const nodosConAccesorio = new Set();
+  for (const c of estado.components) {
+    if (c.type === 'pipe' || c.type === 'weld') continue;
+    const T = TIPOS[c.type], tipo = T.base || c.type, P = aPantalla(c.coords[0]);
+    if (T.modo === 'nodo') {
+      nodosConAccesorio.add(c.coords[0].join(','));
+      for (const a of brazosAccesorio(c).brazos) { const u = unitAng(a); agregar({ x: P.x + u.x * 0.42 * PASO_PX, y: P.y + u.y * 0.42 * PASO_PX }, c); }
+      continue;
+    }
+    const locales = JUNTAS_LOCALES[tipo]; if (!locales) continue;
+    const e = unitAng(c.rotation), n = esVertical(c.rotation) ? { x: C30, y: 0.5 } : { x: 0, y: 1 };
+    for (const [lx, ly] of locales) agregar({ x: P.x + e.x * lx + n.x * ly, y: P.y + e.y * lx + n.y * ly }, c);
+  }
+  /* uniones directas tubo con tubo (sin accesorio en el nodo) */
+  const extremos = new Map();
+  for (const c of tuberias()) for (const P of c.coords) { const k = P.map(v => v.toFixed(5)).join(','); if (!extremos.has(k)) extremos.set(k, { P, tubos: [] }); extremos.get(k).tubos.push(c); }
+  for (const { P, tubos } of extremos.values()) {
+    if (tubos.length < 2 || nodosConAccesorio.has(P.join(','))) continue;
+    const s = aPantalla(P);
+    if (estado.components.some(o => o.type !== 'pipe' && o.type !== 'weld' && (() => { const q = aPantalla(o.coords[0]); return Math.hypot(q.x - s.x, q.y - s.y) < 3; })())) continue;
+    agregar(s, tubos[0]);
+  }
+  if (!nuevas.length) { aviso(omitidas.size ? `Sin juntas nuevas (uniones no soldadas: ${[...omitidas].join(', ')})` : 'No hay juntas nuevas para agregar', null, 3500); return; }
+  commit(() => {
+    for (const { s, origen } of nuevas) estado.components.push(Object.assign(crearComponente('weld', [red6(aRed(s.x, s.y))], origen.rotation || 0), { nps: origen.nps, schedule: origen.schedule }));
+  });
+  aviso(`Se agregaron ${nuevas.length} juntas soldadas`, 'ok', 2500);
+}
+
+/* ---------- 11c. Catálogo propio (ítems del usuario, también importables desde CSV) ---------- */
+const quitarTildes = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+function registrarPropio(it) {
+  const base = TIPOS[it.simbolo] && !TIPOS[it.simbolo].propio && it.simbolo !== 'pipe' && it.simbolo !== 'weld' ? it.simbolo : 'coupling';
+  TIPOS[it.id] = { grupo: 'propio', cat: it.cat || 'OTRO', mat: 'gen', modo: TIPOS[base].modo || 'linea', orden: 80, nombre: it.nombre,
+    corto: it.nombre.length > 24 ? it.nombre.slice(0, 23) + '…' : it.nombre, base, desc: it.desc || '', uni: it.uni || 'UND', propio: true };
+}
+function agregarItemPropio(it) {
+  const item = { id: 'u_' + nuevoId(), nombre: it.nombre, cat: it.cat, simbolo: it.simbolo, desc: it.desc || '', uni: it.uni || 'UND' };
+  estado.catalogoPropio.push(item); registrarPropio(item);
+}
+const normalizarCategoria = t => { const u = quitarTildes(t).toUpperCase().trim();
+  return CATEGORIAS.find(c => quitarTildes(c).startsWith(u.slice(0, 3)) && u) || 'OTRO'; };
+function buscarSimbolo(txt, cat) {
+  const t = quitarTildes(txt).toLowerCase().trim();
+  if (t && TIPOS[t] && !TIPOS[t].propio && t !== 'pipe') return t;
+  if (t) { const k = Object.keys(TIPOS).find(k => k !== 'pipe' && !TIPOS[k].propio && quitarTildes(TIPOS[k].corto + ' ' + TIPOS[k].nombre).toLowerCase().includes(t)); if (k) return k; }
+  return { 'VÁLVULA': 'v_gate', BRIDA: 'flange_so', INSTRUMENTO: 'pi', SOPORTE: 'sup_shoe', ESPECIAL: 'strainer_y' }[cat] || 'coupling';
+}
+function abrirCatalogoPropio() {
+  toggleSidebar(false);
+  const bases = Object.keys(TIPOS).filter(t => t !== 'pipe' && t !== 'weld' && !TIPOS[t].propio);
+  const lista = estado.catalogoPropio.map(it => `<div style="display:flex;gap:6px;align-items:center;margin:4px 0">
+      <span style="flex:1;font-size:12px">${esc(it.nombre)} <small style="color:var(--s400)">· ${esc(it.cat)} · ${esc(TIPOS[it.simbolo]?.corto || it.simbolo)}</small></span>
+      <button type="button" class="btn peligro" data-quitar-cat="${esc(it.id)}">Quitar</button></div>`).join('');
+  abrirModal({
+    titulo: 'Agregar ítem al catálogo propio',
+    html: `${lista ? `<label>Ítems propios (${estado.catalogoPropio.length})</label><div style="max-height:150px;overflow:auto">${lista}</div>` : ''}
+      <label>Nombre (como saldrá en el BOM)</label><input id="m-cn" placeholder="Ej: VÁLVULA DE BOLA 3 PIEZAS" maxlength="80">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label>Categoría</label><select id="m-cc">${CATEGORIAS.map(c => `<option>${c}</option>`).join('')}</select></div>
+        <div><label>Unidad</label><select id="m-cu">${UNIDADES.map(u => `<option${u === 'UND' ? ' selected' : ''}>${u}</option>`).join('')}</select></div></div>
+      <label>Símbolo a usar en el plano</label><select id="m-cs">${bases.map(t => `<option value="${t}">${esc(TIPOS[t].corto)}</option>`).join('')}</select>
+      <label>Especificación / material (opcional)</label><input id="m-cd" placeholder="Ej: SW 800# ASTM A105, ASIENTO PTFE" maxlength="120">
+      <p>Para cargar muchos ítems use <b>Importar catálogo (.csv)</b>; la plantilla trae el formato.</p>`,
+    alAbrir: () => {
+      $('m-cc').onchange = () => { $('m-cs').value = buscarSimbolo('', $('m-cc').value); };
+      $('modal-cuerpo').onclick = e => {
+        const id = e.target.dataset && e.target.dataset.quitarCat; if (!id) return;
+        if (estado.components.some(c => c.type === id)) { aviso('Ese ítem está en el plano: bórrelo primero', 'error'); return; }
+        estado.catalogoPropio = estado.catalogoPropio.filter(x => x.id !== id); delete TIPOS[id];
+        e.target.closest('div').remove(); if (herramienta === id) setActiveTool('pipe'); construirCatalogo(); guardarLocal();
+      };
+      $('m-cn').focus();
+    },
+    alAceptar: () => {
+      const nombre = $('m-cn').value.trim().toUpperCase();
+      if (!nombre) { aviso('Escriba el nombre del ítem', 'error'); return false; }
+      agregarItemPropio({ nombre, cat: $('m-cc').value, simbolo: $('m-cs').value, desc: $('m-cd').value.trim().toUpperCase(), uni: $('m-cu').value });
+      construirCatalogo(); guardarLocal(); aviso('Ítem agregado al catálogo propio', 'ok');
+    }
+  });
+}
+function parseLineaCSV(linea, sep) {
+  const out = []; let cur = '', q = false;
+  for (let i = 0; i < linea.length; i++) {
+    const ch = linea[i];
+    if (q) { if (ch === '"') { if (linea[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+    else if (ch === '"') q = true; else if (ch === sep) { out.push(cur); cur = ''; } else cur += ch;
+  }
+  out.push(cur); return out.map(v => v.trim());
+}
+$('in-catalogo').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const lineas = (await f.text()).replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim());
+    if (!lineas.length) throw new Error('archivo vacío');
+    const sep = (lineas[0].match(/;/g) || []).length >= (lineas[0].match(/,/g) || []).length ? ';' : ',';
+    let n = 0;
+    for (const [i, l] of lineas.entries()) {
+      const col = parseLineaCSV(l, sep);
+      if (i === 0 && /nombre/i.test(col[0])) continue;
+      const nombre = (col[0] || '').toUpperCase().slice(0, 80); if (!nombre) continue;
+      if (estado.catalogoPropio.length >= 500) break;
+      const cat = normalizarCategoria(col[1] || '');
+      const uni = UNIDADES.find(u => u.toUpperCase() === (col[4] || '').toUpperCase()) || 'UND';
+      agregarItemPropio({ nombre, cat, simbolo: buscarSimbolo(col[2] || '', cat), desc: (col[3] || '').toUpperCase().slice(0, 120), uni }); n++;
+    }
+    construirCatalogo(); guardarLocal(); toggleSidebar(true);
+    const g = document.querySelector('details[data-grupo="propio"]'); if (g) { g.open = true; g.scrollIntoView({ block: 'nearest' }); }
+    aviso(`Catálogo importado: ${n} ítems`, 'ok', 3000);
+  } catch (err) { aviso('No se pudo importar: ' + err.message, 'error', 5000); }
+});
+function descargarPlantillaCatalogo() {
+  const filas = [['NOMBRE', 'CATEGORIA', 'SIMBOLO', 'DESCRIPCION', 'UNIDAD'],
+    ['VÁLVULA DE BOLA 3 PIEZAS', 'VÁLVULA', 'v_ball', 'SW 800# ASTM A105, ASIENTO PTFE', 'UND'],
+    ['CODO 90° SOCKET WELD', 'ACCESORIO', 'elbow90', 'ASTM A105 3000# SW', 'UND'],
+    ['VÁLVULA DE GLOBO SANITARIA', 'VÁLVULA', 'v_globe', 'CLAMP 316L', 'UND'],
+    ['JUEGO DE EMPAQUE Y ESPÁRRAGOS 150#', 'OTRO', 'flange_so', 'ESPIROMETÁLICO + A193 B7', 'JGO'],
+    ['SOPORTE TIPO U-BOLT', 'SOPORTE', 'sup_guide', 'ACERO GALVANIZADO', 'UND']];
+  const csv = filas.map(f => f.map(v => /[;"]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v).join(';')).join('\r\n');
+  descargarBlob(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }), 'Plantilla_catalogo_INDIMON.csv');
+  aviso('Plantilla descargada: llénela en Excel y guárdela como CSV', 'ok', 3500);
+}
+
+/* ---------- 12. Selección y panel de propiedades ---------- */
+function seleccionar(id) { seleccion = id; renderLienzo(); renderPanelSeleccion(); }
+function renderPanelSeleccion() {
+  const p = $('panel-sel'), c = estado.components.find(x => x.id === seleccion);
+  if (!c) { seleccion = null; p.hidden = true; return; }
+  const T = TIPOS[c.type], opNps = v => NPS_LISTA.map(n => `<option${n === v ? ' selected' : ''}>${esc(n)}</option>`).join('');
+  p.innerHTML = `<h4><span>${esc(T.corto)}</span><button class="btn" onclick="seleccionar(null)" aria-label="Cerrar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-x"/></svg></button></h4>
+    <label>Diámetro (NPS)</label><select data-p="nps">${opNps(c.nps)}</select>
+    ${T.reduce ? `<label>Diámetro menor</label><select data-p="npsRed">${opNps(c.npsRed)}</select>` : ''}
+    <label>Especificación</label><select data-p="schedule">${Object.keys(SPECS).map(s => `<option value="${esc(s)}"${s === c.schedule ? ' selected' : ''}>${esc(SPECS[s].corto)}</option>`).join('')}</select>
+    ${c.type === 'pipe' ? `<label>Longitud (${txtUnidad()})${c.lengthManual ? ' · manual' : ' · por grilla'}</label>
+      <div style="display:flex;gap:5px"><input data-p="length" type="number" step="any" min="0" inputmode="decimal" value="${aUnidad(longitudTubo(c))}">
+      <button class="btn" data-acc="auto" title="Volver a la longitud por grilla">Grilla</button></div>
+      ${c.libre && PLANOS[c.libre.plano] && !dirEntre(c.coords[0], c.coords[1]) ? `<label>Ángulo · plano ${PLANOS[c.libre.plano].nombre} (° desde ${PLANOS[c.libre.plano].ref})</label>
+      <input data-p="angulo" type="number" step="0.1" inputmode="decimal" value="${c.libre.ang}">` : ''}` : ''}
+    ${c.type === 'pipe' ? `<div style="margin-top:6px;font:600 12px var(--mono);color:${longitudCorte(c) <= 0 ? '#f87171' : 'var(--verde)'}">Corte: ${fmtLong(Math.max(0, longitudCorte(c)))} · descuento acc.: ${fmtLong(descuentoTubo(c))}</div>` : ''}
+    ${c.type !== 'pipe' && c.type !== 'weld' && !TIPOS[c.type].noBOM ? `<label>Largo / descuento al tubo (${txtUnidad()})${c.largo != null ? ' · manual' : fuenteLargo(c) ? ' · ' + fuenteLargo(c) : ' · sin dato'}</label>
+      <input data-p="largo" type="number" step="any" min="0" inputmode="decimal" placeholder="vacío = tabla" value="${c.largo != null || largoAccesorio(c) ? aUnidad(largoAccesorio(c)) : ''}">` : ''}
+    ${c.type === 'pipe' ? `<label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:12px;color:var(--s200)"><input type="checkbox" data-p="sinCota" style="width:18px;height:18px"${c.sinCota ? ' checked' : ''}> Ocultar cota de este tramo</label>` : ''}
+    ${c.type === 'pipe' ? `<label>Pendiente</label><button class="btn" style="width:100%" data-acc="pend">${c.pendiente ? `PEND. ${c.pendiente.valor}% · baja hacia el ${c.pendiente.haciaFin === false ? 'inicio' : 'final'}` : 'Agregar pendiente'}</button>` : ''}
+    ${c.type !== 'weld' && !TIPOS[c.type].noBOM ? `<label>Código / ref. fabricante</label><input data-p="ref" maxlength="60" placeholder="Ej: 032U1247" value="${esc(c.ref || '')}">` : ''}
+    <div class="acc">${c.type !== 'pipe' && TIPOS[c.type].modo !== 'punto' ? `<button class="btn" data-acc="rotar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-rotate"/></svg>${c.type === 'flow' ? 'Invertir' : 'Rotar'}</button>` : ''}
+      <button class="btn peligro" data-acc="borrar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-trash"/></svg>Borrar</button></div>`;
+  p.hidden = false;
+}
+$('panel-sel').addEventListener('change', e => {
+  const k = e.target.dataset.p, c = estado.components.find(x => x.id === seleccion); if (!k || !c) return;
+  if (k === 'length') {
+    const v = deUnidad(parseFloat(String(e.target.value).replace(',', '.')));
+    if (!(v > 0)) { aviso('Longitud no válida', 'error'); renderPanelSeleccion(); return; }
+    commit(() => { c.length = r3(v); c.lengthManual = true; });
+  } else if (k === 'angulo') {
+    const a = parseFloat(String(e.target.value).replace(',', '.'));
+    if (!isFinite(a)) { aviso('Ángulo no válido', 'error'); renderPanelSeleccion(); return; }
+    commit(() => cambiarAnguloLibre(c, a));
+  } else if (k === 'largo') {
+    const t = String(e.target.value).trim().replace(',', '.'), v = deUnidad(parseFloat(t));
+    if (t !== '' && !(v >= 0)) { aviso('Largo no válido', 'error'); renderPanelSeleccion(); return; }
+    commit(() => { if (t === '') delete c.largo; else c.largo = r3(v); });
+  } else if (k === 'sinCota') {
+    commit(() => { if (e.target.checked) c.sinCota = true; else delete c.sinCota; });
+  } else if (k === 'ref') {
+    const v = e.target.value.trim().toUpperCase();
+    commit(() => { if (v) c.ref = v; else delete c.ref; });
+  } else commit(() => { c[k] = e.target.value; });
+});
+$('panel-sel').addEventListener('click', e => {
+  const b = e.target.closest('[data-acc]'), c = estado.components.find(x => x.id === seleccion); if (!b || !c) return;
+  if (b.dataset.acc === 'borrar') deleteSelected();
+  if (b.dataset.acc === 'rotar') commit(() => { c.rotation = normAng(c.rotation + (c.type === 'flow' ? 180 : 60)); });
+  if (b.dataset.acc === 'pend') pedirPendiente(c);
+  if (b.dataset.acc === 'auto') commit(() => { c.lengthManual = false; c.length = longitudTubo(c); });
+});
+function deleteSelected() {
+  if (!seleccion) { aviso('Seleccione primero un componente (herramienta Tocar)'); return; }
+  const id = seleccion;
+  commit(() => { estado.components = estado.components.filter(c => c.id !== id); seleccion = null; });
+}
+
+/* ---------- 13. Herramientas y eventos de puntero (ratón, dedo, lápiz) ---------- */
+const PISTAS = {
+  pan: 'Mover: arrastre la hoja · pellizque para zoom',
+  select: 'Tocar: seleccione un componente para editarlo',
+  pipe: 'Tubería: arrastre, o toque inicio y toque cada punto'
+};
+const pistaTuberia = () => estado.trazo.modo === 'iso' ? PISTAS.pipe : `Tubería libre (${PLANOS[estado.trazo.plano].corto}, cada ${estado.trazo.modo}°)`;
+function setActiveTool(t) {
+  if (trazo) terminarTrazo();
+  herramienta = t;
+  document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('activa', b.dataset.tool === t));
+  document.querySelectorAll('[data-rapida]').forEach(b => b.classList.toggle('activa', b.dataset.rapida === t));
+  svg.classList.toggle('modo-pan', t === 'pan'); svg.classList.toggle('modo-sel', t === 'select');
+  if (t !== 'select') seleccionar(null);
+  limpiarGuia(); actualizarBarraEstado();
+  if (window.innerWidth < 1024) toggleSidebar(false);
+}
+function actualizarBarraEstado() {
+  $('pista').textContent = trazo && trazo.cadena ? 'Toque el siguiente punto · toque el mismo punto para terminar'
+    : herramienta === 'pipe' ? pistaTuberia() : PISTAS[herramienta] || `${TIPOS[herramienta]?.corto || ''}: toque sobre la tubería o el nodo`;
+  $('btn-terminar').hidden = !(trazo && trazo.cadena);
+}
+const MODOS_TRAZO = ['iso', '15', '5', '1'];
+function sincronizarTrazo() {
+  const { modo, plano } = estado.trazo;
+  $('sel-trazo').value = modo; $('sel-plano').value = plano;
+  $('fila-plano').hidden = modo === 'iso'; $('btn-plano').hidden = modo === 'iso';
+  $('btn-modo-trazo').textContent = modo === 'iso' ? 'ISO' : `∠${modo}°`;
+  $('btn-plano').textContent = PLANOS[plano].corto;
+  actualizarBarraEstado();
+}
+function ciclarModoTrazo() { estado.trazo.modo = MODOS_TRAZO[(MODOS_TRAZO.indexOf(estado.trazo.modo) + 1) % MODOS_TRAZO.length]; sincronizarTrazo(); guardarLocal();
+  aviso(estado.trazo.modo === 'iso' ? 'Trazo ISO: ejes 30° / 90° / 150°' : `Trazo libre cada ${estado.trazo.modo}° en ${PLANOS[estado.trazo.plano].corto}`); }
+function ciclarPlano() { const k = Object.keys(PLANOS); estado.trazo.plano = k[(k.indexOf(estado.trazo.plano) + 1) % k.length]; sincronizarTrazo(); guardarLocal();
+  aviso(`Ángulo libre en ${PLANOS[estado.trazo.plano].corto} (${PLANOS[estado.trazo.plano].nombre})`); }
+$('sel-trazo').addEventListener('change', () => { estado.trazo.modo = $('sel-trazo').value; sincronizarTrazo(); guardarLocal(); });
+$('sel-plano').addEventListener('change', () => { estado.trazo.plano = $('sel-plano').value; sincronizarTrazo(); guardarLocal(); });
+function terminarTrazo() { trazo = null; limpiarGuia(); actualizarHUD(null, 0, false); actualizarBarraEstado(); }
+function cycleSymbolRotation() {
+  rotacionActual = ROTACIONES[(ROTACIONES.indexOf(rotacionActual) + 1) % ROTACIONES.length];
+  $('rot-label').textContent = rotacionActual + '°';
+  const c = estado.components.find(x => x.id === seleccion);
+  if (c && c.type !== 'pipe') commit(() => { c.rotation = rotacionActual; });
+}
+
+const punteros = new Map();
+let pinch = null, arrastreHoja = null, gestoMultiple = false, simboloPendiente = null;
+const distP = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const medioP = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+
+svg.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'mouse' && e.button > 1) return;
+  try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+  punteros.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (punteros.size >= 2) {
+    /* dos dedos: zoom/desplazamiento; se cancela el gesto de dibujo en curso */
+    const [a, b] = [...punteros.values()];
+    pinch = { d0: distP(a, b) || 1, z0: zoom, m: medioP(a, b) }; gestoMultiple = true; arrastreHoja = null; simboloPendiente = null;
+    if (trazo) { trazo.down = null; if (!trazo.cadena) terminarTrazo(); }
+    return;
+  }
+  e.preventDefault();
+  const pt = puntoSVG(e), R = radioCaptura(e);
+  if (herramienta === 'pan' || e.button === 1) { arrastreHoja = { x: e.clientX, y: e.clientY }; svg.style.cursor = 'grabbing'; return; }
+  if (herramienta === 'select') {
+    /* piezas bajo el dedo: si ya hay una seleccionada aquí, un nuevo toque pasa a la siguiente (codo → tramo corto…) */
+    const ids = [...new Set(document.elementsFromPoint(e.clientX, e.clientY).map(el => el.closest && el.closest('#iso-svg [data-id]')).filter(Boolean).map(g => g.dataset.id))];
+    /* la más cercana al punto tocado primero (un tramo corto gana al codo vecino si se toca sobre él) */
+    const dist = id => { const c = estado.components.find(x => x.id === id); if (!c) return 1e9;
+      if (c.type !== 'pipe') { const s = aPantalla(c.coords[0]); return Math.hypot(s.x - pt.x, s.y - pt.y); }
+      const a = aPantalla(c.coords[0]), b = aPantalla(c.coords[1]), dx = b.x - a.x, dy = b.y - a.y, t = Math.max(0, Math.min(1, ((pt.x - a.x) * dx + (pt.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
+      return Math.hypot(a.x + t * dx - pt.x, a.y + t * dy - pt.y); };
+    ids.sort((x, y) => dist(x) - dist(y));
+    if (ids.length) seleccionar(ids[(ids.indexOf(seleccion) + 1) % ids.length]); else { seleccionar(null); arrastreHoja = { x: e.clientX, y: e.clientY }; }
+    return;
+  }
+  if (herramienta === 'pipe') {
+    if (!trazo) trazo = { inicio: snapInicio(pt, R).P, cadena: false, fresco: true };
+    else trazo.fresco = false;
+    trazo.down = { x: e.clientX, y: e.clientY }; trazo.movido = false;
+    dibujarFantasma(pt, R);
+    return;
+  }
+  /* símbolos: se colocan al soltar (si el dedo se desplaza, se mueve la hoja) */
+  simboloPendiente = { pt, R, x: e.clientX, y: e.clientY };
+  previsualizarSimbolo(pt, R);
+});
+svg.addEventListener('pointermove', e => {
+  if (punteros.has(e.pointerId)) punteros.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && punteros.size >= 2) {
+    const [a, b] = [...punteros.values()], m = medioP(a, b);
+    setZoom(pinch.z0 * distP(a, b) / pinch.d0, pinch.m.x, pinch.m.y);
+    vp.scrollLeft -= m.x - pinch.m.x; vp.scrollTop -= m.y - pinch.m.y; pinch.m = m;
+    return;
+  }
+  if (gestoMultiple) return;
+  if (simboloPendiente && Math.hypot(e.clientX - simboloPendiente.x, e.clientY - simboloPendiente.y) > 10) {
+    arrastreHoja = { x: simboloPendiente.x, y: simboloPendiente.y }; simboloPendiente = null; limpiarGuia();
+  }
+  if (arrastreHoja) {
+    vp.scrollLeft -= e.clientX - arrastreHoja.x; vp.scrollTop -= e.clientY - arrastreHoja.y;
+    arrastreHoja = { x: e.clientX, y: e.clientY }; return;
+  }
+  const pt = puntoSVG(e), R = radioCaptura(e);
+  if (herramienta === 'pipe') {
+    if (trazo && trazo.down && Math.hypot(e.clientX - trazo.down.x, e.clientY - trazo.down.y) > 8) trazo.movido = true;
+    if (e.pointerType === 'mouse' || trazo) dibujarFantasma(pt, R);
+  } else if (TIPOS[herramienta] && (e.pointerType === 'mouse' || punteros.size)) previsualizarSimbolo(pt, R);
+});
+function finPuntero(e, cancelado) {
+  punteros.delete(e.pointerId);
+  if (gestoMultiple) { if (punteros.size < 2) pinch = null; if (!punteros.size) gestoMultiple = false; return; }
+  if (arrastreHoja) { arrastreHoja = null; svg.style.cursor = ''; return; }
+  if (simboloPendiente) {
+    const sp = simboloPendiente; simboloPendiente = null;
+    if (!cancelado) colocarSimbolo(herramienta, sp.pt, sp.R);
+    if (e.pointerType !== 'mouse') limpiarGuia();
+    return;
+  }
+  if (herramienta !== 'pipe' || !trazo || !trazo.down) { if (e.pointerType !== 'mouse') limpiarGuia(); return; }
+  trazo.down = null;
+  if (cancelado) { if (!trazo.cadena) terminarTrazo(); return; }
+  const r = resolverFin(trazo.inicio, puntoSVG(e), radioCaptura(e));
+  if (r.pasos >= 0.25 && !igual(r.fin, trazo.inicio)) {
+    const ini = trazo.inicio;
+    if (trazo.fresco && trazo.movido) trazo = null;           // trazo por arrastre: un solo tramo
+    else { trazo.inicio = r.fin; trazo.cadena = true; }       // trazo por toques: continúa en cadena
+    crearTuberia(ini, r.fin, r);
+  } else if (trazo.cadena && !trazo.fresco) terminarTrazo();  // tocó el mismo punto: fin de la cadena
+  else trazo.cadena = true;                                    // primer toque: queda esperando el siguiente
+  if (trazo) { if (e.pointerType === 'mouse') dibujarFantasma(puntoSVG(e), radioCaptura(e)); else { limpiarGuia(); $('capa-guia').innerHTML = indicadorSnap(trazo.inicio, true); } }
+  actualizarBarraEstado();
+}
+svg.addEventListener('pointerup', e => finPuntero(e, false));
+svg.addEventListener('pointercancel', e => finPuntero(e, true));
+svg.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !trazo) limpiarGuia(); });
+svg.addEventListener('dblclick', () => { if (trazo) terminarTrazo(); });
+svg.addEventListener('contextmenu', e => { e.preventDefault(); if (trazo) terminarTrazo(); });
+
+/* ---------- 14. Zoom y desplazamiento de la hoja ---------- */
+function aplicarZoom() {
+  hoja.style.transform = `scale(${zoom})`;
+  envoltura.style.width = HOJA.w * zoom + 'px'; envoltura.style.height = HOJA.h * zoom + 'px';
+  $('zoom-indicator').textContent = Math.round(zoom * 100) + '%';
+}
+function setZoom(z, cx, cy) {
+  z = Math.min(4, Math.max(0.12, z));
+  if (cx == null) { const r = vp.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2; }
+  const r0 = hoja.getBoundingClientRect(), sx = (cx - r0.left) / zoom, sy = (cy - r0.top) / zoom;
+  zoom = z; aplicarZoom();
+  const r1 = hoja.getBoundingClientRect();
+  vp.scrollLeft += r1.left + sx * zoom - cx; vp.scrollTop += r1.top + sy * zoom - cy;
+}
+const adjustZoom = f => setZoom(zoom * f);
+function fitSheetToScreen() {
+  const pad = window.innerWidth <= 760 ? 16 : 32;
+  zoom = Math.max(0.12, Math.min((vp.clientWidth - pad) / HOJA.w, (vp.clientHeight - pad - 50) / HOJA.h));
+  aplicarZoom(); vp.scrollLeft = 0; vp.scrollTop = 0;
+}
+/* Acerca al área de dibujo con un paso de grilla cómodo para el dedo */
+function enfocarLienzo() {
+  const z = $('zona-dibujo');
+  zoom = Math.min(1.6, Math.max(0.85, Math.min((vp.clientWidth - 16) / z.offsetWidth, (vp.clientHeight - 70) / z.offsetHeight)));
+  aplicarZoom();
+  const r = z.getBoundingClientRect(), rv = vp.getBoundingClientRect();
+  vp.scrollLeft += (r.left + r.width / 2) - (rv.left + rv.width / 2);
+  vp.scrollTop += (r.top + r.height / 2) - (rv.top + rv.height / 2);
+}
+vp.addEventListener('wheel', e => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  e.preventDefault(); setZoom(zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1), e.clientX, e.clientY);
+}, { passive: false });
+/* Safari (iOS/macOS): evita el zoom nativo de la página con el gesto de pellizco */
+['gesturestart', 'gesturechange'].forEach(ev => document.addEventListener(ev, e => e.preventDefault()));
+
+/* ---------- 15. Teclado (PC) ---------- */
+document.addEventListener('keydown', e => {
+  if (!$('modal').hidden) { if (e.key === 'Escape') cerrarModal(); return; }
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+  const k = e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey;
+  if (mod && k === 'z' && !e.shiftKey) { e.preventDefault(); undoAction(); }
+  else if (mod && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); redoAction(); }
+  else if (mod && k === 's') { e.preventDefault(); guardarProyecto(); }
+  else if (mod && k === 'p') { e.preventDefault(); imprimirA3(); }
+  else if (mod) return;
+  else if (k === 'delete' || k === 'backspace') { e.preventDefault(); deleteSelected(); }
+  else if (k === 'escape') { if (trazo) terminarTrazo(); else seleccionar(null); }
+  else if (k === 'r') cycleSymbolRotation();
+  else if (k === 'a') ciclarModoTrazo();
+  else if (k === 'p') ciclarPlano();
+  else if (k === 't') setActiveTool('pipe');
+  else if (k === 'v') setActiveTool('select');
+  else if (k === 'h' || k === ' ') { e.preventDefault(); setActiveTool('pan'); }
+  else if (k === '+' || k === '=') adjustZoom(1.2);
+  else if (k === '-') adjustZoom(1 / 1.2);
+  else if (k === '0') fitSheetToScreen();
+});
+
+/* ---------- 16. Rótulo (cabecera) reactivo ---------- */
+function pintarCabecera() {
+  document.querySelectorAll('[data-h]').forEach(i => { i.value = estado.cabecera[i.dataset.h] ?? ''; });
+  $('sel-unidad').value = estado.unidad;
+  $('sel-cotas').value = estado.cotas; $('chk-descontar').checked = estado.descontar;
+  $('lbl-unidad-paso').textContent = txtUnidad();
+  $('grid-scale').step = enMM() ? '50' : '0.05';
+  $('grid-scale').value = aUnidad(estado.escala);
+  $('txt-escala').value = `S/E · 1 paso de grilla = ${fmtLong(estado.escala)}`;
+  $('etq-dibujo').textContent = `ISOMÉTRICO — SIN ESCALA (COTAS EN ${enMM() ? 'MILÍMETROS' : 'METROS'})`;
+}
+document.querySelectorAll('[data-h]').forEach(i => i.addEventListener('input', () => { estado.cabecera[i.dataset.h] = i.value; guardarLocal(); }));
+$('spec-nps').addEventListener('change', () => { estado.cabecera.nps = $('spec-nps').value; pintarCabecera(); guardarLocal(); });
+$('spec-mat').addEventListener('change', () => { estado.cabecera.spec = $('spec-mat').value; pintarCabecera(); guardarLocal(); });
+$('sel-cotas').addEventListener('change', () => { estado.cotas = $('sel-cotas').value; actualizarTodo(); });
+$('chk-descontar').addEventListener('change', () => { estado.descontar = $('chk-descontar').checked; actualizarTodo(); });
+$('sel-unidad').addEventListener('change', () => {
+  estado.unidad = $('sel-unidad').value === 'm' ? 'm' : 'mm';
+  pintarCabecera(); actualizarTodo();
+});
+$('grid-scale').addEventListener('change', () => {
+  const v = deUnidad(parseFloat(String($('grid-scale').value).replace(',', '.')));
+  if (!(v > 0)) { aviso('Paso de grilla no válido', 'error'); $('grid-scale').value = aUnidad(estado.escala); return; }
+  estado.escala = r3(v);
+  for (const c of tuberias()) if (!c.lengthManual) c.length = longitudTubo(c);
+  pintarCabecera(); actualizarTodo();
+});
+
+/* ---------- 17. Archivo: nuevo, abrir, guardar, limpiar ---------- */
+function clearCanvas() {
+  toggleSidebar(false);
+  if (!estado.components.length && !estado.consumibles.length) { aviso('El plano ya está vacío'); return; }
+  abrirModal({ titulo: '¿Limpiar todo el plano?', html: '<p>Se borran tuberías, accesorios, válvulas, consumibles y ajustes del BOM. El rótulo se conserva. Puede deshacerlo con Ctrl+Z / Deshacer.</p>',
+    okTxt: 'Limpiar', alAceptar: () => { terminarTrazo(); commit(() => { estado.components = []; estado.consumibles = []; estado.ajustes = {}; seleccion = null; }); } });
+}
+function nuevoPlano() {
+  toggleSidebar(false);
+  abrirModal({ titulo: '¿Empezar un plano nuevo?', html: '<p>Se conservan cliente, proyecto y firmas; se limpian el dibujo, la línea, el consecutivo y el BOM. Guarde antes el proyecto si lo necesita.</p>',
+    okTxt: 'Nuevo plano', alAceptar: () => {
+      terminarTrazo();
+      commit(() => { estado.components = []; estado.consumibles = []; estado.ajustes = {}; seleccion = null; });
+      Object.assign(estado.cabecera, { linea: '', consecutivo: '', notas: '', fecha: hoyISO(), pagina: '1', paginas: '1' });
+      pintarCabecera(); guardarLocal();
+    } });
+}
+const nombreSeguro = s => String(s || '').trim().replace(/[\\/:*?"<>|#%&\s]+/g, '_').slice(0, 60);
+const nombreBase = () => ['DP-F-009', nombreSeguro(estado.cabecera.linea) || 'ISO', nombreSeguro(estado.cabecera.consecutivo)].filter(Boolean).join('_');
+function descargarBlob(blob, nombre) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nombre;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+function guardarProyecto() {
+  const datos = { formato: 'INDIMON-DP-F-009', version: 1, guardado: new Date().toISOString(), ...estado };
+  descargarBlob(new Blob([JSON.stringify(datos, null, 1)], { type: 'application/json' }), nombreBase() + '.json');
+  aviso('Proyecto guardado', 'ok');
+}
+$('in-proyecto').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const o = JSON.parse(await f.text());
+    if (!o || !Array.isArray(o.components)) throw new Error('el archivo no es un proyecto DP-F-009');
+    terminarTrazo(); registrar(); aplicarProyecto(o); seleccion = null;
+    pintarCabecera(); sincronizarSelectores(); sincronizarTrazo(); construirCatalogo(); actualizarTodo(); toggleSidebar(false);
+    aviso('Proyecto abierto: ' + f.name, 'ok');
+  } catch (err) { aviso('No se pudo abrir: ' + err.message, 'error', 5000); }
+});
+
+/* ---------- 18. Exportación: Excel (.xlsx), PDF A3 y app .html ---------- */
+function exportToExcel() {
+  const cab = estado.cabecera, esML = u => u === 'ML' || u === 'm';
+  const fecha = /^\d{4}-\d{2}-\d{2}$/.test(cab.fecha || '') ? cab.fecha.split('-').reverse().join('/') : (cab.fecha || '');
+  const numW = numeracionSoldaduras();
+  const filasBOM = ultimoBOM.map((f, i) => [i + 1, f.uni, f.desc, Number(esML(f.uni) ? r2(f.cant) : f.cant)]);
+  const meta = [['CLIENTE', cab.cliente], ['PROYECTO', cab.proyecto], ['DIBUJO / LÍNEA N°', cab.linea], ['FECHA', fecha], ['CONSECUTIVO', cab.consecutivo],
+    ['DIÁMETRO NOMINAL (NPS)', cab.nps], ['ESPECIFICACIÓN DE MATERIAL', cab.spec], ['ESCALA', `S/E · 1 paso de grilla = ${fmtLong(estado.escala)}`],
+    ['FLUIDO / SERVICIO · PRUEBA', cab.servicio], ['ELABORÓ', cab.elaboro], ['REVISÓ', cab.reviso], ['APROBÓ', cab.aprobo], ['NOTAS / OBSERVACIONES', cab.notas]];
+  const totML = r2(ultimoBOM.filter(f => f.uni === 'ML' && !f.consumible).reduce((s, f) => s + Number(f.cant || 0), 0));
+  const nJuntas = estado.components.filter(c => c.type === 'weld').length;
+  let nT = 0;
+  const detalle = [['MARCA', 'CATEGORÍA', 'TIPO', 'NPS', 'NPS MENOR', 'ESPECIFICACIÓN', `CENTRO-CENTRO (${txtUnidad()})`, `DESCUENTO / LARGO ACC. (${txtUnidad()})`, `LONG. CORTE (${txtUnidad()})`, 'LONG. MANUAL', 'ÁNGULO / PLANO', 'PENDIENTE', 'DESCRIPCIÓN', 'COORDENADAS RED [p,q]']]
+    .concat([...estado.components].filter(c => !TIPOS[c.type].noBOM).sort((a, b) => (a.type === 'weld') - (b.type === 'weld') || (a.type === 'weld' ? numW.get(a.id) - numW.get(b.id) : 0)).map(c => [c.type === 'weld' ? `W${numW.get(c.id)}` : c.type === 'pipe' ? `T${++nT}` : '', c.category, TIPOS[c.type].corto, c.nps, c.npsRed || '', c.schedule,
+      c.type === 'pipe' ? aUnidad(longitudTubo(c)) : '', c.type === 'pipe' ? aUnidad(descuentoTubo(c)) : (largoAccesorio(c) ? aUnidad(largoAccesorio(c)) : ''),
+      c.type === 'pipe' ? aUnidad(Math.max(0, longitudCorte(c))) : '', c.type === 'pipe' ? (c.lengthManual ? 'SÍ' : 'NO') : '',
+      c.libre && PLANOS[c.libre.plano] && !dirEntre(c.coords[0], c.coords[1]) ? `${anguloAgudo(c)}° · ${PLANOS[c.libre.plano].corto}` : '',
+      c.pendiente ? `${c.pendiente.valor}% hacia el ${c.pendiente.haciaFin === false ? 'inicio' : 'final'}` : '',
+      descripcion(c), c.coords.map(P => `[${P[0]}, ${P[1]}]`).join(' → ')]));
+  if (typeof XLSX === 'undefined') {
+    /* respaldo sin librería: CSV compatible con Excel (separador ;) */
+    const filas = [['INDIMON S.A.S. — NIT 900602215-5'], ['FORMATO BOCETOS ISOMÉTRICOS — LISTADO DE MATERIALES (BOM)'], [], ...meta, [], ['ITEM', 'UNI', 'DESCRIPCIÓN TÉCNICA', 'CANTIDAD'], ...filasBOM];
+    const csv = filas.map(f => f.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
+    descargarBlob(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }), nombreBase() + '.csv');
+    aviso('Librería Excel no disponible: se exportó CSV', 'error', 4500); return;
+  }
+  /* ----- Hoja 1: rótulo + listado de materiales, con formato ----- */
+  const aoa = [['INDIMON S.A.S.  —  NIT 900602215-5'], ['FORMATO BOCETOS ISOMÉTRICOS — LISTADO DE MATERIALES (BOM)'],
+    [`Código: DP-F-009        Versión: 01        Página: ${cab.pagina || 1} de ${cab.paginas || 1}`], []];
+  const fMeta = aoa.length; meta.forEach(([k, v]) => aoa.push([k, '', v ?? '', '']));
+  aoa.push([]);
+  const fEnc = aoa.length; aoa.push(['ITEM', 'UNI', 'DESCRIPCIÓN TÉCNICA', 'CANTIDAD']);
+  const fDat = aoa.length; filasBOM.forEach(f => aoa.push(f));
+  aoa.push([]);
+  const fTot = aoa.length; aoa.push(['', '', estado.descontar ? 'TOTAL TUBERÍA (ML, LONGITUD DE CORTE)' : 'TOTAL TUBERÍA (ML, CENTRO A CENTRO)', totML], ['', '', 'TOTAL JUNTAS SOLDADAS (END)', nJuntas]);
+  aoa.push([]); const fPie = aoa.length; aoa.push([`Generado con INDIMON CAD · ${new Date().toLocaleString('es-CO')}`]);
+  const ws = XLSX.utils.aoa_to_sheet(aoa), merges = [];
+  const linea = { style: 'thin', color: { rgb: '000000' } }, borde = { top: linea, bottom: linea, left: linea, right: linea };
+  const est = (r, c, s, z) => { const ref = XLSX.utils.encode_cell({ r, c }); if (!ws[ref]) ws[ref] = { t: 's', v: '' }; ws[ref].s = s; if (z) ws[ref].z = z; };
+  const centro = { horizontal: 'center', vertical: 'center', wrapText: true };
+  [[0, { font: { bold: true, sz: 16, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '0F172A' } } }],
+   [1, { font: { bold: true, sz: 12, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: 'DC2626' } } }],
+   [2, { font: { bold: true, sz: 10 }, fill: { fgColor: { rgb: 'F1F5F9' } } }]].forEach(([r, s]) => {
+    merges.push({ s: { r, c: 0 }, e: { r, c: 3 } });
+    for (let c = 0; c < 4; c++) est(r, c, { ...s, alignment: centro, border: borde });
+  });
+  meta.forEach((_, i) => {
+    const r = fMeta + i; merges.push({ s: { r, c: 0 }, e: { r, c: 1 } }, { s: { r, c: 2 }, e: { r, c: 3 } });
+    for (let c = 0; c < 2; c++) est(r, c, { font: { bold: true, sz: 9, color: { rgb: '1E293B' } }, fill: { fgColor: { rgb: 'E2E8F0' } }, border: borde, alignment: { vertical: 'center' } });
+    for (let c = 2; c < 4; c++) est(r, c, { font: { bold: true, sz: 11 }, border: borde, alignment: { vertical: 'center', wrapText: true } });
+  });
+  for (let c = 0; c < 4; c++) est(fEnc, c, { font: { bold: true, sz: 10, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '1E293B' } }, border: borde, alignment: centro });
+  ultimoBOM.forEach((f, i) => {
+    const r = fDat + i, fondo = i % 2 ? { fill: { fgColor: { rgb: 'F8FAFC' } } } : {};
+    const formato = esML(f.uni) ? '0.00' : Number.isInteger(Number(f.cant)) ? '0' : '0.00';
+    est(r, 0, { ...fondo, font: { bold: true }, border: borde, alignment: centro });
+    est(r, 1, { ...fondo, border: borde, alignment: centro });
+    est(r, 2, { ...fondo, border: borde, alignment: { vertical: 'center', wrapText: true } });
+    est(r, 3, { ...fondo, font: { bold: true }, border: borde, alignment: { horizontal: 'right', vertical: 'center' }, numFmt: formato }, formato);
+  });
+  for (let i = 0; i < 2; i++) {
+    est(fTot + i, 2, { font: { bold: true }, fill: { fgColor: { rgb: 'FEF3C7' } }, border: borde, alignment: { horizontal: 'right' } });
+    est(fTot + i, 3, { font: { bold: true }, fill: { fgColor: { rgb: 'FEF3C7' } }, border: borde, alignment: { horizontal: 'right' }, numFmt: i ? '0' : '0.00' }, i ? '0' : '0.00');
+  }
+  merges.push({ s: { r: fPie, c: 0 }, e: { r: fPie, c: 3 } });
+  est(fPie, 0, { font: { italic: true, sz: 8, color: { rgb: '64748B' } } });
+  ws['!merges'] = merges;
+  ws['!cols'] = [{ wch: 13 }, { wch: 13 }, { wch: 76 }, { wch: 14 }];
+  ws['!margins'] = { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 };
+  ws['!rows'] = aoa.map((_, r) => r === 0 ? { hpt: 26 } : r === 1 ? { hpt: 20 } : r === fEnc ? { hpt: 20 } : r >= fDat && r < fDat + filasBOM.length ? { hpt: 17 } : null);
+  /* ----- Hoja 2: detalle de componentes (trazabilidad de juntas y tramos) ----- */
+  const ws2 = XLSX.utils.aoa_to_sheet(detalle);
+  ws2['!cols'] = [8, 12, 18, 8, 10, 26, 13, 15, 13, 12, 16, 18, 80, 34].map(w => ({ wch: w }));
+  for (let c = 0; c < detalle[0].length; c++) {
+    ws2[XLSX.utils.encode_cell({ r: 0, c })].s = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '1E293B' } }, border: borde, alignment: centro };
+    for (let r = 1; r < detalle.length; r++) { const ref = XLSX.utils.encode_cell({ r, c }); if (!ws2[ref]) ws2[ref] = { t: 's', v: '' }; ws2[ref].s = { border: borde, alignment: { vertical: 'center', horizontal: c < 12 && c !== 5 ? 'center' : 'left' } }; }
+  }
+  ws2['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(1, detalle.length - 1), c: detalle[0].length - 1 } }) };
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'BOM DP-F-009');
+  XLSX.utils.book_append_sheet(wb, ws2, 'Componentes');
+  XLSX.writeFile(wb, nombreBase() + '.xlsx');
+  aviso('Excel exportado', 'ok');
+}
+function imprimirA3() {
+  seleccionar(null); terminarTrazo();
+  if (document.activeElement) document.activeElement.blur();
+  setTimeout(() => window.print(), 60);
+}
+window.addEventListener('beforeprint', () => { seleccion = null; renderLienzo(); limpiarGuia(); $('panel-sel').hidden = true; });
+
+/* Descarga la app completa en un único .html (con la librería Excel incrustada) para usar sin internet */
+async function downloadSelfHtml() {
+  toggleSidebar(false);
+  let html = null;
+  try {
+    html = await (await fetch(location.href.split('#')[0].split('?')[0], { cache: 'no-store' })).text();
+    try {
+      const lib = await (await fetch('vendor/xlsx.bundle.js')).text();
+      if (lib.length > 1000) html = html.replace(/<script src="vendor\/xlsx\.bundle\.js"[^>]*><\/script>/, () => '<script>' + lib + '</scr' + 'ipt>');
+    } catch (_) { /* queda la referencia al CDN como respaldo */ }
+  } catch (_) {
+    html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+  }
+  descargarBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), 'INDIMON_CAD_DP-F-009.html');
+  aviso('App descargada: ábrala con Chrome, Edge o Safari', 'ok', 4000);
+}
+
+/* ---------- 19. Instalación como aplicación (PWA) ---------- */
+let eventoInstalar = null;
+const esStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); eventoInstalar = e; $('btn-instalar').hidden = false; });
+window.addEventListener('appinstalled', () => { eventoInstalar = null; $('btn-instalar').hidden = true; aviso('Aplicación instalada', 'ok'); });
+async function instalarApp(desdeMenu) {
+  toggleSidebar(false);
+  if (esStandalone()) { aviso('La aplicación ya está instalada y abierta como app', 'ok'); return; }
+  if (eventoInstalar) { eventoInstalar.prompt(); await eventoInstalar.userChoice; eventoInstalar = null; $('btn-instalar').hidden = true; return; }
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const local = location.protocol === 'file:';
+  abrirModal({
+    titulo: 'Instalar INDIMON CAD', okTxt: 'Entendido', sinCancelar: true,
+    html: local ? `<p>Está abriendo el archivo directamente. Para instalarla como app debe publicarse en un sitio <b>https</b> (por ejemplo GitHub Pages). Mientras tanto, este .html funciona sin internet: guárdelo en el equipo y ábralo con el navegador.</p>`
+      : ios ? `<ol><li>Abra esta página en <b>Safari</b>.</li><li>Toque <b>Compartir</b> (cuadro con flecha).</li><li>Elija <b>Agregar a pantalla de inicio</b> y luego <b>Agregar</b>.</li></ol><p>Quedará un ícono INDIMON CAD que funciona sin internet.</p>`
+      : `<ol><li><b>Android (Chrome):</b> menú ⋮ → <b>Instalar aplicación</b> / Agregar a pantalla principal.</li><li><b>PC (Chrome / Edge):</b> ícono de instalar en la barra de direcciones, o menú → <b>Instalar INDIMON CAD</b>.</li></ol><p>También puede usar <b>Descargar app (.html)</b> para llevarla en un archivo.</p>`
+  });
+}
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+
+/* ---------- 20. Interfaz: panel lateral, avisos, ventanas ---------- */
+function toggleSidebar(abrir) {
+  const s = $('tools-sidebar'), v = abrir === undefined ? !s.classList.contains('abierta') : abrir;
+  s.classList.toggle('abierta', v); $('velo').hidden = !v;
+}
+function aviso(m, tipo, ms = 2200) {
+  const e = $('aviso'); e.textContent = m;
+  e.style.background = tipo === 'ok' ? '#047857' : tipo === 'error' ? '#b91c1c' : '#1e293b';
+  e.style.display = 'block'; clearTimeout(aviso.t); aviso.t = setTimeout(() => { e.style.display = 'none'; }, ms);
+}
+let modalCfg = null;
+function abrirModal(cfg) {
+  modalCfg = cfg;
+  $('modal-titulo').textContent = cfg.titulo; $('modal-cuerpo').innerHTML = cfg.html;
+  $('modal-ok').textContent = cfg.okTxt || 'Aceptar'; $('modal-cancelar').hidden = !!cfg.sinCancelar;
+  $('modal').hidden = false;
+  if (cfg.alAbrir) cfg.alAbrir(); else setTimeout(() => $('modal-ok').focus(), 30);
+}
+function cerrarModal() { $('modal').hidden = true; modalCfg = null; }
+$('modal-form').addEventListener('submit', () => { const cfg = modalCfg; if (cfg && cfg.alAceptar && cfg.alAceptar() === false) return; cerrarModal(); });
+$('modal-cancelar').addEventListener('click', cerrarModal);
+$('modal').addEventListener('pointerdown', e => { if (e.target === $('modal') && !(modalCfg && modalCfg.sinCancelar)) cerrarModal(); });
+
+/* Iconos de interfaz (trazos simples, sin dependencias externas) */
+const ICONOS = {
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>', x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>', redo: '<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>',
+  trash: '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  zoomIn: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/>', zoomOut: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M8 11h6"/>',
+  sheet: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>',
+  printer: '<path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+  rotate: '<path d="M21 12a9 9 0 1 1-9-9c2.5 0 4.9 1 6.7 2.7L21 8"/><path d="M21 3v5h-5"/>',
+  move: '<path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/>',
+  pointer: '<path d="m4 4 7 17 2.5-7.5L21 11z"/>', pipe: '<path d="M3 17l8-4.5V4M11 12.5l10 5.5"/><circle cx="11" cy="12.5" r="1.5"/>',
+  plus: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>', file: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 12v6M9 15h6"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>',
+  code: '<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>', check: '<path d="M20 6 9 17l-5-5"/>',
+  target: '<circle cx="12" cy="12" r="8"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/>'
+};
+/* Botones del panel generados desde el catálogo */
+const claro = s => s.replace(/class="sb"/g, 'fill="#0f172a" stroke="#e2e8f0" stroke-width="1.6"').replace(/class="sn"/g, 'fill="#e2e8f0"').replace(/class="s"/g, 'fill="none" stroke="#e2e8f0" stroke-width="1.6"').replace(/<text /g, '<text fill="#fbbf24" ');
+const iconoSimbolo = t => { const b = TIPOS[t].base || t; return claro(ICONO_NODO[b] || SIM[b] || ''); };
+const botonHerr = (tool, etiqueta, dibujo, esIcono) => `<button class="herr" data-tool="${esc(tool)}" onclick="setActiveTool('${esc(tool)}')" title="${esc(TIPOS[tool]?.nombre || etiqueta)}">
+    ${esIcono ? `<svg class="ico" viewBox="0 0 24 24" style="width:22px;height:22px"><use href="#i-${dibujo}"/></svg>` : `<svg class="sim" viewBox="-20 -20 40 40" style="stroke:#e2e8f0">${dibujo}</svg>`}<span>${esc(etiqueta)}</span></button>`;
+const gruposAbiertos = new Set(['acc_bw', 'val', 'junta', 'anot', 'propio', 'fab_danfoss']);
+function construirCatalogo() {
+  const filtro = quitarTildes($('buscar-sim').value).toLowerCase().trim();
+  const html = GRUPOS.map(([g, titulo]) => {
+    const items = Object.keys(TIPOS).filter(t => TIPOS[t].grupo === g && (!filtro || quitarTildes(t + ' ' + TIPOS[t].corto + ' ' + TIPOS[t].nombre + ' ' + (TIPOS[t].desc || '')).toLowerCase().includes(filtro)));
+    if (!items.length) return '';
+    return `<details class="grupo-cat" data-grupo="${g}"${filtro || gruposAbiertos.has(g) ? ' open' : ''}><summary><span>${esc(titulo)}</span><span style="color:var(--s400)">${items.length}</span></summary>
+      <div class="rejilla">${items.map(t => botonHerr(t, TIPOS[t].corto, iconoSimbolo(t))).join('')}</div></details>`;
+  }).join('');
+  $('catalogo').innerHTML = html || '<p style="font-size:12px;color:var(--s400);margin:4px 0 8px">Sin resultados. Puede agregarlo como ítem propio.</p>';
+  document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('activa', b.dataset.tool === herramienta));
+}
+function construirInterfaz() {
+  /* sprite de iconos reutilizables + inserción en los botones */
+  const sprite = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  sprite.setAttribute('style', 'display:none');
+  sprite.innerHTML = Object.entries(ICONOS).map(([k, v]) => `<symbol id="i-${k}" viewBox="0 0 24 24">${v}</symbol>`).join('');
+  document.body.prepend(sprite);
+  document.querySelectorAll('svg[data-ico]').forEach(s => { s.setAttribute('viewBox', '0 0 24 24'); s.innerHTML = `<use href="#i-${s.dataset.ico}"/>`; });
+  $('herr-control').innerHTML = botonHerr('pan', 'Mover', 'move', true) + botonHerr('select', 'Tocar', 'pointer', true) + botonHerr('pipe', 'Tubería', 'pipe', true);
+  $('buscar-sim').addEventListener('input', construirCatalogo);
+  $('catalogo').addEventListener('toggle', e => { const g = e.target.dataset && e.target.dataset.grupo; if (!g || $('buscar-sim').value) return; e.target.open ? gruposAbiertos.add(g) : gruposAbiertos.delete(g); }, true);
+  $('spec-nps').innerHTML = NPS_LISTA.map(n => `<option value="${esc(n)}">Ø ${esc(n)}</option>`).join('');
+  $('spec-mat').innerHTML = Object.keys(SPECS).map(s => `<option value="${esc(s)}">${esc(SPECS[s].corto)}</option>`).join('');
+}
+function sincronizarSelectores() {
+  if (NPS_LISTA.includes(estado.cabecera.nps)) $('spec-nps').value = estado.cabecera.nps;
+  if (SPECS[estado.cabecera.spec]) $('spec-mat').value = estado.cabecera.spec;
+}
+
+/* ---------- 21. Arranque ---------- */
+(function iniciar() {
+  construirInterfaz();
+  cargarLocal();
+  if (!estado.cabecera.fecha) estado.cabecera.fecha = hoyISO();
+  sincronizarSelectores(); pintarCabecera(); construirCatalogo(); sincronizarTrazo();
+  prepararLienzo();
+  setActiveTool('pipe');
+  actualizarTodo();
+  if (window.innerWidth <= 760) enfocarLienzo(); else fitSheetToScreen();
+  let anchoPrevio = window.innerWidth;
+  window.addEventListener('resize', () => {
+    clearTimeout(window._tr);
+    window._tr = setTimeout(() => { if (window.innerWidth !== anchoPrevio) { anchoPrevio = window.innerWidth; if (window.innerWidth >= 1024) toggleSidebar(false); fitSheetToScreen(); } }, 200);
+  });
+})();
+</script>
+</body>
+</html>
