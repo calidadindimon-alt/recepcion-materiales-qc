@@ -99,6 +99,9 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
 /* Avisos y ventanas modales */
 #aviso{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top));transform:translateX(-50%);z-index:90;background:var(--s800);border:1px solid var(--s600);color:#fff;
   padding:9px 14px;border-radius:9px;font-size:13px;font-weight:600;display:none;max-width:92vw;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.4)}
+#tarjeta-version{position:fixed;right:14px;bottom:calc(74px + var(--safe-b));z-index:85;display:flex;align-items:center;gap:10px;max-width:min(460px,calc(100vw - 28px));
+  background:var(--s900);border:1px solid var(--ambar);border-radius:12px;padding:10px 12px;font-size:13px;color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+#tarjeta-version[hidden]{display:none}
 .modal{position:fixed;inset:0;background:rgba(2,6,23,.7);z-index:80;display:flex;align-items:center;justify-content:center;padding:14px}
 .modal[hidden]{display:none}
 .modal-card{width:100%;max-width:440px;max-height:90vh;overflow:auto;background:var(--s900);border:1px solid var(--s700);border-radius:14px;padding:16px}
@@ -410,6 +413,12 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
 </div>
 
 <div id="aviso" class="no-print" role="status"></div>
+<div id="tarjeta-version" class="no-print" role="alert" hidden>
+  <div style="font-size:22px">⏲️</div>
+  <div style="flex:1"><b>Nueva versión disponible</b><div id="tarjeta-version-txt" style="font-size:12px;color:var(--s300)">Actualice para usar los últimos cambios. Su dibujo queda guardado.</div></div>
+  <button class="btn ambar" onclick="location.reload()">Actualizar ahora</button>
+  <button class="btn" onclick="document.getElementById('tarjeta-version').hidden = true" aria-label="Más tarde">Más tarde</button>
+</div>
 <div id="modal" class="modal no-print" hidden>
   <form class="modal-card" id="modal-form" onsubmit="return false" novalidate>
     <h3 id="modal-titulo"></h3>
@@ -650,7 +659,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v12';   // subir junto con VERSION en sw.js en cada publicación
+const APP_VERSION = 'v13';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-10-22T19:31';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -2418,7 +2428,26 @@ async function instalarApp(desdeMenu) {
   });
 }
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  /* revisa si hay versión nueva al abrir, cada 30 min y al volver a la ventana; si la hay, muestra la tarjeta */
+  window.addEventListener('load', async () => {
+    try {
+      const habia = !!navigator.serviceWorker.controller;
+      const reg = await navigator.serviceWorker.register('sw.js');
+      navigator.serviceWorker.addEventListener('controllerchange', () => { if (habia) mostrarTarjetaVersion(); });
+      const revisar = () => reg.update().catch(() => {});
+      setInterval(revisar, 30 * 60 * 1000);
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) revisar(); });
+    } catch (_) { /* sin service worker: la app funciona igual */ }
+  });
+}
+
+async function mostrarTarjetaVersion() {
+  $('tarjeta-version').hidden = false;
+  try {
+    const html = await (await fetch(location.href.split('#')[0].split('?')[0] + '?v=' + Date.now(), { cache: 'no-store' })).text();
+    const v = html.match(/const APP_VERSION = '([^']+)'/);
+    if (v && v[1] !== APP_VERSION) $('tarjeta-version-txt').textContent = `Versión ${v[1]} publicada (usted tiene ${APP_VERSION}). Su dibujo queda guardado.`;
+  } catch (_) {}
 }
 
 /* ---------- 20. Interfaz: panel lateral, avisos, ventanas ---------- */
@@ -2500,7 +2529,9 @@ function sincronizarSelectores() {
 /* ---------- 21. Arranque ---------- */
 (function iniciar() {
   construirInterfaz();
-  $('version-app').textContent = `DP-F-009 · ${APP_VERSION}`; $('hud-version').textContent = APP_VERSION;
+  const fv = new Date(APP_FECHA + 'Z'), dosD = n => String(n).padStart(2, '0');
+  const fechaTxt = isNaN(fv) ? '' : `${dosD(fv.getDate())}/${dosD(fv.getMonth() + 1)}/${fv.getFullYear()} ${dosD(fv.getHours())}:${dosD(fv.getMinutes())}`;
+  $('version-app').textContent = `DP-F-009 · ⏲ ${APP_VERSION} · ${fechaTxt}`; $('hud-version').textContent = `${APP_VERSION} · ${fechaTxt}`;
   cargarLocal();
   if (!estado.cabecera.fecha) estado.cabecera.fecha = hoyISO();
   sincronizarSelectores(); pintarCabecera(); construirCatalogo(); sincronizarTrazo();
