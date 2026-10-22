@@ -968,12 +968,17 @@ const TAKEOFF = {
   tee:         tablaMM([25, 29, 38, 48, 57, 64, 76, 86, 105, 143, 178, 216, 254, 279, 305, 343, 381, 432]),
   reducer:     tablaMM([null, 38, 51, 51, 64, 76, 89, 89, 102, 140, 152, 178, 203, 330, 356, 381, 508, 508]),
   cap:         tablaMM([25, 25, 38, 38, 38, 38, 38, 51, 64, 89, 102, 127, 152, 165, 178, 203, 229, 267]),
-  flange_wn:   tablaMM([48, 52, 56, 57, 62, 62, 68, 68, 75, 87, 100, 100, 113, 125, 125, 138, 143, 151]),
+  /* brida WN clase 150: largo Y (1"–14" ficha FEINSA; 1/2", 3/4" y 16"–24" ASME B16.5) */
+  flange_wn:   tablaMM([48, 52, 54, 56, 60, 62, 68, 68, 75, 87, 100, 100, 113, 125, 125, 138, 143, 151]),
+  /* stub end MSS SP-43 tipo B: largo F (ficha FEINSA) */
+  stub_end:    tablaMM([50.8, 50.8, 50.8, 50.8, 50.8, 63.5, 63.5, 63.5, 76.2]),
   v_gate:      tablaMM([108, 117, 127, 140, 165, 178, 190, 203, 229, 267, 292, 330, 356, 381, 406, 432, 457, 508]),
   v_globe:     tablaMM([108, 117, 127, 140, 165, 203, 216, 241, 292, 406, 495, 622, 698]),
   v_check:     tablaMM([108, 117, 127, 140, 165, 203, 216, 241, 292, 356, 495, 622, 698, 787, 864, 978, 978, 1295]),
   v_butterfly: tablaMM([null, null, null, null, null, 43, 46, 46, 52, 56, 60, 68, 78, 92, 102, 114, 127, 154])
 };
+/* brida WN clase 300: largo Y (ficha FEINSA, 3/4"–16") */
+const FLANGE_WN_300 = { '3/4"': 56, '1"': 60, '1-1/4"': 64, '1-1/2"': 67, '2"': 68, '2-1/2"': 75, '3"': 78, '4"': 84, '6"': 97, '8"': 110, '10"': 116, '12"': 129, '14"': 141, '16"': 144 };
 TAKEOFF.tee_red = TAKEOFF.tee; TAKEOFF.cross = TAKEOFF.tee; TAKEOFF.reducer_ecc = TAKEOFF.reducer; TAKEOFF.elbow180 = TAKEOFF.elbow90; TAKEOFF.v_ball = TAKEOFF.v_gate;
 /* Roscados NPT: penetración de rosca E (mm, apriete normal) y centro a extremo A de accesorios
    de hierro maleable clase 150 (ASME B16.3). El descuento al tubo es A − E. */
@@ -991,9 +996,9 @@ const ROSCA_VALV = {
   v_check: tablaRosca([null, null, 62, 72, 82, 95, 105, 120])
 };
 /* Socket weld 3000# (ASME B16.11, ficha del fabricante): A = centro a fondo de socket (codo 90°, tee, cruz),
-   E = fondo a fondo de socket (copla), J = profundidad mínima del socket. Codo 45°: valores de la norma B16.11. */
+   E = fondo a fondo de socket (copla), J = profundidad mínima del socket. */
 const SW_A90 = tablaRosca([11.0, 13.5, 15.5, 19.0, 22.5, 27.0, 32.0, 38.0, 41.0, 57.0, 66.5]);
-const SW_A45 = tablaRosca([8.0, 8.0, 11.0, 13.0, 14.0, 17.0, 21.0, 25.0, 29.0, 31.0, 41.0]);
+const SW_A45 = tablaRosca([8.0, 8.0, 11.0, 13.0, 14.0, 17.5, 20.5, 25.5, 28.5, 32.0, 41.0]);   // 1/2"–4": ficha FEINSA codo 45° SW 3000
 const SW_E_COPLA = tablaRosca([6.5, 6.5, 9.5, 9.5, 12.5, 12.5, 12.5, 19.0, 19.0, 19.0, 19.0]);
 const SW_J = tablaRosca([9.5, 9.5, 9.5, 12.5, 12.5, 12.5, 12.5, 16.0, 16.0, 16.0, 19.0]);
 /* Olets 3000# (ficha FEINSA): A = altura desde la superficie del tubo principal, por diámetro del ramal */
@@ -1051,6 +1056,7 @@ function fuenteLargo(c) {
   if (fab) return fab.mm[c.nps] ? 'hoja Danfoss' : null;
   const j = SPECS[c.schedule]?.junta || 'BW';
   if (j === 'ROSCA') return ROSCA_VALV[c.type]?.[c.nps] ? 'típico roscado' : ({ elbow90: 1, elbow90_sr: 1, tee: 1, tee_red: 1, cross: 1, elbow45: 1 }[c.type] && ROSCA_E[c.nps] ? 'ASME B16.3' : null);
+  if (c.type === 'flange_wn') return j === 'BW' && largoAccesorio(c) ? (/300#/.test(SPECS[c.schedule]?.brida || '') ? 'B16.5 clase 300' : 'B16.5 clase 150') : null;
   return j === 'BW' && TAKEOFF[c.type]?.[c.nps] ? 'ASME' : null;
 }
 /* Largo que un accesorio le quita al tubo (m): valor del usuario o de la tabla que corresponda */
@@ -1070,6 +1076,12 @@ function largoAccesorio(c) {
     return A ? Math.max(0, A - E) / 1000 : 0;
   }
   if (junta !== 'BW') return 0;
+  if (c.type === 'flange_wn') {
+    /* el largo del cuello depende de la clase de la brida en la especificación */
+    const clase = /300#/.test(SPECS[c.schedule]?.brida || '') ? 300 : /150#/.test(SPECS[c.schedule]?.brida || '') ? 150 : 0;
+    const L = clase === 300 ? FLANGE_WN_300[c.nps] : clase === 150 ? TAKEOFF.flange_wn[c.nps] : 0;
+    return (L || 0) / 1000;
+  }
   const tabla = TAKEOFF[c.type]; if (!tabla) return 0;
   return (tabla[c.nps] || 0) / 1000;
 }
@@ -2096,7 +2108,7 @@ function exportToExcel() {
   const meta = [['CLIENTE', cab.cliente], ['PROYECTO', cab.proyecto], ['DIBUJO / LÍNEA N°', cab.linea], ['FECHA', fecha], ['CONSECUTIVO', cab.consecutivo],
     ['DIÁMETRO NOMINAL (NPS)', cab.nps], ['ESPECIFICACIÓN DE MATERIAL', cab.spec], ['ESCALA', `S/E · 1 paso de grilla = ${fmtLong(estado.escala)}`],
     ['FLUIDO / SERVICIO · PRUEBA', cab.servicio], ['ELABORÓ', cab.elaboro], ['REVISÓ', cab.reviso], ['APROBÓ', cab.aprobo], ['NOTAS / OBSERVACIONES', cab.notas],
-    ['JUNTAS', `BW: apertura de raíz ${estado.apertura} mm, bisel 37,5° ± 2,5° (ASME B16.25) · SW: separación ${estado.sepSW} mm entre tubo y fondo del socket antes de soldar`]];
+    ['JUNTAS', `BW: apertura de raíz ${estado.apertura} mm, bisel simple 37,5° ± 2,5° hasta 22 mm de espesor y bisel compuesto en espesores mayores (ASME B16.25) · SW: separación ${estado.sepSW} mm entre tubo y fondo del socket antes de soldar`]];
   const totML = r2(ultimoBOM.filter(f => f.uni === 'ML' && !f.consumible).reduce((s, f) => s + Number(f.cant || 0), 0));
   const nJuntas = estado.components.filter(c => c.type === 'weld').length;
   let nT = 0;
