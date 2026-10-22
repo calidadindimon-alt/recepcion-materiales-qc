@@ -1416,8 +1416,69 @@ function crearComponente(tipo, coords, rot, extra) {
   return Object.assign({ id: nuevoId(), category: TIPOS[tipo].cat, type: tipo, nps: $('spec-nps').value, schedule: $('spec-mat').value,
     length: 0, lengthManual: false, coords, rotation: normAng(rot) }, extra || {});
 }
+/* ---------- 10b. Diámetro automático ----------
+   Un tramo nuevo toma el diámetro y la especificación del tramo al que se conecta; al pasar por una
+   reducción (o arrancar de una tee reductora u olet) toma el diámetro menor. Al colocar una reducción,
+   los tramos del lado chico (y sus accesorios) pasan al diámetro menor hasta la siguiente reducción. */
+const REDUCTORES_LINEA = ['reducer', 'reducer_ecc', 'swage', 'bushing', 'coupling_red'];
+const DERIVACIONES = ['tee_red', 'weldolet', 'sockolet', 'threadolet', 'half_coupling'];
+function sobreTubo(P, c) {
+  const a = aPantalla(c.coords[0]), b = aPantalla(c.coords[1]), s = aPantalla(P), dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy || 1;
+  const t = ((s.x - a.x) * dx + (s.y - a.y) * dy) / L2;
+  return t > 1e-6 && t < 1 - 1e-6 && Math.hypot(a.x + t * dx - s.x, a.y + t * dy - s.y) < 0.5;
+}
+const tocaTubo = (P, c) => igual(c.coords[0], P) || igual(c.coords[1], P) || sobreTubo(P, c);
+/* Parte un tramo en P (la longitud manual se reparte en proporción) y devuelve el tramo nuevo P→B */
+function partirTubo(c, P) {
+  const tot = pasosReales(c), d = JSON.parse(JSON.stringify(c));
+  d.id = nuevoId(); d.coords = [P, c.coords[1]]; c.coords = [c.coords[0], P];
+  if (c.lengthManual) { const f = pasosReales(c) / (tot || 1); d.length = r3(c.length * (1 - f)); c.length = r3(c.length * f); }
+  estado.components.splice(estado.components.indexOf(c) + 1, 0, d);
+  return d;
+}
+/* Diámetro del tramo que sale de P en la dirección ang, según lo que haya en P */
+function diametroDesde(P, ang) {
+  for (const o of estado.components) {
+    if (o.type === 'pipe' || !o.npsRed || !igual(o.coords[0], P)) continue;
+    if (REDUCTORES_LINEA.includes(o.type)) return casiAng(ang, o.rotation) ? o.npsRed : o.nps;
+    if (OLET_A[o.type] || o.type === 'half_coupling') return o.npsRed;
+    if (o.type === 'tee_red') { const br = brazosAccesorio(o).brazos; return casiAng(ang, br[2]) ? o.npsRed : o.nps; }
+  }
+  return null;
+}
+/* Cambia el diámetro de un tramo y sigue por los tramos conectados (codos, tees iguales, uniones directas)
+   hasta encontrar otra reducción o derivación; actualiza también los accesorios que están sobre ellos */
+function propagarDiametro(inicio, nps) {
+  const vistos = new Set(), pila = [inicio];
+  while (pila.length) {
+    const c = pila.pop(); if (vistos.has(c)) continue; vistos.add(c); c.nps = nps;
+    for (const o of estado.components) {
+      if (o.type === 'pipe' || !tocaTubo(o.coords[0], c)) continue;
+      if (REDUCTORES_LINEA.includes(o.type) || DERIVACIONES.includes(o.type) || TIPOS[o.type].modo === 'equipo') continue;
+      o.nps = nps;
+    }
+    for (const Q of c.coords) {
+      if (estado.components.some(o => o.type !== 'pipe' && igual(o.coords[0], Q) && (REDUCTORES_LINEA.includes(o.type) || DERIVACIONES.includes(o.type)))) continue;
+      for (const p of tuberias()) if (!vistos.has(p) && (igual(p.coords[0], Q) || igual(p.coords[1], Q) || sobreTubo(Q, p))) pila.push(p);
+    }
+  }
+}
+/* Aplica una reducción o derivación: parte el tramo si quedó en medio y fija los diámetros a cada lado */
+function aplicarReduccion(r) {
+  if (!r.npsRed) return;
+  const P = r.coords[0], esLinea = REDUCTORES_LINEA.includes(r.type);
+  if (esLinea) for (const c of [...tuberias()]) if (sobreTubo(P, c)) partirTubo(c, P);
+  for (const c of tuberias()) {
+    const otro = igual(c.coords[0], P) ? c.coords[1] : igual(c.coords[1], P) ? c.coords[0] : null; if (!otro) continue;
+    const d = diametroDesde(P, angPantalla(P, otro)); if (d) propagarDiametro(c, d);
+  }
+}
 function crearTuberia(A, B, info) {
   const c = crearComponente('pipe', [A, B], angPantalla(A, B));
+  /* hereda diámetro y especificación del tramo o la reducción donde arranca */
+  const previo = tuberias().find(p => tocaTubo(A, p));
+  if (previo) { c.nps = previo.nps; c.schedule = previo.schedule; }
+  const red = diametroDesde(A, c.rotation); if (red) c.nps = red;
   if (info && info.libre && !dirEntre(A, B)) c.libre = { plano: info.plano, ang: info.angPlano };
   c.length = longitudTubo(c);
   commit(() => estado.components.push(c));
@@ -1509,6 +1570,9 @@ function colocarSimbolo(tipo, pt, R) {
   const dup = estado.components.find(o => o.type === tipo && (() => { const q = aPantalla(o.coords[0]); return Math.hypot(q.x - s.x, q.y - s.y) < (tipo === 'weld' ? 7 : 3); })());
   if (dup) { aviso(`Ya hay ${T.corto.toLowerCase()} en ese punto`, 'error', 1800); return; }
   const c = crearComponente(tipo, [pos.P], pos.rot);
+  /* el accesorio toma diámetro y especificación del tramo donde se coloca */
+  const base = tuberias().find(p => tocaTubo(pos.P, p));
+  if (base && T.modo !== 'equipo') { c.nps = base.nps; c.schedule = base.schedule; }
   if (!T.reduce) { commit(() => estado.components.push(c)); aviso(`${T.corto} colocado`, 'ok', 900); return; }
   const i = NPS_LISTA.indexOf(c.nps), sugerido = NPS_LISTA[Math.max(0, i - 1)];
   abrirModal({
@@ -1519,7 +1583,8 @@ function colocarSimbolo(tipo, pt, R) {
     alAceptar: () => {
       c.npsRed = $('m-red').value;
       if (npsNum(c.npsRed) >= npsNum(c.nps)) { aviso('El diámetro menor debe ser inferior al mayor', 'error'); return false; }
-      commit(() => estado.components.push(c));
+      commit(() => { estado.components.push(c); aplicarReduccion(c); });
+      aviso(`${T.corto} ${c.nps} x ${c.npsRed}: los tramos del lado menor pasaron a ${c.npsRed}`, 'ok', 2600);
     }
   });
 }
@@ -1779,6 +1844,7 @@ function renderPanelSeleccion() {
     <label>Diámetro (NPS)</label><select data-p="nps">${opNps(c.nps)}</select>
     ${T.reduce ? `<label>Diámetro menor</label><select data-p="npsRed">${opNps(c.npsRed)}</select>` : ''}
     <label>Especificación</label><select data-p="schedule">${Object.keys(SPECS).map(s => `<option value="${esc(s)}"${s === c.schedule ? ' selected' : ''}>${esc(SPECS[s].corto)}</option>`).join('')}</select>
+    ${T.modo !== 'equipo' && !T.noBOM ? `<button class="btn" style="width:100%;margin-top:5px" data-acc="specLinea">Aplicar esta especificación a toda la línea</button>` : ''}
     ${c.type === 'pipe' ? `<label>Longitud (${txtUnidad()})${c.lengthManual ? ' · manual' : ' · por grilla'}</label>
       <div style="display:flex;gap:5px"><input data-p="length" type="number" step="any" min="0" inputmode="decimal" value="${aUnidad(longitudTubo(c))}">
       <button class="btn" data-acc="auto" title="Volver a la longitud por grilla">Grilla</button></div>
@@ -1792,7 +1858,7 @@ function renderPanelSeleccion() {
     ${T.modo === 'equipo' ? `<label>TAG del equipo</label><input data-p="tag" maxlength="24" placeholder="Ej: P-101, TK-01" value="${esc(c.tag || '')}">` : ''}
     ${c.type !== 'pipe' && c.type !== 'weld' && !TIPOS[c.type].noBOM && T.modo !== 'equipo' ? `<div style="margin-top:6px;font:600 11px var(--mono);color:var(--s300)">Unión: ${tipoUnion(c)}${holgura(c) ? ` · holgura ${fmtLong(holgura(c))} por junta` : ''}</div>` : ''}
     ${c.type !== 'weld' && !TIPOS[c.type].noBOM ? `<label>Código / ref. fabricante</label><input data-p="ref" maxlength="60" placeholder="Ej: 032U1247" value="${esc(c.ref || '')}">` : ''}
-    <div class="acc">${c.type !== 'pipe' && TIPOS[c.type].modo !== 'punto' ? `<button class="btn" data-acc="rotar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-rotate"/></svg>${c.type === 'flow' ? 'Invertir' : T.modo === 'equipo' ? 'Girar' : 'Rotar'}</button>` : ''}
+    <div class="acc">${c.type !== 'pipe' && TIPOS[c.type].modo !== 'punto' ? `<button class="btn" data-acc="rotar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-rotate"/></svg>${c.type === 'flow' || REDUCTORES_LINEA.includes(c.type) ? 'Invertir' : T.modo === 'equipo' ? 'Girar' : 'Rotar'}</button>` : ''}
       <button class="btn peligro" data-acc="borrar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-trash"/></svg>Borrar</button></div>`;
   p.hidden = false;
 }
@@ -1818,15 +1884,40 @@ $('panel-sel').addEventListener('change', e => {
   } else if (k === 'ref') {
     const v = e.target.value.trim().toUpperCase();
     commit(() => { if (v) c.ref = v; else delete c.ref; });
+  } else if ((k === 'nps' || k === 'npsRed') && c.npsRed && (REDUCTORES_LINEA.includes(c.type) || DERIVACIONES.includes(c.type))) {
+    commit(() => { c[k] = e.target.value; aplicarReduccion(c); });
+  } else if (k === 'nps' && c.type === 'pipe') {
+    commit(() => propagarDiametro(c, e.target.value));
   } else commit(() => { c[k] = e.target.value; });
 });
 $('panel-sel').addEventListener('click', e => {
   const b = e.target.closest('[data-acc]'), c = estado.components.find(x => x.id === seleccion); if (!b || !c) return;
   if (b.dataset.acc === 'borrar') deleteSelected();
-  if (b.dataset.acc === 'rotar') commit(() => { c.rotation = normAng(c.rotation + (c.type === 'flow' ? 180 : 60)); });
+  if (b.dataset.acc === 'rotar') commit(() => {
+    const invertir = c.type === 'flow' || REDUCTORES_LINEA.includes(c.type);
+    c.rotation = normAng(c.rotation + (invertir ? 180 : 60));
+    if (REDUCTORES_LINEA.includes(c.type) || c.type === 'tee_red') aplicarReduccion(c);
+  });
   if (b.dataset.acc === 'pend') pedirPendiente(c);
+  if (b.dataset.acc === 'specLinea') {
+    const lista = componentesDeLinea(c);
+    commit(() => lista.forEach(o => { o.schedule = c.schedule; }));
+    aviso(`${lista.length} componentes de la línea pasaron a ${SPECS[c.schedule]?.corto || c.schedule}`, 'ok', 2600);
+  }
   if (b.dataset.acc === 'auto') commit(() => { c.lengthManual = false; c.length = longitudTubo(c); });
 });
+/* Todos los componentes de la línea conectada a c (tramos unidos por sus extremos o derivaciones) */
+function componentesDeLinea(c) {
+  const semilla = c.type === 'pipe' ? [c] : tuberias().filter(p => tocaTubo(c.coords[0], p));
+  const vistos = new Set(), pila = [...semilla];
+  while (pila.length) {
+    const t = pila.pop(); if (vistos.has(t)) continue; vistos.add(t);
+    for (const p of tuberias()) if (!vistos.has(p) && (t.coords.some(Q => tocaTubo(Q, p)) || p.coords.some(Q => tocaTubo(Q, t)))) pila.push(p);
+  }
+  const res = new Set([...vistos, c]);
+  for (const o of estado.components) if (o.type !== 'pipe' && TIPOS[o.type].modo !== 'equipo' && [...vistos].some(t => tocaTubo(o.coords[0], t))) res.add(o);
+  return [...res].filter(o => !TIPOS[o.type].noBOM);
+}
 function deleteSelected() {
   if (!seleccion) { aviso('Seleccione primero un componente (herramienta Tocar)'); return; }
   const id = seleccion;
@@ -1905,7 +1996,8 @@ svg.addEventListener('pointerdown', e => {
       if (c.type !== 'pipe') { const s = aPantalla(c.coords[0]); return Math.hypot(s.x - pt.x, s.y - pt.y); }
       const a = aPantalla(c.coords[0]), b = aPantalla(c.coords[1]), dx = b.x - a.x, dy = b.y - a.y, t = Math.max(0, Math.min(1, ((pt.x - a.x) * dx + (pt.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
       return Math.hypot(a.x + t * dx - pt.x, a.y + t * dy - pt.y); };
-    ids.sort((x, y) => dist(x) - dist(y));
+    const esTubo = id => estado.components.find(x => x.id === id)?.type === 'pipe' ? 1 : 0;
+    ids.sort((x, y) => (Math.floor(dist(x) / 4) - Math.floor(dist(y) / 4)) || (esTubo(x) - esTubo(y)) || (dist(x) - dist(y)));   // a menos de 4 px: el accesorio antes que el tubo
     if (ids.length) seleccionar(ids[(ids.indexOf(seleccion) + 1) % ids.length]); else { seleccionar(null); arrastreHoja = { x: e.clientX, y: e.clientY }; }
     return;
   }
@@ -2045,7 +2137,24 @@ function pintarCabecera() {
 }
 document.querySelectorAll('[data-h]').forEach(i => i.addEventListener('input', () => { estado.cabecera[i.dataset.h] = i.value; guardarLocal(); }));
 $('spec-nps').addEventListener('change', () => { estado.cabecera.nps = $('spec-nps').value; pintarCabecera(); guardarLocal(); });
-$('spec-mat').addEventListener('change', () => { estado.cabecera.spec = $('spec-mat').value; pintarCabecera(); guardarLocal(); });
+$('spec-mat').addEventListener('change', () => {
+  const spec = $('spec-mat').value; estado.cabecera.spec = spec; pintarCabecera(); guardarLocal();
+  const n = estado.components.filter(c => !TIPOS[c.type].noBOM && TIPOS[c.type].modo !== 'equipo' && c.schedule !== spec).length;
+  if (!n) return;
+  abrirModal({
+    titulo: `Especificación: ${SPECS[spec]?.corto || spec}`,
+    html: `<label>¿A qué se aplica?</label><select id="m-alcance">
+        <option value="nuevo">Solo a lo que dibuje de ahora en adelante</option>
+        <option value="todo">A todo el plano (${n} componentes con otra especificación)</option></select>
+      <p>También puede cambiar una sola línea: seleccione un tramo con <b>Tocar</b> y use «Aplicar esta especificación a toda la línea».</p>`,
+    okTxt: 'Aplicar',
+    alAceptar: () => {
+      if ($('m-alcance').value !== 'todo') return;
+      commit(() => estado.components.forEach(c => { if (!TIPOS[c.type].noBOM && TIPOS[c.type].modo !== 'equipo') c.schedule = spec; }));
+      aviso(`Todo el plano pasó a ${SPECS[spec]?.corto || spec}`, 'ok', 2600);
+    }
+  });
+});
 $('sel-cotas').addEventListener('change', () => { estado.cotas = $('sel-cotas').value; actualizarTodo(); });
 for (const [id, k] of [['in-apertura', 'apertura'], ['in-sepsw', 'sepSW']])
   $(id).addEventListener('change', () => {
