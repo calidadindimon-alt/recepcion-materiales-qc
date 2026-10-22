@@ -13,8 +13,8 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<!-- SheetJS (exportación .xlsx): copia local para trabajo sin internet; si falta, se intenta el CDN -->
-<script src="vendor/xlsx.full.min.js" onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';document.head.appendChild(s)"></script>
+<!-- SheetJS con estilos (xlsx-js-style) para exportar .xlsx con formato: copia local para trabajo sin internet; si falta, se intenta el CDN -->
+<script src="vendor/xlsx.bundle.js" onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js';document.head.appendChild(s)"></script>
 <style>
 /* =====================================================================
    ESTILOS DE LA APLICACIÓN (barra, panel lateral, ventanas) — sin CDN
@@ -66,6 +66,14 @@ button{cursor:pointer}
 .fila-opc input[type=number]{width:70px;background:var(--s800);border:1px solid var(--s700);border-radius:5px;color:var(--cian);font:700 13px var(--mono);text-align:center;padding:3px}
 .fila-opc input[type=checkbox]{width:18px;height:18px;accent-color:var(--ambar)}
 .btn.ancho{width:100%;margin-top:5px;justify-content:flex-start}
+.fila-opc select.sel{min-height:30px;padding:3px 6px;max-width:150px}
+.buscador{width:100%;background:var(--s800);border:1px solid var(--s700);border-radius:7px;padding:8px 9px;font-size:13px;margin-bottom:6px}
+details.grupo-cat{margin-bottom:6px;border:1px solid var(--s800);border-radius:8px;background:rgba(15,23,42,.5)}
+details.grupo-cat>summary{cursor:pointer;list-style:none;padding:8px 9px;font-size:11px;font-weight:800;color:var(--s300);display:flex;justify-content:space-between;gap:6px}
+details.grupo-cat>summary::-webkit-details-marker{display:none}
+details.grupo-cat>summary::after{content:'▸';color:var(--s400)}
+details.grupo-cat[open]>summary::after{content:'▾'}
+details.grupo-cat .rejilla{padding:0 6px 6px}
 .hud{padding:8px 10px;background:var(--s900);border-top:1px solid var(--s800);font:11px var(--mono);color:var(--s400)}
 .hud div{display:flex;justify-content:space-between;margin:2px 0}
 .hud b{color:var(--ambar2)}
@@ -147,6 +155,7 @@ button{cursor:pointer}
 .bom td.r{text-align:right;font:700 11px var(--mono);padding:0}
 .bom td input,.bom td select{width:100%;height:100%;border:0;outline:none;background:transparent;font:inherit;color:inherit;padding:0 4px}
 .bom td.r input{text-align:right}
+.bom td select{appearance:none;-webkit-appearance:none;text-align:center;text-align-last:center;cursor:pointer}
 .bom td input:focus{background:rgba(254,240,138,.55)}
 .bom tr.ajustado td.r input{color:#b45309}
 .bom .quitar{border:0;background:none;color:#dc2626;font-weight:900;padding:0 3px;cursor:pointer}
@@ -163,6 +172,8 @@ button{cursor:pointer}
 .sb{fill:#fff;stroke:#000;stroke-width:1.6;stroke-linejoin:round}
 .sn{fill:#000;stroke:#000;stroke-width:1.2}
 .cota{font:700 10.5px Arial;fill:#0f172a;paint-order:stroke;stroke:#fff;stroke-width:3px}
+.wl{font:700 9.5px Arial;fill:#b91c1c;paint-order:stroke;stroke:#fff;stroke-width:2.5px}
+.angl{font:italic 700 9.5px Arial;fill:#334155;paint-order:stroke;stroke:#fff;stroke-width:2.5px}
 
 /* ---------- Adaptación a tableta y móvil ---------- */
 @media (max-width:1023px){
@@ -247,27 +258,31 @@ button{cursor:pointer}
           <div class="fila-opc"><span>Unidad de cotas</span><select id="sel-unidad" class="sel" style="min-height:30px;padding:3px 6px;color:var(--cian)"><option value="mm">Milímetros (mm)</option><option value="m">Metros (m)</option></select></div>
           <div class="fila-opc"><span>Paso de grilla (<b id="lbl-unidad-paso">mm</b>)</span><input id="grid-scale" type="number" step="any" min="0.001" value="500" inputmode="decimal"></div>
           <label class="fila-opc"><span>Confirmar longitud al trazar</span><input type="checkbox" id="chk-manual-len" checked></label>
+          <div class="fila-opc"><span>Ángulo de trazado</span><select id="sel-trazo" class="sel" style="color:var(--ambar2)">
+            <option value="iso">ISO 30°/90°/150°</option><option value="15">Libre · cada 15°</option><option value="5">Libre · cada 5°</option><option value="1">Libre · cada 1°</option></select></div>
+          <div class="fila-opc" id="fila-plano" hidden><span>Plano del ángulo</span><select id="sel-plano" class="sel" style="color:var(--ambar2)">
+            <option value="H">Horizontal (desde N)</option><option value="NZ">Vertical N-S</option><option value="EZ">Vertical E-O</option></select></div>
         </div>
 
         <div class="sec">
-          <h3>2. Accesorios (fittings)</h3>
-          <div class="rejilla" id="herr-accesorios"></div>
+          <h3>2. Catálogo de simbología</h3>
+          <input id="buscar-sim" class="buscador" type="search" placeholder="Buscar: codo, bola, brida, filtro…" autocomplete="off" aria-label="Buscar símbolo">
+          <div id="catalogo"></div>
+          <button class="btn ancho" onclick="abrirCatalogoPropio()"><svg class="ico" data-ico="plus"></svg>Agregar ítem al catálogo</button>
+          <button class="btn ancho" onclick="document.getElementById('in-catalogo').click()"><svg class="ico" data-ico="folder"></svg>Importar catálogo (.csv)</button>
+          <button class="btn ancho" onclick="descargarPlantillaCatalogo()"><svg class="ico" data-ico="sheet"></svg>Plantilla de catálogo (.csv)</button>
+          <input type="file" id="in-catalogo" accept=".csv,text/csv,.txt" hidden>
         </div>
 
         <div class="sec">
-          <h3>3. Válvulas</h3>
-          <div class="rejilla" id="herr-valvulas"></div>
-        </div>
-
-        <div class="sec">
-          <h3>4. Juntas y BOM</h3>
-          <div class="rejilla dos" id="herr-juntas"></div>
+          <h3>3. Juntas y BOM</h3>
+          <button class="btn ancho ambar" onclick="generarJuntas()"><svg class="ico" data-ico="check"></svg>Generar juntas soldadas automáticas</button>
           <button class="btn ancho" onclick="openConsumableModal()"><svg class="ico" data-ico="plus"></svg>Añadir consumible al BOM</button>
           <button class="btn ancho peligro" onclick="clearCanvas()"><svg class="ico" data-ico="trash"></svg>Limpiar todo el plano</button>
         </div>
 
         <div class="sec">
-          <h3>5. Archivo y aplicación</h3>
+          <h3>4. Archivo y aplicación</h3>
           <button class="btn ancho" onclick="nuevoPlano()"><svg class="ico" data-ico="file"></svg>Nuevo plano</button>
           <button class="btn ancho" onclick="document.getElementById('in-proyecto').click()"><svg class="ico" data-ico="folder"></svg>Abrir proyecto (.json)</button>
           <button class="btn ancho" onclick="guardarProyecto()"><svg class="ico" data-ico="save"></svg>Guardar proyecto (.json)</button>
@@ -376,6 +391,8 @@ button{cursor:pointer}
       <button class="btn rapida solo-movil" data-rapida="pan" onclick="setActiveTool('pan')" aria-label="Mover hoja"><svg class="ico" data-ico="move"></svg></button>
       <button class="btn rapida solo-movil" data-rapida="select" onclick="setActiveTool('select')" aria-label="Seleccionar"><svg class="ico" data-ico="pointer"></svg></button>
       <button class="btn rapida solo-movil" data-rapida="pipe" onclick="setActiveTool('pipe')" aria-label="Tubería"><svg class="ico" data-ico="pipe"></svg></button>
+      <button class="btn" id="btn-modo-trazo" onclick="ciclarModoTrazo()" title="Ángulo de trazado: ISO o libre (A)" style="font-family:var(--mono)">ISO</button>
+      <button class="btn" id="btn-plano" onclick="ciclarPlano()" title="Plano del ángulo libre (P)" hidden>Plano H</button>
       <span class="pista" id="pista">Tubería: toque y arrastre</span>
       <button class="btn ambar" id="btn-terminar" onclick="terminarTrazo()" hidden><svg class="ico" data-ico="check"></svg>Terminar</button>
       <button class="btn" onclick="enfocarLienzo()" title="Acercar al área de dibujo"><svg class="ico" data-ico="target"></svg><span class="txt-btn">Lienzo</span></button>
@@ -385,7 +402,7 @@ button{cursor:pointer}
 
 <div id="aviso" class="no-print" role="status"></div>
 <div id="modal" class="modal no-print" hidden>
-  <form class="modal-card" id="modal-form" onsubmit="return false">
+  <form class="modal-card" id="modal-form" onsubmit="return false" novalidate>
     <h3 id="modal-titulo"></h3>
     <div id="modal-cuerpo"></div>
     <div class="modal-acc">
@@ -425,35 +442,111 @@ const HOJA = { w: 1400, h: 990 };
 let ORIGEN = { x: 0, y: 0 }, LIENZO = { w: 0, h: 0 };
 
 /* ---------- 2. Catálogos técnicos ---------- */
-const NPS_LISTA = ['1/2"', '3/4"', '1"', '1-1/2"', '2"', '3"', '4"', '6"', '8"', '10"', '12"'];
+const NPS_LISTA = ['1/4"', '3/8"', '1/2"', '3/4"', '1"', '1-1/4"', '1-1/2"', '2"', '2-1/2"', '3"', '4"', '6"', '8"', '10"', '12"', '14"', '16"', '18"', '20"', '24"'];
+/* Especificaciones de material: tubo, accesorios BW, forjados (roscados / socket weld), bridas, válvulas y tipo de junta */
 const SPECS = {
-  'SCH 40 ASTM A106 Gr.B':   { corto: 'SCH 40 A106 Gr.B',   sch: 'SCH 40',  tubo: 'ASTM A106 Gr.B SIN COSTURA, EXTREMOS BISELADOS', acc: 'ASTM A234 WPB, BW', brida: 'ASTM A105 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A216 WCB' },
-  'SCH 80 ASTM A106 Gr.B':   { corto: 'SCH 80 A106 Gr.B',   sch: 'SCH 80',  tubo: 'ASTM A106 Gr.B SIN COSTURA, EXTREMOS BISELADOS', acc: 'ASTM A234 WPB, BW', brida: 'ASTM A105 300# RF', val: 'CLASE 300 RF, CUERPO ASTM A216 WCB' },
-  'SCH 40S ASTM A312 TP304L':{ corto: 'SCH 40S Inox 304L',  sch: 'SCH 40S', tubo: 'ASTM A312 TP304L, EXTREMOS BISELADOS', acc: 'ASTM A403 WP304L, BW', brida: 'ASTM A182 F304L 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A351 CF3' },
-  'SCH 10S ASTM A312 TP316L':{ corto: 'SCH 10S Inox 316L',  sch: 'SCH 10S', tubo: 'ASTM A312 TP316L, EXTREMOS BISELADOS', acc: 'ASTM A403 WP316L, BW', brida: 'ASTM A182 F316L 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A351 CF3M' },
-  'SCH 40 ASTM A53 Galv':    { corto: 'SCH 40 Galvanizado', sch: 'SCH 40',  tubo: 'ASTM A53 Gr.B GALVANIZADO, ROSCADO NPT', acc: 'HIERRO MALEABLE GALV. 150#, ROSCADO NPT', brida: 'ROSCADA ASTM A105 GALV. 150# FF', val: 'ROSCADA NPT 600 WOG, BRONCE' }
+  'SCH 40 ASTM A106 Gr.B':    { corto: 'SCH 40 A106 Gr.B',    sch: 'SCH 40',  tubo: 'ASTM A106 Gr.B SIN COSTURA, EXTREMOS BISELADOS', acc: 'ASTM A234 WPB, BW', forj: 'ASTM A105 3000#, SW/NPT', brida: 'ASTM A105 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A216 WCB', junta: 'BW' },
+  'SCH STD ASTM A106 Gr.B':   { corto: 'SCH STD A106 Gr.B',   sch: 'SCH STD', tubo: 'ASTM A106 Gr.B SIN COSTURA, EXTREMOS BISELADOS', acc: 'ASTM A234 WPB, BW', forj: 'ASTM A105 3000#, SW/NPT', brida: 'ASTM A105 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A216 WCB', junta: 'BW' },
+  'SCH 80 ASTM A106 Gr.B':    { corto: 'SCH 80 A106 Gr.B',    sch: 'SCH 80',  tubo: 'ASTM A106 Gr.B SIN COSTURA, EXTREMOS BISELADOS', acc: 'ASTM A234 WPB, BW', forj: 'ASTM A105 3000#, SW/NPT', brida: 'ASTM A105 300# RF', val: 'CLASE 300 RF, CUERPO ASTM A216 WCB', junta: 'BW' },
+  'SCH 160 ASTM A106 Gr.B':   { corto: 'SCH 160 A106 Gr.B',   sch: 'SCH 160', tubo: 'ASTM A106 Gr.B SIN COSTURA, EXTREMOS BISELADOS', acc: 'ASTM A234 WPB, BW', forj: 'ASTM A105 6000#, SW/NPT', brida: 'ASTM A105 600# RF', val: 'CLASE 600 RF, CUERPO ASTM A216 WCB', junta: 'BW' },
+  'SCH 40 ASTM A53 Gr.B':     { corto: 'SCH 40 A53 Gr.B',     sch: 'SCH 40',  tubo: 'ASTM A53 Gr.B ERW, EXTREMOS BISELADOS', acc: 'ASTM A234 WPB, BW', forj: 'ASTM A105 3000#, SW/NPT', brida: 'ASTM A105 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A216 WCB', junta: 'BW' },
+  'SCH 40 ASTM A333 Gr.6':    { corto: 'SCH 40 A333 Gr.6 (baja T)', sch: 'SCH 40', tubo: 'ASTM A333 Gr.6 SIN COSTURA, BAJA TEMPERATURA', acc: 'ASTM A420 WPL6, BW', forj: 'ASTM A350 LF2 3000#, SW/NPT', brida: 'ASTM A350 LF2 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A352 LCB', junta: 'BW' },
+  'SCH 80 ASTM A335 P11':     { corto: 'SCH 80 A335 P11 (Cr-Mo)', sch: 'SCH 80', tubo: 'ASTM A335 P11 SIN COSTURA, ALEACIÓN Cr-Mo', acc: 'ASTM A234 WP11, BW', forj: 'ASTM A182 F11 3000#, SW', brida: 'ASTM A182 F11 300# RF', val: 'CLASE 300 RF, CUERPO ASTM A217 WC6', junta: 'BW' },
+  'SCH 10S ASTM A312 TP304L': { corto: 'SCH 10S Inox 304L',   sch: 'SCH 10S', tubo: 'ASTM A312 TP304L, EXTREMOS BISELADOS', acc: 'ASTM A403 WP304L, BW', forj: 'ASTM A182 F304L 3000#, SW/NPT', brida: 'ASTM A182 F304L 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A351 CF3', junta: 'BW' },
+  'SCH 40S ASTM A312 TP304L': { corto: 'SCH 40S Inox 304L',   sch: 'SCH 40S', tubo: 'ASTM A312 TP304L, EXTREMOS BISELADOS', acc: 'ASTM A403 WP304L, BW', forj: 'ASTM A182 F304L 3000#, SW/NPT', brida: 'ASTM A182 F304L 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A351 CF3', junta: 'BW' },
+  'SCH 80S ASTM A312 TP304L': { corto: 'SCH 80S Inox 304L',   sch: 'SCH 80S', tubo: 'ASTM A312 TP304L, EXTREMOS BISELADOS', acc: 'ASTM A403 WP304L, BW', forj: 'ASTM A182 F304L 3000#, SW/NPT', brida: 'ASTM A182 F304L 300# RF', val: 'CLASE 300 RF, CUERPO ASTM A351 CF3', junta: 'BW' },
+  'SCH 10S ASTM A312 TP316L': { corto: 'SCH 10S Inox 316L',   sch: 'SCH 10S', tubo: 'ASTM A312 TP316L, EXTREMOS BISELADOS', acc: 'ASTM A403 WP316L, BW', forj: 'ASTM A182 F316L 3000#, SW/NPT', brida: 'ASTM A182 F316L 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A351 CF3M', junta: 'BW' },
+  'SCH 40S ASTM A312 TP316L': { corto: 'SCH 40S Inox 316L',   sch: 'SCH 40S', tubo: 'ASTM A312 TP316L, EXTREMOS BISELADOS', acc: 'ASTM A403 WP316L, BW', forj: 'ASTM A182 F316L 3000#, SW/NPT', brida: 'ASTM A182 F316L 150# RF', val: 'CLASE 150 RF, CUERPO ASTM A351 CF3M', junta: 'BW' },
+  'SANITARIA ASTM A270 316L': { corto: 'Sanitaria A270 316L', sch: 'CAL. 16', tubo: 'ASTM A270 TP316L PULIDO SANITARIO', acc: 'ASME BPE 316L, EXTREMOS PARA SOLDAR', forj: 'ASME BPE 316L CLAMP', brida: 'FÉRULA CLAMP ASME BPE 316L', val: 'SANITARIA CLAMP, CUERPO 316L', junta: 'BW' },
+  'SCH 40 ASTM A53 Galv':     { corto: 'SCH 40 Galvanizado',  sch: 'SCH 40',  tubo: 'ASTM A53 Gr.B GALVANIZADO, ROSCADO NPT', acc: 'HIERRO MALEABLE GALV. 150#, ROSCADO NPT', forj: 'HIERRO MALEABLE GALV. 150#, ROSCADO NPT', brida: 'ROSCADA ASTM A105 GALV. 150# FF', val: 'ROSCADA NPT 600 WOG, BRONCE', junta: 'ROSCA' },
+  'SCH 80 ASTM A53 Galv':     { corto: 'SCH 80 Galvanizado',  sch: 'SCH 80',  tubo: 'ASTM A53 Gr.B GALVANIZADO, ROSCADO NPT', acc: 'HIERRO MALEABLE GALV. 300#, ROSCADO NPT', forj: 'ASTM A105 GALV. 3000#, NPT', brida: 'ROSCADA ASTM A105 GALV. 150# FF', val: 'ROSCADA NPT 800#, ACERO', junta: 'ROSCA' },
+  'PVC SCH 40 ASTM D1785':    { corto: 'PVC SCH 40',          sch: 'SCH 40',  tubo: 'PVC ASTM D1785, EXTREMOS LISOS', acc: 'PVC SCH 40 ASTM D2466, SOLDADO CON CEMENTO', forj: 'PVC SCH 80 ASTM D2464, ROSCADO', brida: 'PVC SCH 80 150# FF', val: 'PVC, EXTREMOS SOLDABLES', junta: 'CEMENTO' },
+  'PVC SCH 80 ASTM D1785':    { corto: 'PVC SCH 80',          sch: 'SCH 80',  tubo: 'PVC ASTM D1785, EXTREMOS LISOS', acc: 'PVC SCH 80 ASTM D2467, SOLDADO CON CEMENTO', forj: 'PVC SCH 80 ASTM D2464, ROSCADO', brida: 'PVC SCH 80 150# FF', val: 'PVC, EXTREMOS SOLDABLES', junta: 'CEMENTO' },
+  'CPVC SCH 80 ASTM F441':    { corto: 'CPVC SCH 80',         sch: 'SCH 80',  tubo: 'CPVC ASTM F441, EXTREMOS LISOS', acc: 'CPVC SCH 80 ASTM F439, SOLDADO CON CEMENTO', forj: 'CPVC SCH 80, ROSCADO', brida: 'CPVC SCH 80 150# FF', val: 'CPVC, EXTREMOS SOLDABLES', junta: 'CEMENTO' },
+  'HDPE PE100 SDR11':         { corto: 'HDPE PE100 SDR11',    sch: 'SDR 11',  tubo: 'HDPE PE100 PN16, TERMOFUSIÓN', acc: 'HDPE PE100 SDR11, TERMOFUSIÓN', forj: 'HDPE PE100, ELECTROFUSIÓN', brida: 'PORTABRIDA HDPE + BRIDA LOCA ACERO GALV.', val: 'CLASE 150 FF', junta: 'FUSION' },
+  'COBRE TIPO L ASTM B88':    { corto: 'Cobre tipo L',        sch: 'TIPO L',  tubo: 'COBRE ASTM B88 TIPO L, RÍGIDO', acc: 'COBRE FORJADO ASME B16.22, SOLDADURA CAPILAR', forj: 'BRONCE ASME B16.18, ROSCADO', brida: 'BRONCE 150#', val: 'BRONCE, EXTREMOS SOLDABLES', junta: 'CAPILAR' }
 };
+const TIPO_JUNTA = { BW: 'JUNTA SOLDADA A TOPE', ROSCA: 'JUNTA ROSCADA', CEMENTO: 'JUNTA CEMENTADA', FUSION: 'JUNTA POR TERMOFUSIÓN', CAPILAR: 'JUNTA SOLDADURA CAPILAR' };
 /* modo: 'nodo' = se ubica en un nodo y orienta sus brazos con las tuberías conectadas;
          'linea' = va sobre el eje de una tubería; 'extremo' = prefiere el final de un tramo;
-         'punto' = marca puntual (soldadura) */
+         'punto' = marca puntual (soldadura)
+   mat:  regla de descripción para el BOM (ver descripcion())
+   grupo: sección del catálogo en el panel lateral */
 const TIPOS = {
-  pipe:        { cat: 'TUBERÍA',   mat: 'tubo',  nombre: 'TUBERÍA',                 corto: 'Tubería',     orden: 0 },
-  elbow90:     { cat: 'ACCESORIO', mat: 'acc',   nombre: 'CODO 90° RADIO LARGO',    corto: 'Codo 90° RL', orden: 1, modo: 'nodo' },
-  elbow45:     { cat: 'ACCESORIO', mat: 'acc',   nombre: 'CODO 45° RADIO LARGO',    corto: 'Codo 45°',    orden: 2, modo: 'nodo' },
-  tee:         { cat: 'ACCESORIO', mat: 'acc',   nombre: 'TEE RECTA',               corto: 'Tee recta',   orden: 3, modo: 'nodo' },
-  tee_red:     { cat: 'ACCESORIO', mat: 'acc',   nombre: 'TEE REDUCTORA',           corto: 'Tee reductora', orden: 4, modo: 'nodo', reduce: true },
-  reducer:     { cat: 'ACCESORIO', mat: 'acc',   nombre: 'REDUCCIÓN CONCÉNTRICA',   corto: 'Red. concéntrica', orden: 5, modo: 'linea', reduce: true },
-  reducer_ecc: { cat: 'ACCESORIO', mat: 'acc',   nombre: 'REDUCCIÓN EXCÉNTRICA',    corto: 'Red. excéntrica',  orden: 6, modo: 'linea', reduce: true },
-  cap:         { cat: 'ACCESORIO', mat: 'acc',   nombre: 'CAP (TAPÓN)',             corto: 'Cap / Tapón', orden: 7, modo: 'extremo' },
-  flange_wn:   { cat: 'BRIDA',     mat: 'brida', nombre: 'BRIDA WELDING NECK',      corto: 'Brida WN',    orden: 8, modo: 'extremo' },
-  flange_so:   { cat: 'BRIDA',     mat: 'brida', nombre: 'BRIDA SLIP-ON',           corto: 'Brida SO',    orden: 9, modo: 'extremo' },
-  v_gate:      { cat: 'VÁLVULA',   mat: 'val',   nombre: 'VÁLVULA DE COMPUERTA',    corto: 'V. Compuerta', orden: 10, modo: 'linea' },
-  v_globe:     { cat: 'VÁLVULA',   mat: 'val',   nombre: 'VÁLVULA DE GLOBO',        corto: 'V. Globo',    orden: 11, modo: 'linea' },
-  v_ball:      { cat: 'VÁLVULA',   mat: 'val',   nombre: 'VÁLVULA DE BOLA',         corto: 'V. Bola',     orden: 12, modo: 'linea' },
-  v_check:     { cat: 'VÁLVULA',   mat: 'val',   nombre: 'VÁLVULA CHEQUE (RETENCIÓN)', corto: 'V. Cheque', orden: 13, modo: 'linea' },
-  v_needle:    { cat: 'VÁLVULA',   mat: 'val',   nombre: 'VÁLVULA DE AGUJA',        corto: 'V. Aguja',    orden: 14, modo: 'linea' },
-  weld:        { cat: 'JUNTA',     mat: 'junta', nombre: 'JUNTA SOLDADA A TOPE',    corto: 'Soldadura (END)', orden: 20, modo: 'punto' }
+  pipe:          { cat: 'TUBERÍA',     mat: 'tubo',  nombre: 'TUBERÍA', corto: 'Tubería', orden: 0 },
+  /* accesorios soldables a tope */
+  elbow90:       { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'nodo',    orden: 1,  nombre: 'CODO 90° RADIO LARGO', corto: 'Codo 90° RL' },
+  elbow90_sr:    { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'nodo',    orden: 2,  nombre: 'CODO 90° RADIO CORTO', corto: 'Codo 90° RC' },
+  elbow45:       { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'nodo',    orden: 3,  nombre: 'CODO 45° RADIO LARGO', corto: 'Codo 45°' },
+  elbow180:      { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'extremo', orden: 4,  nombre: 'CODO 180° RETORNO', corto: 'Codo 180°' },
+  tee:           { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'nodo',    orden: 5,  nombre: 'TEE RECTA', corto: 'Tee recta' },
+  tee_red:       { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'nodo',    orden: 6,  nombre: 'TEE REDUCTORA', corto: 'Tee reductora', reduce: true },
+  cross:         { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'nodo',    orden: 7,  nombre: 'CRUZ RECTA', corto: 'Cruz' },
+  reducer:       { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'linea',   orden: 8,  nombre: 'REDUCCIÓN CONCÉNTRICA', corto: 'Red. concéntrica', reduce: true },
+  reducer_ecc:   { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'linea',   orden: 9,  nombre: 'REDUCCIÓN EXCÉNTRICA', corto: 'Red. excéntrica', reduce: true },
+  cap:           { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'extremo', orden: 10, nombre: 'CAP (TAPÓN)', corto: 'Cap / Tapón' },
+  stub_end:      { grupo: 'acc_bw', cat: 'ACCESORIO', mat: 'acc', modo: 'extremo', orden: 11, nombre: 'STUB END (PARA BRIDA LOCA)', corto: 'Stub end' },
+  /* roscados, socket weld y derivaciones */
+  union:         { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 12, nombre: 'UNIVERSAL (UNIÓN)', corto: 'Universal' },
+  coupling:      { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 13, nombre: 'ACOPLE / COPLA COMPLETA', corto: 'Copla' },
+  half_coupling: { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 14, nombre: 'MEDIA COPLA', corto: 'Media copla', reduce: true },
+  nipple:        { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 15, nombre: 'NIPLE', corto: 'Niple' },
+  swage:         { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 16, nombre: 'NIPLE REDUCTOR (SWAGE)', corto: 'Swage', reduce: true },
+  bushing:       { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 17, nombre: 'BUJE REDUCTOR', corto: 'Buje', reduce: true },
+  plug:          { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'extremo', orden: 18, nombre: 'TAPÓN MACHO', corto: 'Tapón macho' },
+  weldolet:      { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 19, nombre: 'WELDOLET', corto: 'Weldolet', reduce: true },
+  sockolet:      { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 20, nombre: 'SOCKOLET', corto: 'Sockolet', reduce: true },
+  threadolet:    { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 21, nombre: 'THREADOLET', corto: 'Threadolet', reduce: true },
+  /* bridas */
+  flange_wn:     { grupo: 'brida', cat: 'BRIDA', mat: 'brida', modo: 'extremo', orden: 22, nombre: 'BRIDA WELDING NECK', corto: 'Brida WN', conSch: true },
+  flange_so:     { grupo: 'brida', cat: 'BRIDA', mat: 'brida', modo: 'extremo', orden: 23, nombre: 'BRIDA SLIP-ON', corto: 'Brida SO' },
+  flange_sw:     { grupo: 'brida', cat: 'BRIDA', mat: 'brida', modo: 'extremo', orden: 24, nombre: 'BRIDA SOCKET WELD', corto: 'Brida SW', conSch: true },
+  flange_th:     { grupo: 'brida', cat: 'BRIDA', mat: 'brida', modo: 'extremo', orden: 25, nombre: 'BRIDA ROSCADA', corto: 'Brida roscada' },
+  flange_lj:     { grupo: 'brida', cat: 'BRIDA', mat: 'brida', modo: 'extremo', orden: 26, nombre: 'BRIDA LOCA (LAP JOINT)', corto: 'Brida loca' },
+  flange_bl:     { grupo: 'brida', cat: 'BRIDA', mat: 'brida', modo: 'extremo', orden: 27, nombre: 'BRIDA CIEGA', corto: 'Brida ciega' },
+  flange_or:     { grupo: 'brida', cat: 'BRIDA', mat: 'brida', modo: 'linea',   orden: 28, nombre: 'BRIDA DE ORIFICIO (PAR)', corto: 'Brida orificio', conSch: true },
+  spectacle:     { grupo: 'brida', cat: 'BRIDA', mat: 'brida', modo: 'linea',   orden: 29, nombre: 'FIGURA 8 (SPECTACLE BLIND)', corto: 'Figura 8' },
+  /* válvulas */
+  v_gate:        { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 30, nombre: 'VÁLVULA DE COMPUERTA', corto: 'V. Compuerta' },
+  v_globe:       { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 31, nombre: 'VÁLVULA DE GLOBO', corto: 'V. Globo' },
+  v_ball:        { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 32, nombre: 'VÁLVULA DE BOLA', corto: 'V. Bola' },
+  v_butterfly:   { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 33, nombre: 'VÁLVULA MARIPOSA', corto: 'V. Mariposa' },
+  v_check:       { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 34, nombre: 'VÁLVULA CHEQUE (RETENCIÓN)', corto: 'V. Cheque' },
+  v_check_wafer: { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 35, nombre: 'VÁLVULA CHEQUE WAFER (DOBLE PLATO)', corto: 'Cheque wafer' },
+  v_plug:        { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 36, nombre: 'VÁLVULA MACHO (PLUG)', corto: 'V. Macho' },
+  v_needle:      { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 37, nombre: 'VÁLVULA DE AGUJA', corto: 'V. Aguja' },
+  v_diaphragm:   { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 38, nombre: 'VÁLVULA DE DIAFRAGMA', corto: 'V. Diafragma' },
+  v_angle:       { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 39, nombre: 'VÁLVULA ANGULAR', corto: 'V. Angular' },
+  v_3way:        { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 40, nombre: 'VÁLVULA DE TRES VÍAS', corto: 'V. 3 vías' },
+  v_control:     { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 41, nombre: 'VÁLVULA DE CONTROL', corto: 'V. Control' },
+  v_regulator:   { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 42, nombre: 'VÁLVULA REGULADORA DE PRESIÓN', corto: 'V. Reguladora' },
+  v_solenoid:    { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 43, nombre: 'VÁLVULA SOLENOIDE', corto: 'V. Solenoide' },
+  v_psv:         { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'linea',   orden: 44, nombre: 'VÁLVULA DE ALIVIO / SEGURIDAD (PSV)', corto: 'V. Alivio PSV' },
+  v_foot:        { grupo: 'val', cat: 'VÁLVULA', mat: 'val', modo: 'extremo', orden: 45, nombre: 'VÁLVULA DE PIE CON CANASTILLA', corto: 'V. de pie' },
+  /* especiales de línea */
+  strainer_y:    { grupo: 'esp', cat: 'ESPECIAL', mat: 'esp', modo: 'linea', orden: 46, nombre: 'FILTRO TIPO Y', corto: 'Filtro Y' },
+  strainer_t:    { grupo: 'esp', cat: 'ESPECIAL', mat: 'esp', modo: 'linea', orden: 47, nombre: 'FILTRO TIPO CANASTA', corto: 'Filtro canasta' },
+  exp_joint:     { grupo: 'esp', cat: 'ESPECIAL', mat: 'esp', modo: 'linea', orden: 48, nombre: 'JUNTA DE EXPANSIÓN', corto: 'Junta expansión' },
+  sight:         { grupo: 'esp', cat: 'ESPECIAL', mat: 'esp', modo: 'linea', orden: 49, nombre: 'VISOR DE FLUJO', corto: 'Visor de flujo' },
+  trap:          { grupo: 'esp', cat: 'ESPECIAL', mat: 'esp', modo: 'linea', orden: 50, nombre: 'TRAMPA DE VAPOR', corto: 'Trampa vapor' },
+  vent:          { grupo: 'esp', cat: 'ESPECIAL', mat: 'esp', modo: 'linea', orden: 51, nombre: 'VENTEO CON VÁLVULA', corto: 'Venteo' },
+  drain:         { grupo: 'esp', cat: 'ESPECIAL', mat: 'esp', modo: 'linea', orden: 52, nombre: 'DRENAJE CON VÁLVULA', corto: 'Drenaje' },
+  /* instrumentos */
+  pi:            { grupo: 'inst', cat: 'INSTRUMENTO', mat: 'inst', modo: 'linea', orden: 53, nombre: 'MANÓMETRO', corto: 'Manómetro PI' },
+  ti:            { grupo: 'inst', cat: 'INSTRUMENTO', mat: 'inst', modo: 'linea', orden: 54, nombre: 'TERMÓMETRO CON TERMOPOZO', corto: 'Termómetro TI' },
+  fi:            { grupo: 'inst', cat: 'INSTRUMENTO', mat: 'inst', modo: 'linea', orden: 55, nombre: 'MEDIDOR DE CAUDAL', corto: 'Caudalímetro FI' },
+  /* soportes */
+  sup_shoe:      { grupo: 'sop', cat: 'SOPORTE', mat: 'sop', modo: 'linea', orden: 56, nombre: 'SOPORTE APOYO TIPO ZAPATA', corto: 'Apoyo / zapata' },
+  sup_guide:     { grupo: 'sop', cat: 'SOPORTE', mat: 'sop', modo: 'linea', orden: 57, nombre: 'SOPORTE GUÍA', corto: 'Guía' },
+  sup_anchor:    { grupo: 'sop', cat: 'SOPORTE', mat: 'sop', modo: 'linea', orden: 58, nombre: 'ANCLAJE', corto: 'Anclaje' },
+  sup_hanger:    { grupo: 'sop', cat: 'SOPORTE', mat: 'sop', modo: 'linea', orden: 59, nombre: 'SOPORTE COLGANTE', corto: 'Colgante' },
+  sup_spring:    { grupo: 'sop', cat: 'SOPORTE', mat: 'sop', modo: 'linea', orden: 60, nombre: 'SOPORTE DE RESORTE', corto: 'Resorte' },
+  /* juntas */
+  weld:          { grupo: 'junta', cat: 'JUNTA', mat: 'junta', modo: 'punto', orden: 70, nombre: 'JUNTA SOLDADA A TOPE', corto: 'Soldadura (END)' }
 };
+const GRUPOS = [['acc_bw', 'Accesorios soldables (BW)'], ['acc_rs', 'Roscados · Socket weld · Derivaciones'], ['brida', 'Bridas'], ['val', 'Válvulas'],
+  ['esp', 'Especiales de línea'], ['inst', 'Instrumentos'], ['sop', 'Soportes'], ['junta', 'Juntas'], ['propio', 'Catálogo propio']];
+const CATEGORIAS = ['ACCESORIO', 'BRIDA', 'VÁLVULA', 'ESPECIAL', 'INSTRUMENTO', 'SOPORTE', 'OTRO'];
 const CONSUMIBLES = [
   ['SOLDADURA E6010 Ø 1/8" (PASE DE RAÍZ)', 'KG'],
   ['SOLDADURA E7018 Ø 1/8" (RELLENO Y PRESENTACIÓN)', 'KG'],
@@ -469,7 +562,7 @@ const CONSUMIBLES = [
   ['CINTA TEFLÓN 3/4"', 'UND'],
   ['PINTURA ANTICORROSIVA (PRIMER + ACABADO)', 'GLB']
 ];
-const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG'];
+const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
@@ -480,7 +573,9 @@ const estado = {
   unidad: 'mm',         // unidad de presentación de cotas y longitudes: 'mm' o 'm' 
   components: [],       // { id, category, type, nps, schedule, length, lengthManual, coords, rotation, npsRed }
   consumibles: [],      // { id, uni, desc, cant }
-  ajustes: {}           // ajustes manuales de cantidad en el BOM, por clave de grupo
+  ajustes: {},          // ajustes manuales de cantidad en el BOM, por clave de grupo
+  catalogoPropio: [],   // ítems agregados por el usuario: { id, nombre, cat, simbolo, desc, uni }
+  trazo: { modo: 'iso', plano: 'H' }   // modo: 'iso' o paso angular libre ('15' | '5' | '1'); plano del ángulo libre
 };
 let historial = [], rehacerPila = [];
 let herramienta = 'pipe', rotacionActual = 30, seleccion = null, zoom = 1;
@@ -523,7 +618,14 @@ function nodoMasCercano(x, y) {
 const igual = (A, B) => Math.abs(A[0] - B[0]) < 1e-6 && Math.abs(A[1] - B[1]) < 1e-6;
 const unitAng = ang => ({ x: Math.cos(ang * Math.PI / 180), y: -Math.sin(ang * Math.PI / 180) });
 const normAng = a => ((a % 360) + 360) % 360;
-const esVertical = ang => normAng(ang) === 90 || normAng(ang) === 270;
+const esVertical = ang => Math.abs(Math.sin(ang * Math.PI / 180)) > 0.97;
+const casiAng = (a, b) => { const d = Math.abs(normAng(a) - normAng(b)); return d < 0.05 || d > 359.95; };
+const red6 = P => P.map(v => Math.round(v * 1e6) / 1e6);
+/* Ángulo en pantalla (0° = derecha, antihorario) del vector A→B */
+function angPantalla(A, B) {
+  const a = aPantalla(A), b = aPantalla(B);
+  return normAng(Math.round(Math.atan2(a.y - b.y, b.x - a.x) * 180 / Math.PI * 1000) / 1000);
+}
 /* Si B está sobre un eje isométrico desde A devuelve { ang, d, pasos }, si no null */
 function dirEntre(A, B) {
   const dp = B[0] - A[0], dq = B[1] - A[1];
@@ -536,6 +638,34 @@ function dirEntre(A, B) {
   }
   return null;
 }
+/* Planos para tubería a ángulo libre. Ejes reales en coordenadas de red:
+   Norte = [1,0] (30°), Este = [0,−1] (330°), Arriba = [1,1] (90°). Ambos ejes de cada plano son
+   ortonormales en 3D, así la longitud medida en el plano es la longitud real del tramo. */
+const PLANOS = {
+  H:  { a1: [1, 0],  a2: [0, -1], nombre: 'horizontal', ref: 'N', corto: 'Plano H' },
+  NZ: { a1: [1, 0],  a2: [1, 1],  nombre: 'vertical N-S', ref: 'N', corto: 'Plano N-S' },
+  EZ: { a1: [0, -1], a2: [1, 1],  nombre: 'vertical E-O', ref: 'E', corto: 'Plano E-O' }
+};
+function enPlano(plano, dp, dq) {
+  const { a1, a2 } = PLANOS[plano] || PLANOS.H, det = a1[0] * a2[1] - a2[0] * a1[1];
+  return { x: (dp * a2[1] - a2[0] * dq) / det, y: (a1[0] * dq - a1[1] * dp) / det };
+}
+function desdePlano(plano, A, L, ang) {
+  const { a1, a2 } = PLANOS[plano] || PLANOS.H, c = Math.cos(ang * Math.PI / 180), s = Math.sin(ang * Math.PI / 180);
+  return red6([A[0] + L * (c * a1[0] + s * a2[0]), A[1] + L * (c * a1[1] + s * a2[1])]);
+}
+const angEnPlano = (plano, A, B) => { const v = enPlano(plano, B[0] - A[0], B[1] - A[1]); return normAng(Math.round(Math.atan2(v.y, v.x) * 1800 / Math.PI) / 10); };
+/* Longitud real del tramo en pasos de grilla (ejes ISO exactos; tramos libres medidos en su plano) */
+function pasosReales(c) {
+  const [A, B] = c.coords, di = dirEntre(A, B);
+  if (di) return di.pasos;
+  if (c.libre && PLANOS[c.libre.plano]) { const v = enPlano(c.libre.plano, B[0] - A[0], B[1] - A[1]); return Math.hypot(v.x, v.y); }
+  const a = aPantalla(A), b = aPantalla(B); return Math.hypot(b.x - a.x, b.y - a.y) / PASO_PX;
+}
+/* Ángulo agudo entre un tramo libre y el eje de referencia de su plano (el que se rotula en el plano) */
+const anguloAgudo = c => { const v = enPlano(c.libre.plano, c.coords[1][0] - c.coords[0][0], c.coords[1][1] - c.coords[0][1]);
+  return Math.round(Math.atan2(Math.abs(v.y), Math.abs(v.x)) * 1800 / Math.PI) / 10; };
+const puntoEnTubo = (c, k) => { const [A, B] = c.coords, L = pasosReales(c) || 1; return red6([A[0] + (B[0] - A[0]) * k / L, A[1] + (B[1] - A[1]) * k / L]); };
 /* Perpendicular por defecto: tramo horizontal → vertical; tramo vertical → eje N-S */
 const perpDefecto = ang => esVertical(ang) ? 30 : 90;
 
@@ -566,6 +696,23 @@ function bloqueoAxial(A, pt, R) {
   const n = Math.max(0, Math.round(dmax / PASO_PX));
   return { fin: [A[0] + n * mejor.d[0], A[1] + n * mejor.d[1]], ang: mejor.ang, d: mejor.d, pasos: n, iman: false };
 }
+/* Trazo a ángulo libre: el cursor se proyecta sobre el plano elegido (horizontal o vertical);
+   el ángulo se ajusta al paso elegido (15°, 5° o 1°) y la longitud a medios pasos de grilla */
+function bloqueoLibre(A, pt, R) {
+  const plano = estado.trazo.plano, paso = Number(estado.trazo.modo) || 15;
+  const P = puertoCercano(pt, R);
+  let fin = A, iman = false;
+  if (P && !igual(P, A)) { fin = P; iman = true; }
+  else {
+    const [p, q] = aRed(pt.x, pt.y), v = enPlano(plano, p - A[0], q - A[1]);
+    const L = Math.round(Math.hypot(v.x, v.y) * 2) / 2;
+    const ang = normAng(Math.round(Math.atan2(v.y, v.x) * 180 / Math.PI / paso) * paso);
+    if (L > 0) fin = desdePlano(plano, A, L, ang);
+  }
+  const di = dirEntre(A, fin), v = enPlano(plano, fin[0] - A[0], fin[1] - A[1]);
+  return { fin, pasos: di ? di.pasos : Math.hypot(v.x, v.y), ang: igual(A, fin) ? 0 : angPantalla(A, fin), angPlano: angEnPlano(plano, A, fin), plano, iman, libre: !di };
+}
+const resolverFin = (A, pt, R) => estado.trazo.modo === 'iso' ? bloqueoAxial(A, pt, R) : bloqueoLibre(A, pt, R);
 /* Tubería más cercana al cursor: posición en medios pasos y ángulo del eje */
 function tuberiaCercana(pt, R) {
   let mejor = null, dmin = R;
@@ -577,18 +724,22 @@ function tuberiaCercana(pt, R) {
     if (d < dmin) { dmin = d; mejor = { c, t }; }
   }
   if (!mejor) return null;
-  const di = dirEntre(mejor.c.coords[0], mejor.c.coords[1]); if (!di) return null;
-  const k = Math.round(mejor.t * di.pasos * 2) / 2, A = mejor.c.coords[0];
-  return { c: mejor.c, k, pasos: di.pasos, ang: di.ang, P: [A[0] + k * di.d[0], A[1] + k * di.d[1]] };
+  const L = pasosReales(mejor.c); if (!(L > 0)) return null;
+  const k = Math.round(mejor.t * L * 2) / 2;
+  return { c: mejor.c, k, pasos: L, ang: angPantalla(mejor.c.coords[0], mejor.c.coords[1]), P: puntoEnTubo(mejor.c, k) };
 }
 /* Direcciones (ángulos) de las tuberías que salen de un nodo P */
 function brazos(P) {
-  const angs = [], add = a => { a = normAng(a); if (!angs.includes(a)) angs.push(a); };
+  const angs = [], add = a => { if (!angs.some(b => casiAng(a, b))) angs.push(normAng(a)); }, s = aPantalla(P);
   for (const c of tuberias()) {
     const [A, B] = c.coords;
-    if (igual(A, P)) { const d = dirEntre(A, B); d && add(d.ang); }
-    else if (igual(B, P)) { const d = dirEntre(B, A); d && add(d.ang); }
-    else { const d = dirEntre(A, P), tot = dirEntre(A, B); if (d && tot && d.ang === tot.ang && d.pasos < tot.pasos) { add(d.ang); add(d.ang + 180); } }
+    if (igual(A, P)) add(angPantalla(A, B));
+    else if (igual(B, P)) add(angPantalla(B, A));
+    else {
+      const a = aPantalla(A), b = aPantalla(B), dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy; if (!L2) continue;
+      const t = ((s.x - a.x) * dx + (s.y - a.y) * dy) / L2;
+      if (t > 0 && t < 1 && Math.hypot(a.x + t * dx - s.x, a.y + t * dy - s.y) < 0.5) { const g = angPantalla(A, B); add(g); add(g + 180); }
+    }
   }
   return angs;
 }
@@ -610,7 +761,51 @@ const SIM = {
   reducer_ecc: '<polygon points="-10,-7 10,-7 10,0 -10,7" class="sb"/>',
   flange_wn: '<polygon points="-11,-2.5 -2,-6 -2,6 -11,2.5" class="sb"/><path d="M-2 -10V10M2 -10V10" class="s" style="stroke-width:2.2"/><circle cx="-11" r="2.2" class="sn"/>',
   flange_so: '<path d="M-2 -10V10M2 -10V10" class="s" style="stroke-width:2.2"/><circle cx="-4.5" cy="-4" r="1.8" class="sn"/><circle cx="-4.5" cy="4" r="1.8" class="sn"/>',
-  cap: '<path d="M0 -7A7 7 0 0 1 0 7Z" class="sb"/><circle r="2.2" class="sn"/>'
+  cap: '<path d="M0 -7A7 7 0 0 1 0 7Z" class="sb"/><circle r="2.2" class="sn"/>',
+  elbow180: '<path d="M-10 0H0A7 7 0 0 0 0 -14H-10" class="s" style="stroke-width:3.5"/><circle cx="-10" r="2.2" class="sn"/><circle cx="-10" cy="-14" r="2.2" class="sn"/>',
+  stub_end: '<path d="M-10 -4H0V-8H3V8H0V4H-10Z" class="sb"/>',
+  union: '<rect x="-5" y="-6" width="10" height="12" class="sb"/><path d="M0 -6V6" class="s"/>',
+  coupling: '<rect x="-5" y="-5" width="10" height="10" class="sb"/>',
+  half_coupling: '<rect x="-4" y="-12" width="8" height="12" class="sb"/>',
+  nipple: '<rect x="-9" y="-3.5" width="18" height="7" class="sb"/><path d="M-6 -3.5L-4 3.5M-2 -3.5L0 3.5M2 -3.5L4 3.5" class="s" style="stroke-width:1"/>',
+  swage: '<polygon points="-10,-6 -3,-6 3,-3.5 10,-3.5 10,3.5 3,3.5 -3,6 -10,6" class="sb"/>',
+  bushing: '<rect x="-6" y="-6" width="5" height="12" class="sb"/><rect x="-1" y="-3.5" width="6" height="7" class="sb"/>',
+  plug: '<path d="M0 -6V6" class="s" style="stroke-width:2.4"/><rect x="0" y="-3.5" width="6" height="7" class="sn"/>',
+  weldolet: '<polygon points="-7,0 7,0 3.5,-9 -3.5,-9" class="sb"/><path d="M0 -9V-15" class="s"/>',
+  sockolet: '<polygon points="-7,0 7,0 3.5,-9 -3.5,-9" class="sb"/><rect x="-3.5" y="-14" width="7" height="5" class="sb"/>',
+  threadolet: '<polygon points="-7,0 7,0 3.5,-9 -3.5,-9" class="sb"/><path d="M0 -9V-15M-3 -11.5H3M-3 -13.5H3" class="s" style="stroke-width:1"/>',
+  flange_sw: '<path d="M-2 -10V10M2 -10V10" class="s" style="stroke-width:2.2"/><rect x="-8" y="-3" width="5" height="6" class="sb"/>',
+  flange_th: '<path d="M-2 -10V10M2 -10V10" class="s" style="stroke-width:2.2"/><path d="M-10 -4L-7 -2L-10 0L-7 2L-10 4" class="s" style="stroke-width:1"/>',
+  flange_lj: '<path d="M-2 -10V10M2 -10V10" class="s" style="stroke-width:2.2"/><path d="M-1 -6H-10M-1 6H-10" class="s" style="stroke-width:1"/>',
+  flange_bl: '<path d="M-2 -10V10" class="s" style="stroke-width:2.2"/><rect x="1" y="-10" width="4" height="20" class="sn"/>',
+  flange_or: '<path d="M-5 -10V10M-1.5 -10V10M1.5 -10V10M5 -10V10" class="s" style="stroke-width:1.8"/><path d="M0 -14V-10" class="s" style="stroke-width:1"/>',
+  spectacle: '<path d="M0 -8V8" class="s" style="stroke-width:3"/><path d="M0 -8V-12" class="s"/><circle cy="-17" r="5" class="sb"/>',
+  v_butterfly: '<path d="M-5 -9V9M5 -9V9M-5 9L5 -9M0 0V-14M-5 -14H5" class="s"/>',
+  v_check_wafer: '<path d="M-3 -9V9M3 -9V9" class="s" style="stroke-width:2"/><path d="M-9 -12H6M3 -15L7 -12L3 -9" class="s" style="stroke-width:1.2"/>',
+  v_plug: MONO_V + '<rect x="-3" y="-3" width="6" height="6" class="sb"/><path d="M0 -3V-12H8" class="s"/>',
+  v_diaphragm: MONO_V + '<path d="M-7 -7A7 7 0 0 1 7 -7Z" class="sb"/><path d="M0 -10V-15M-5 -15H5" class="s"/>',
+  v_angle: '<polygon points="-11,-7 -11,7 0,0" class="sb"/><polygon points="-7,11 7,11 0,0" class="sb"/><circle r="2.8" class="sn"/><path d="M0 -2V-12M-5 -12H5" class="s"/>',
+  v_3way: MONO_V + '<polygon points="-7,11 7,11 0,0" class="sb"/><path d="M0 0V-13M-6 -13H6" class="s"/>',
+  v_control: MONO_V + '<path d="M0 0V-10" class="s"/><path d="M-8 -10A8 8 0 0 1 8 -10Z" class="sb"/>',
+  v_regulator: MONO_V + '<path d="M0 0V-9" class="s"/><path d="M-8 -9A8 8 0 0 1 8 -9Z" class="sb"/><path d="M8 -7H13V3" class="s" style="stroke-width:1"/>',
+  v_solenoid: MONO_V + '<path d="M0 0V-8" class="s"/><rect x="-5" y="-17" width="10" height="9" class="sb"/><text y="-9.8" font-size="7" font-weight="800" text-anchor="middle">S</text>',
+  v_psv: '<polygon points="-11,-7 -11,7 0,0" class="sb"/><polygon points="-7,11 7,11 0,0" class="sb"/><path d="M0 0V-5L-4 -7L4 -10L-4 -13L4 -16L0 -18V-21" class="s" style="stroke-width:1.2"/>',
+  v_foot: '<polygon points="-11,-7 -11,7 0,0" class="sb"/><path d="M0 -7V7M3 -7V7M6 -7V7" class="s" style="stroke-width:1"/>',
+  strainer_y: '<rect x="-9" y="-5" width="18" height="10" class="sb"/><path d="M0 5L8 14" class="s" style="stroke-width:5"/>',
+  strainer_t: '<rect x="-8" y="-8" width="16" height="16" class="sb"/><path d="M-5 -5L5 5M-5 5L5 -5" class="s" style="stroke-width:1"/>',
+  exp_joint: '<path d="M-10 -7V7M10 -7V7" class="s" style="stroke-width:2"/><path d="M-10 -5L-6 5L-2 -5L2 5L6 -5L10 5" class="s" style="stroke-width:1.2"/>',
+  sight: '<circle r="6.5" class="sb"/><circle r="3" class="s"/>',
+  trap: '<circle r="7" class="sb"/><text y="3" font-size="9" font-weight="800" text-anchor="middle">T</text>',
+  vent: '<path d="M0 0V-10" class="s"/><polygon points="-4,-10 4,-10 -4,-18 4,-18" class="sb"/><path d="M0 -18V-21" class="s"/>',
+  drain: '<path d="M0 0V10" class="s"/><polygon points="-4,10 4,10 -4,18 4,18" class="sb"/><path d="M0 18V21" class="s"/>',
+  pi: '<path d="M0 0V-9" class="s"/><circle cy="-15" r="6.5" class="sb"/><text y="-12.6" font-size="6.5" font-weight="800" text-anchor="middle">PI</text>',
+  ti: '<path d="M0 0V-9" class="s"/><circle cy="-15" r="6.5" class="sb"/><text y="-12.6" font-size="6.5" font-weight="800" text-anchor="middle">TI</text>',
+  fi: '<rect x="-9" y="-6" width="18" height="12" class="sb"/><text y="2.6" font-size="7.5" font-weight="800" text-anchor="middle">FI</text>',
+  sup_shoe: '<polygon points="-6,3 6,3 4,10 -4,10" class="sb"/><path d="M-10 10H10M-8 10L-11 13M-3 10L-6 13M2 10L-1 13M7 10L4 13" class="s" style="stroke-width:1"/>',
+  sup_guide: '<path d="M-7 -6H7M-7 6H7" class="s" style="stroke-width:2.2"/><path d="M-10 11H10" class="s"/>',
+  sup_anchor: '<path d="M-6 -6L6 6M-6 6L6 -6" class="s" style="stroke-width:2.2"/><path d="M-10 11H10" class="s"/>',
+  sup_hanger: '<path d="M0 -5V-18M-6 -18H6M-5 -4H5" class="s"/>',
+  sup_spring: '<path d="M-5 -4H5M0 -4V-7L-4 -9L4 -11L-4 -13L4 -15L0 -17V-20M-6 -20H6" class="s" style="stroke-width:1.2"/>'
 };
 /* Iconos del panel (vista frontal simple) */
 const ICONO_NODO = {
@@ -618,7 +813,9 @@ const ICONO_NODO = {
   elbow45: '<path d="M-14 8 0 0 10 -12" class="s"/><circle cx="-14" cy="8" r="2.4" class="sn"/><circle cx="10" cy="-12" r="2.4" class="sn"/>',
   tee: '<path d="M-14 8 14 -8M0 0V-15" class="s"/><circle cx="-14" cy="8" r="2.4" class="sn"/><circle cx="14" cy="-8" r="2.4" class="sn"/><circle cx="0" cy="-15" r="2.4" class="sn"/>',
   tee_red: '<path d="M-14 8 14 -8M0 0V-15" class="s"/><circle cx="-14" cy="8" r="2.4" class="sn"/><circle cx="14" cy="-8" r="2.4" class="sn"/><circle cx="0" cy="-15" r="1.6" class="sn"/><text x="5" y="-9" font-size="9" font-weight="700">R</text>',
-  weld: '<path d="M-15 0H15" class="s"/><circle r="4.5" class="sn"/>'
+  weld: '<path d="M-15 0H15" class="s"/><circle r="4.5" class="sn"/>',
+  elbow90_sr: '<path d="M-14 8 0 0 0 -16" class="s"/><circle cx="-14" cy="8" r="2.4" class="sn"/><circle cx="0" cy="-16" r="2.4" class="sn"/><text x="4" y="10" font-size="8" font-weight="700">RC</text>',
+  cross: '<path d="M-14 8 14 -8M0 -15V15" class="s"/><circle cx="-14" cy="8" r="2.4" class="sn"/><circle cx="14" cy="-8" r="2.4" class="sn"/><circle cy="-15" r="2.4" class="sn"/><circle cy="15" r="2.4" class="sn"/>'
 };
 /* Matriz local→pantalla: eje x sobre el tubo; eje y vertical (o N-S si el tubo es vertical) → símbolo en 2.5D */
 function matrizSimbolo(ang, s) {
@@ -649,67 +846,184 @@ function prepararLienzo() {
     <circle cx="${n.x}" cy="${n.y}" r="30" fill="none" stroke="#000" stroke-width="1"/>
     <text x="${n.x + u.x * 42}" y="${n.y + u.y * 42}" font-size="15" font-weight="900" text-anchor="middle" dominant-baseline="middle">N</text>`;
 }
-const longitudTubo = c => c.lengthManual ? Number(c.length) || 0 : r3((dirEntre(c.coords[0], c.coords[1])?.pasos || 0) * estado.escala);
+const longitudTubo = c => c.lengthManual ? Number(c.length) || 0 : r3(pasosReales(c) * estado.escala);
+
+/* ---------- 7b. Acomodo de textos: cotas, marcas de soldadura y ángulos no se montan ----------
+   Cada texto tiene varias posiciones candidatas; se elige la primera que no tape tuberías,
+   símbolos ni otros textos (o la de menor choque si todas chocan). */
+function dentroRect(px, py, L, m) {
+  const r = L.rot * Math.PI / 180, dx = px - L.cx, dy = py - L.cy;
+  const lx = dx * Math.cos(r) + dy * Math.sin(r), ly = -dx * Math.sin(r) + dy * Math.cos(r);
+  return Math.abs(lx) <= L.w / 2 + m && Math.abs(ly) <= L.h / 2 + m;
+}
+function muestrasRect(L) {
+  const r = L.rot * Math.PI / 180, c = Math.cos(r), s = Math.sin(r), pts = [];
+  for (const i of [-1, 0, 1]) for (const j of [-1, 0, 1]) { const lx = i * L.w / 2, ly = j * L.h / 2; pts.push({ x: L.cx + lx * c - ly * s, y: L.cy + lx * s + ly * c }); }
+  return pts;
+}
+function acomodarEtiquetas(etiquetas, obst) {
+  const puestas = [];
+  for (const E of etiquetas) {
+    let mejor = null, costoMin = Infinity;
+    for (const p of E.cand) {
+      const L = { cx: p.x, cy: p.y, w: E.w, h: E.h, rot: E.rot }, rad = (E.w + E.h) / 2 + 3, pts = muestrasRect(L);
+      let costo = 0;
+      for (const o of obst) if (Math.abs(o.x - L.cx) < rad && Math.abs(o.y - L.cy) < rad && dentroRect(o.x, o.y, L, 1.5)) costo++;
+      if (pts.some(q => q.x < 2 || q.y < 14 || q.x > LIENZO.w - 2 || q.y > LIENZO.h - 2)) costo += 40;
+      for (const Q of puestas) {
+        if (Math.abs(Q.cx - L.cx) > (Q.w + L.w) / 2 + 4 && Math.abs(Q.cy - L.cy) > (Q.h + L.h) / 2 + 4 && Math.abs(Q.cx - L.cx) + Math.abs(Q.cy - L.cy) > Q.w + L.w + 8) continue;
+        if (pts.some(q => dentroRect(q.x, q.y, Q, 1)) || muestrasRect(Q).some(q => dentroRect(q.x, q.y, L, 1))) costo += 25;
+      }
+      if (costo < costoMin) { costoMin = costo; mejor = L; if (!costo) break; }
+    }
+    E.pos = mejor; puestas.push(mejor);
+  }
+}
+/* Numeración de juntas siguiendo el recorrido de la línea (desde un extremo libre) */
+function numeracionSoldaduras() {
+  const welds = estado.components.filter(c => c.type === 'weld'), mapa = new Map();
+  if (!welds.length) return mapa;
+  const pipes = tuberias(), clave = P => P[0].toFixed(4) + ',' + P[1].toFixed(4), ady = new Map();
+  pipes.forEach(c => c.coords.forEach((P, i) => { const k = clave(P); if (!ady.has(k)) ady.set(k, []); ady.get(k).push({ c, i }); }));
+  const usados = new Set(), orden = [];
+  const recorrer = Q => { for (const { c, i } of ady.get(clave(Q)) || []) { if (usados.has(c)) continue; usados.add(c); orden.push({ c, inv: i === 1 }); recorrer(c.coords[1 - i]); } };
+  const libres = pipes.flatMap(c => c.coords).filter(P => (ady.get(clave(P)) || []).length === 1);
+  for (const P of [...libres, ...pipes.map(c => c.coords[0])]) recorrer(P);
+  const llave = welds.map((w, n) => {
+    const s = aPantalla(w.coords[0]); let mejor = [1e9, n];
+    orden.forEach(({ c, inv }, j) => {
+      let a = aPantalla(c.coords[0]), b = aPantalla(c.coords[1]); if (inv) [a, b] = [b, a];
+      const dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((s.x - a.x) * dx + (s.y - a.y) * dy) / L2));
+      if (Math.hypot(a.x + t * dx - s.x, a.y + t * dy - s.y) < 14 && (j < mejor[0] || (j === mejor[0] && t < mejor[1]))) mejor = [j, t];
+    });
+    return { w, k: mejor };
+  }).sort((x, y) => x.k[0] - y.k[0] || x.k[1] - y.k[1]);
+  llave.forEach((x, n) => mapa.set(x.w.id, n + 1));
+  return mapa;
+}
 
 function renderLienzo() {
-  let tubos = '', cotas = '', simbolos = '', nSold = 0;
+  let tubos = '', simbolos = '', textos = '';
+  const etiquetas = [], obst = [], numW = numeracionSoldaduras();
+  const anillo = (P, r, n) => { for (let i = 0; i < n; i++) obst.push({ x: P.x + r * Math.cos(i * 2 * Math.PI / n), y: P.y + r * Math.sin(i * 2 * Math.PI / n) }); };
+  /* obstáculos: trazos de tubería y símbolos */
+  for (const c of estado.components) {
+    if (c.type === 'pipe') {
+      const A = aPantalla(c.coords[0]), B = aPantalla(c.coords[1]), n = Math.max(1, Math.ceil(Math.hypot(B.x - A.x, B.y - A.y) / 5));
+      for (let i = 0; i <= n; i++) obst.push({ x: A.x + (B.x - A.x) * i / n, y: A.y + (B.y - A.y) * i / n });
+    } else { const P = aPantalla(c.coords[0]); obst.push(P); anillo(P, c.type === 'weld' ? 4 : 9, c.type === 'weld' ? 4 : 8); }
+  }
+  anillo({ x: LIENZO.w - 70, y: 60 }, 30, 12);
   for (const c of estado.components) {
     const sel = c.id === seleccion ? ' selec' : '';
     if (c.type === 'pipe') {
-      const A = aPantalla(c.coords[0]), B = aPantalla(c.coords[1]), di = dirEntre(c.coords[0], c.coords[1]);
+      const A = aPantalla(c.coords[0]), B = aPantalla(c.coords[1]);
+      /* tramo a ángulo libre: triángulo de desvío sombreado (práctica normal en isométricos) */
+      if (c.libre && PLANOS[c.libre.plano] && !dirEntre(c.coords[0], c.coords[1])) {
+        const pl = PLANOS[c.libre.plano], v = enPlano(c.libre.plano, c.coords[1][0] - c.coords[0][0], c.coords[1][1] - c.coords[0][1]);
+        if (Math.abs(v.x) > 1e-3 && Math.abs(v.y) > 1e-3) {
+          const C = aPantalla([c.coords[0][0] + v.x * pl.a1[0], c.coords[0][1] + v.x * pl.a1[1]]);
+          let rayado = '';
+          const n = Math.max(2, Math.floor(Math.hypot(C.x - A.x, C.y - A.y) / 6));
+          for (let i = 1; i < n; i++) { const f = i / n; rayado += `M${(A.x + (C.x - A.x) * f).toFixed(1)} ${(A.y + (C.y - A.y) * f).toFixed(1)}L${(A.x + (B.x - A.x) * f).toFixed(1)} ${(A.y + (B.y - A.y) * f).toFixed(1)}`; }
+          tubos += `<path d="M${A.x} ${A.y}L${C.x.toFixed(1)} ${C.y.toFixed(1)}L${B.x} ${B.y}" fill="none" stroke="#475569" stroke-width=".8" stroke-dasharray="4 3" pointer-events="none"/>
+            <path d="${rayado}" stroke="#94a3b8" stroke-width=".6" pointer-events="none"/>`;
+          /* se rotula el ángulo agudo entre el tramo y el cateto del triángulo (como en el plano a mano) */
+          const agudo = anguloAgudo(c);
+          const u = unitAng(angPantalla(c.coords[0], c.coords[1])), txt = `${agudo}°`;
+          const cand = [14, 22, 30].flatMap(d => [-1, 1].map(lado => ({ x: A.x + u.x * (d + 10) - u.y * lado * 9, y: A.y + u.y * (d + 10) + u.x * lado * 9 })));
+          etiquetas.push({ texto: txt, clase: 'angl', w: txt.length * 5.6 + 3, h: 11, rot: 0, cand, prio: 2 });
+        }
+      }
       tubos += `<g class="cmp${sel}" data-id="${c.id}"><line class="hit" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke-width="14"/>
         <line class="tubo" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="#000" stroke-width="3" stroke-linecap="round"/></g>`;
-      if (di) {
-        const m = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 }, a = normAng(di.ang);
-        const rot = esVertical(a) ? -90 : (a === 30 || a === 210) ? -30 : 30;
-        const off = esVertical(a) ? { x: -10, y: 0 } : { x: 0, y: -10 };
-        const txt = `${fmtLong(longitudTubo(c))}${c.lengthManual ? '*' : ''}`;
-        cotas += `<text class="cota" text-anchor="middle" transform="translate(${(m.x + off.x).toFixed(1)} ${(m.y + off.y).toFixed(1)}) rotate(${rot})">${txt}</text>`;
+      const ang = angPantalla(c.coords[0], c.coords[1]), r = ang * Math.PI / 180, Lpx = Math.hypot(B.x - A.x, B.y - A.y);
+      const e = { x: Math.cos(r), y: -Math.sin(r) };
+      let nrm = { x: -Math.sin(r), y: -Math.cos(r) };
+      if (nrm.y > 0.05 || (Math.abs(nrm.y) <= 0.05 && nrm.x > 0)) nrm = { x: -nrm.x, y: -nrm.y };
+      let rot = -ang; while (rot < -90) rot += 180; while (rot >= 90) rot -= 180;
+      const texto = `${fmtLong(longitudTubo(c))}${c.lengthManual ? '*' : ''}`, w = texto.length * 6.1 + 4, h = 13;
+      const m = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 }, cand = [];
+      for (const d of [10, 19, 28]) for (const f of [0, 0.25, -0.25, 0.4, -0.4]) {
+        if (f && Math.abs(f) * Lpx + w / 2 > Lpx / 2 + 4) continue;
+        for (const lado of [1, -1]) cand.push({ x: m.x + e.x * f * Lpx + nrm.x * lado * d, y: m.y + e.y * f * Lpx + nrm.y * lado * d });
+      }
+      etiquetas.push({ texto, clase: 'cota', w, h, rot, cand, prio: 0 });
+      continue;
+    }
+    const P = aPantalla(c.coords[0]), T = TIPOS[c.type], dib = T.base || c.type;
+    if (T.modo === 'nodo') {
+      simbolos += simboloNodo(c, P, sel);
+      const tag = { elbow45: '45°', elbow90_sr: 'RC', tee_red: 'TR' }[dib];
+      if (tag) {
+        const cand = [];
+        for (const d of [12, 18, 25]) for (const k of [7, 5, 1, 3, 6, 2, 0, 4]) { const a = k * Math.PI / 4; cand.push({ x: P.x + Math.cos(a) * d, y: P.y - Math.sin(a) * d }); }
+        etiquetas.push({ texto: tag, clase: 'angl', w: tag.length * 5.6 + 3, h: 11, rot: 0, cand, prio: 3 });
       }
       continue;
     }
-    const P = aPantalla(c.coords[0]), T = TIPOS[c.type];
-    if (T.modo === 'nodo') { simbolos += simboloNodo(c, P, sel); continue; }
     if (c.type === 'weld') {
-      nSold++;
       simbolos += `<g class="cmp${sel}" data-id="${c.id}"><circle class="hit" cx="${P.x}" cy="${P.y}" r="11"/>
-        <circle cx="${P.x}" cy="${P.y}" r="4.2" fill="#000" stroke="#fff" stroke-width="1"/>
-        <text x="${P.x + 6}" y="${P.y - 6}" font-size="9.5" font-weight="700" fill="#b91c1c" paint-order="stroke" stroke="#fff" stroke-width="2.5">W${nSold}</text></g>`;
+        <circle cx="${P.x}" cy="${P.y}" r="4.2" fill="#000" stroke="#fff" stroke-width="1"/></g>`;
+      const texto = `W${numW.get(c.id) || '?'}`, w = texto.length * 5.8 + 3, h = 11, cand = [];
+      for (const d of [8, 14, 21, 29]) for (const k of [1, 3, 7, 5, 2, 6, 0, 4]) {
+        const a = k * Math.PI / 4, ux = Math.cos(a), uy = -Math.sin(a);
+        cand.push({ x: P.x + ux * (d + w / 2 * Math.abs(ux)), y: P.y + uy * (d + h / 2 * Math.abs(uy)) });
+      }
+      etiquetas.push({ texto, clase: 'wl', w, h, rot: 0, cand, prio: 1, ancla: P, sel: c.id });
       continue;
     }
     simbolos += `<g class="cmp${sel}" data-id="${c.id}" transform="${matrizSimbolo(c.rotation, P)}">
-      <rect class="hit" x="-14" y="-16" width="28" height="28"/>${SIM[c.type] || ''}</g>`;
+      <rect class="hit" x="-14" y="-16" width="28" height="28"/>${SIM[dib] || SIM.coupling}</g>`;
+  }
+  etiquetas.sort((a, b) => a.prio - b.prio);
+  acomodarEtiquetas(etiquetas, obst);
+  for (const E of etiquetas) {
+    const L = E.pos;
+    if (E.ancla && Math.hypot(L.cx - E.ancla.x, L.cy - E.ancla.y) > 16) {
+      /* línea guía hacia la junta cuando la marca quedó alejada */
+      const dx = L.cx - E.ancla.x, dy = L.cy - E.ancla.y, d = Math.hypot(dx, dy), corte = Math.min(Math.abs(L.w / 2 / (dx / d || 1e-9)), Math.abs(L.h / 2 / (dy / d || 1e-9)));
+      textos += `<line x1="${E.ancla.x.toFixed(1)}" y1="${E.ancla.y.toFixed(1)}" x2="${(L.cx - dx / d * corte).toFixed(1)}" y2="${(L.cy - dy / d * corte).toFixed(1)}" stroke="#b91c1c" stroke-width=".7"/>`;
+    }
+    textos += `<text class="${E.clase}" text-anchor="middle" dominant-baseline="central" transform="translate(${L.cx.toFixed(1)} ${L.cy.toFixed(1)}) rotate(${L.rot.toFixed(2)})">${esc(E.texto)}</text>`;
   }
   $('capa-tuberia').innerHTML = tubos;
   $('capa-simbolos').innerHTML = simbolos;
-  $('capa-cotas').innerHTML = cotas;
+  $('capa-cotas').innerHTML = textos;
   $('hud-count').textContent = estado.components.length;
 }
-/* Codos y tees: los brazos se orientan con las tuberías realmente conectadas al nodo */
-function simboloNodo(c, P, sel) {
-  const L = 0.42 * PASO_PX, br = brazos(c.coords[0]);
-  const pto = ang => { const u = unitAng(ang); return { x: P.x + u.x * L, y: P.y + u.y * L }; };
-  const punto = q => `<circle cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="2.5" fill="#000" stroke="#fff" stroke-width=".8"/>`;
-  let cuerpo = '', fin = [];
-  if (c.type === 'elbow90' || c.type === 'elbow45') {
-    let a1 = br[0] ?? c.rotation, a2 = br.find(a => a !== a1 && normAng(a - a1) !== 180);
+/* Brazos de codos, tees y cruces: se orientan con las tuberías realmente conectadas al nodo */
+function brazosAccesorio(c) {
+  const br = brazos(c.coords[0]), tipo = TIPOS[c.type].base || c.type;
+  if (tipo === 'elbow90' || tipo === 'elbow90_sr' || tipo === 'elbow45') {
+    const a1 = br[0] ?? c.rotation;
+    let a2 = br.find(a => !casiAng(a, a1) && !casiAng(a, a1 + 180));
     if (a2 === undefined) {
       const p = perpDefecto(a1);
-      if (c.type === 'elbow90') a2 = p;
+      if (tipo !== 'elbow45') a2 = p;
       else { const u = unitAng(a1 + 180), v = unitAng(p); a2 = Math.atan2(-(u.y + v.y), u.x + v.x) * 180 / Math.PI; }
     }
-    const A1 = pto(a1), A2 = pto(a2); fin = [A1, A2];
-    cuerpo = `<path d="M${A1.x.toFixed(1)} ${A1.y.toFixed(1)}Q${P.x} ${P.y} ${A2.x.toFixed(1)} ${A2.y.toFixed(1)}" fill="none" stroke="#000" stroke-width="5.5"/>`;
-    if (c.type === 'elbow45') cuerpo += `<text x="${P.x + 7}" y="${P.y + 13}" font-size="8.5" font-weight="700">45°</text>`;
+    return { tipo, run: null, brazos: [a1, a2] };
+  }
+  /* tee y cruz: corrida = par de brazos opuestos; ramal = el restante */
+  let run = null;
+  for (const a of br) if (br.some(b => casiAng(b, a + 180))) { run = a; break; }
+  if (run === null) run = br[0] ?? c.rotation;
+  const ramal = br.find(a => !casiAng(a, run) && !casiAng(a, run + 180)) ?? perpDefecto(run);
+  const lista = [run, run + 180, ramal];
+  if (tipo === 'cross') lista.push(ramal + 180);
+  return { tipo, run, brazos: lista };
+}
+function simboloNodo(c, P, sel) {
+  const L = 0.42 * PASO_PX, { tipo, brazos: arms } = brazosAccesorio(c);
+  const pto = ang => { const u = unitAng(ang); return { x: P.x + u.x * L, y: P.y + u.y * L }; };
+  const punto = q => `<circle cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="2.5" fill="#000" stroke="#fff" stroke-width=".8"/>`;
+  const fin = arms.map(pto);
+  let cuerpo;
+  if (arms.length === 2) {
+    cuerpo = `<path d="M${fin[0].x.toFixed(1)} ${fin[0].y.toFixed(1)}Q${P.x} ${P.y} ${fin[1].x.toFixed(1)} ${fin[1].y.toFixed(1)}" fill="none" stroke="#000" stroke-width="5.5"/>`;
   } else {
-    /* tee: corrida = par de brazos opuestos; ramal = el restante */
-    let run = null;
-    for (const a of br) if (br.includes(normAng(a + 180))) { run = a; break; }
-    if (run === null) run = br[0] ?? c.rotation;
-    const ramal = br.find(a => a !== normAng(run) && a !== normAng(run + 180)) ?? perpDefecto(run);
-    const R1 = pto(run), R2 = pto(run + 180), Bq = pto(ramal); fin = [R1, R2, Bq];
-    cuerpo = `<path d="M${R1.x.toFixed(1)} ${R1.y.toFixed(1)}L${R2.x.toFixed(1)} ${R2.y.toFixed(1)}M${P.x} ${P.y}L${Bq.x.toFixed(1)} ${Bq.y.toFixed(1)}" fill="none" stroke="#000" stroke-width="5.5"/>`;
-    if (c.type === 'tee_red') cuerpo += `<text x="${P.x + 7}" y="${P.y + 13}" font-size="8.5" font-weight="700">TR</text>`;
+    cuerpo = `<path d="M${fin[0].x.toFixed(1)} ${fin[0].y.toFixed(1)}L${fin[1].x.toFixed(1)} ${fin[1].y.toFixed(1)}${fin.slice(2).map(q => `M${P.x} ${P.y}L${q.x.toFixed(1)} ${q.y.toFixed(1)}`).join('')}" fill="none" stroke="#000" stroke-width="5.5"/>`;
   }
   return `<g class="cmp${sel}" data-id="${c.id}"><circle class="hit" cx="${P.x}" cy="${P.y}" r="13"/>${cuerpo}${fin.map(punto).join('')}</g>`;
 }
@@ -721,18 +1035,19 @@ function indicadorSnap(P, iman) {
           <circle cx="${s.x}" cy="${s.y}" r="1.6" fill="${iman ? '#16a34a' : '#f97316'}"/>`;
 }
 function actualizarHUD(ang, pasos, iman, manual) {
-  $('hud-angle').textContent = ang == null ? '—' : normAng(ang) + '°';
+  $('hud-angle').textContent = ang == null ? '—' : typeof ang === 'string' ? ang : normAng(Math.round(ang)) + '°';
   $('hud-length').textContent = fmtLong(manual ?? (pasos || 0) * estado.escala);
   $('hud-snap').textContent = iman ? 'NODO (IMÁN)' : 'GRILLA ISO';
 }
 function dibujarFantasma(pt, R) {
   const g = $('capa-guia');
   if (!trazo) { const s = snapInicio(pt, R); g.innerHTML = indicadorSnap(s.P, s.iman); actualizarHUD(null, 0, s.iman); return; }
-  const r = bloqueoAxial(trazo.inicio, pt, R), A = aPantalla(trazo.inicio), B = aPantalla(r.fin);
+  const r = resolverFin(trazo.inicio, pt, R), A = aPantalla(trazo.inicio), B = aPantalla(r.fin);
+  const angTxt = r.libre ? `∠${f2(r.angPlano).replace(/\.00$/, '')}° ${PLANOS[r.plano].corto}` : `${Math.round(r.ang)}°`;
   g.innerHTML = `<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="#f59e0b" stroke-width="3" stroke-dasharray="7 5" stroke-linecap="round"/>
     ${indicadorSnap(trazo.inicio, true)}${indicadorSnap(r.fin, r.iman)}
-    <text x="${B.x + 10}" y="${B.y - 10}" font-size="12" font-weight="800" fill="#b45309" paint-order="stroke" stroke="#fff" stroke-width="3">${fmtLong(r.pasos * estado.escala)} · ${r.ang}°</text>`;
-  actualizarHUD(r.ang, r.pasos, r.iman);
+    <text x="${B.x + 10}" y="${B.y - 10}" font-size="12" font-weight="800" fill="#b45309" paint-order="stroke" stroke="#fff" stroke-width="3">${fmtLong(r.pasos * estado.escala)} · ${angTxt}</text>`;
+  actualizarHUD(angTxt, r.pasos, r.iman);
 }
 function previsualizarSimbolo(pt, R) {
   const pos = posicionSimbolo(herramienta, pt, R);
@@ -772,6 +1087,10 @@ function aplicarProyecto(o) {
   Object.assign(estado.cabecera, o.cabecera || {});
   estado.escala = Number(o.escala) > 0 ? Number(o.escala) : 0.5;
   estado.unidad = o.unidad === 'm' ? 'm' : 'mm';
+  estado.catalogoPropio = Array.isArray(o.catalogoPropio) ? o.catalogoPropio.filter(it => it && /^u_/.test(it.id) && it.nombre) : [];
+  for (const t of Object.keys(TIPOS)) if (TIPOS[t].propio) delete TIPOS[t];
+  estado.catalogoPropio.forEach(registrarPropio);
+  if (o.trazo && typeof o.trazo === 'object') estado.trazo = { modo: ['iso', '15', '5', '1'].includes(o.trazo.modo) ? o.trazo.modo : 'iso', plano: PLANOS[o.trazo.plano] ? o.trazo.plano : 'H' };
   estado.components = (o.components || []).filter(c => TIPOS[c.type] && Array.isArray(c.coords));
   estado.consumibles = Array.isArray(o.consumibles) ? o.consumibles : [];
   estado.ajustes = o.ajustes && typeof o.ajustes === 'object' ? o.ajustes : {};
@@ -787,28 +1106,38 @@ function crearComponente(tipo, coords, rot, extra) {
   return Object.assign({ id: nuevoId(), category: TIPOS[tipo].cat, type: tipo, nps: $('spec-nps').value, schedule: $('spec-mat').value,
     length: 0, lengthManual: false, coords, rotation: normAng(rot) }, extra || {});
 }
-function crearTuberia(A, B) {
-  const c = crearComponente('pipe', [A, B], dirEntre(A, B).ang);
+function crearTuberia(A, B, info) {
+  const c = crearComponente('pipe', [A, B], angPantalla(A, B));
+  if (info && info.libre && !dirEntre(A, B)) c.libre = { plano: info.plano, ang: info.angPlano };
   c.length = longitudTubo(c);
   commit(() => estado.components.push(c));
   if ($('chk-manual-len').checked) pedirLongitud(c.id);
 }
 function pedirLongitud(id) {
   const c = estado.components.find(x => x.id === id); if (!c) return;
-  const pasos = dirEntre(c.coords[0], c.coords[1]).pasos;
+  const pasos = pasosReales(c), pl = c.libre && PLANOS[c.libre.plano];
   abrirModal({
-    titulo: `Longitud real del tramo (${pasos} paso${pasos === 1 ? '' : 's'} de grilla)`,
-    html: `<label>Longitud en ${enMM() ? 'milímetros (mm)' : 'metros (m)'}</label><input id="m-long" type="number" step="${enMM() ? 1 : 0.001}" min="0" inputmode="decimal" value="${aUnidad(longitudTubo(c))}">
+    titulo: `Longitud real del tramo (${f2(pasos).replace(/\.00$/, '')} paso${pasos === 1 ? '' : 's'} de grilla)`,
+    html: `<label>Longitud en ${enMM() ? 'milímetros (mm)' : 'metros (m)'}</label><input id="m-long" type="number" step="any" min="0" inputmode="decimal" value="${aUnidad(longitudTubo(c))}">
+           ${pl ? `<label>Ángulo en plano ${pl.nombre} (grados desde ${pl.ref})</label><input id="m-ang" type="number" step="0.1" inputmode="decimal" value="${c.libre.ang}">` : ''}
            <p>Deje el valor sugerido para usar la escala de la grilla (${fmtLong(estado.escala)} por paso). Escriba la cota medida en campo para fijarla.</p>`,
     alAbrir: () => { const i = $('m-long'); i.focus(); i.select(); },
     alAceptar: () => {
       const v = deUnidad(parseFloat(String($('m-long').value).replace(',', '.')));
       if (!(v > 0)) { aviso('Escriba una longitud mayor que cero', 'error'); return false; }
+      if (pl) { const a = parseFloat(String($('m-ang').value).replace(',', '.')); if (isFinite(a)) cambiarAnguloLibre(c, a); }
       const auto = r3(pasos * estado.escala);
       c.lengthManual = Math.abs(v - auto) > 5e-4; c.length = c.lengthManual ? r3(v) : auto;
       actualizarTodo();
     }
   });
+}
+/* Cambia el ángulo de un tramo libre conservando su inicio y su longitud; arrastra el trazo en curso */
+function cambiarAnguloLibre(c, a) {
+  if (!c.libre || casiAng(a, c.libre.ang)) return;
+  const viejo = c.coords[1], nuevo = desdePlano(c.libre.plano, c.coords[0], pasosReales(c), normAng(a));
+  c.coords[1] = nuevo; c.libre.ang = normAng(Math.round(a * 10) / 10); c.rotation = angPantalla(c.coords[0], nuevo);
+  if (trazo && igual(trazo.inicio, viejo)) trazo.inicio = nuevo;
 }
 /* Calcula dónde y con qué orientación queda un símbolo según el cursor */
 function posicionSimbolo(tipo, pt, R) {
@@ -819,8 +1148,7 @@ function posicionSimbolo(tipo, pt, R) {
     const tb = tuberiaCercana(pt, R * 1.5);
     if (tb) {
       if (T.modo === 'punto') return { P: tb.P, rot: tb.ang, iman: true };
-      const k = Math.round(tb.k), A = tb.c.coords[0], d = dirEntre(A, tb.c.coords[1]).d;
-      return { P: [A[0] + k * d[0], A[1] + k * d[1]], rot: tb.ang, iman: true };
+      return { P: puntoEnTubo(tb.c, Math.round(tb.k)), rot: tb.ang, iman: true };
     }
     return { P: nodoMasCercano(pt.x, pt.y), rot: rotacionActual, iman: false };
   }
@@ -839,14 +1167,17 @@ function posicionSimbolo(tipo, pt, R) {
   return { P: nodoMasCercano(pt.x, pt.y), rot: rotacionActual, iman: false };
 }
 function colocarSimbolo(tipo, pt, R) {
-  const pos = posicionSimbolo(tipo, pt, R), T = TIPOS[tipo];
+  const pos = posicionSimbolo(tipo, pt, R), T = TIPOS[tipo], s = aPantalla(pos.P);
+  /* evita duplicados: misma pieza en el mismo punto (las juntas, con radio mayor) */
+  const dup = estado.components.find(o => o.type === tipo && (() => { const q = aPantalla(o.coords[0]); return Math.hypot(q.x - s.x, q.y - s.y) < (tipo === 'weld' ? 7 : 3); })());
+  if (dup) { aviso(`Ya hay ${T.corto.toLowerCase()} en ese punto`, 'error', 1800); return; }
   const c = crearComponente(tipo, [pos.P], pos.rot);
   if (!T.reduce) { commit(() => estado.components.push(c)); aviso(`${T.corto} colocado`, 'ok', 900); return; }
   const i = NPS_LISTA.indexOf(c.nps), sugerido = NPS_LISTA[Math.max(0, i - 1)];
   abrirModal({
     titulo: `${T.corto}: diámetro reducido`,
     html: `<label>Diámetro mayor</label><input value="Ø ${esc(c.nps)}" disabled>
-           <label>Diámetro menor (${tipo === 'tee_red' ? 'ramal' : 'salida'})</label>
+           <label>Diámetro menor (${/tee|olet|copla/i.test(tipo + T.corto) ? 'ramal' : 'salida'})</label>
            <select id="m-red">${NPS_LISTA.map(n => `<option${n === sugerido ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>`,
     alAceptar: () => {
       c.npsRed = $('m-red').value;
@@ -858,14 +1189,22 @@ function colocarSimbolo(tipo, pt, R) {
 
 /* ---------- 11. Motor del Listado de Materiales (BOM) ---------- */
 function descripcion(c) {
-  const sp = SPECS[c.schedule] || { sch: '', tubo: c.schedule, acc: c.schedule, brida: c.schedule, val: c.schedule };
+  const sp = SPECS[c.schedule] || { sch: '', tubo: c.schedule, acc: c.schedule, forj: c.schedule, brida: c.schedule, val: c.schedule, junta: 'BW' };
   const T = TIPOS[c.type], med = T.reduce && c.npsRed ? `Ø ${c.nps} x ${c.npsRed}` : `Ø ${c.nps}`;
   switch (T.mat) {
     case 'tubo':  return `TUBERÍA ${med} ${sp.sch} ${sp.tubo}`;
     case 'acc':   return `${T.nombre} ${med} ${sp.sch} ${sp.acc}`;
-    case 'brida': return `${T.nombre} ${med} ${c.type === 'flange_wn' ? sp.sch + ' ' : ''}${sp.brida}`;
-    case 'val':   return `${T.nombre} ${med} ${sp.val}`;
-    default:      return `${T.nombre} ${med} ${sp.sch} — INSPECCIÓN END (VT/PT)`;
+    case 'forj':  return `${T.nombre} ${med} ${sp.forj || sp.acc}`;
+    case 'brida': return `${T.nombre} ${med} ${T.conSch ? sp.sch + ' ' : ''}${sp.brida}`;
+    case 'val':
+    case 'esp':   return `${T.nombre} ${med} ${sp.val}`;
+    case 'inst':  return `${T.nombre}, CONEXIÓN 1/2" NPT, PARA LÍNEA ${med}`;
+    case 'sop':   return `${T.nombre} PARA TUBERÍA ${med}`;
+    case 'gen':   return `${T.nombre} ${med}${T.desc ? ' ' + T.desc : ''}`;
+    default: {
+      const j = sp.junta || 'BW';
+      return `${TIPO_JUNTA[j] || TIPO_JUNTA.BW} ${med}${j === 'BW' ? ` ${sp.sch} — INSPECCIÓN END (VT/PT)` : ''}`;
+    }
   }
 }
 /* Agrupa componentes idénticos (tipo + diámetro + especificación): tubería en ML, el resto en UND */
@@ -873,7 +1212,7 @@ function recalculateBOM() {
   const grupos = new Map();
   for (const c of estado.components) {
     const T = TIPOS[c.type], key = [c.type, c.nps, c.npsRed || '', c.schedule].join('|');
-    const g = grupos.get(key) || { key, orden: T.orden, nps: npsNum(c.nps), uni: c.type === 'pipe' ? 'ML' : 'UND', desc: descripcion(c), cant: 0 };
+    const g = grupos.get(key) || { key, orden: T.orden, nps: npsNum(c.nps), uni: c.type === 'pipe' ? 'ML' : (T.uni || 'UND'), desc: descripcion(c), cant: 0 };
     g.cant += c.type === 'pipe' ? longitudTubo(c) : 1;
     grupos.set(key, g);
   }
@@ -948,6 +1287,147 @@ function openConsumableModal() {
   });
 }
 
+/* ---------- 11b. Juntas soldadas automáticas ----------
+   Coloca juntas en: uniones tubo-tubo, extremos de codos/tees/cruces, reducciones, bridas,
+   caps, stub ends, codos 180° y olets. Solo para especificaciones soldadas a tope (BW). */
+const JUNTAS_LOCALES = {
+  reducer: [[-10, 0], [10, 0]], reducer_ecc: [[-10, 0], [10, 0]], flange_wn: [[-11, 0]], flange_so: [[-4, 0]], flange_sw: [[-8, 0]],
+  cap: [[0, 0]], stub_end: [[-10, 0]], elbow180: [[-10, 0], [-10, -14]], weldolet: [[0, 0]], flange_or: [[-9, 0], [9, 0]], exp_joint: [[-10, 0], [10, 0]]
+};
+function generarJuntas() {
+  toggleSidebar(false);
+  const esBW = c => (SPECS[c.schedule]?.junta || 'BW') === 'BW';
+  const existentes = estado.components.filter(c => c.type === 'weld').map(c => aPantalla(c.coords[0]));
+  const nuevas = [], omitidas = new Set();
+  const agregar = (scr, origen) => {
+    if (!esBW(origen)) { omitidas.add(SPECS[origen.schedule]?.corto || origen.schedule); return; }
+    if ([...existentes, ...nuevas.map(n => n.s)].some(q => Math.hypot(q.x - scr.x, q.y - scr.y) < 7)) return;
+    nuevas.push({ s: scr, origen });
+  };
+  const nodosConAccesorio = new Set();
+  for (const c of estado.components) {
+    if (c.type === 'pipe' || c.type === 'weld') continue;
+    const T = TIPOS[c.type], tipo = T.base || c.type, P = aPantalla(c.coords[0]);
+    if (T.modo === 'nodo') {
+      nodosConAccesorio.add(c.coords[0].join(','));
+      for (const a of brazosAccesorio(c).brazos) { const u = unitAng(a); agregar({ x: P.x + u.x * 0.42 * PASO_PX, y: P.y + u.y * 0.42 * PASO_PX }, c); }
+      continue;
+    }
+    const locales = JUNTAS_LOCALES[tipo]; if (!locales) continue;
+    const e = unitAng(c.rotation), n = esVertical(c.rotation) ? { x: C30, y: 0.5 } : { x: 0, y: 1 };
+    for (const [lx, ly] of locales) agregar({ x: P.x + e.x * lx + n.x * ly, y: P.y + e.y * lx + n.y * ly }, c);
+  }
+  /* uniones directas tubo con tubo (sin accesorio en el nodo) */
+  const extremos = new Map();
+  for (const c of tuberias()) for (const P of c.coords) { const k = P.map(v => v.toFixed(5)).join(','); if (!extremos.has(k)) extremos.set(k, { P, tubos: [] }); extremos.get(k).tubos.push(c); }
+  for (const { P, tubos } of extremos.values()) {
+    if (tubos.length < 2 || nodosConAccesorio.has(P.join(','))) continue;
+    const s = aPantalla(P);
+    if (estado.components.some(o => o.type !== 'pipe' && o.type !== 'weld' && (() => { const q = aPantalla(o.coords[0]); return Math.hypot(q.x - s.x, q.y - s.y) < 3; })())) continue;
+    agregar(s, tubos[0]);
+  }
+  if (!nuevas.length) { aviso(omitidas.size ? `Sin juntas nuevas (uniones no soldadas: ${[...omitidas].join(', ')})` : 'No hay juntas nuevas para agregar', null, 3500); return; }
+  commit(() => {
+    for (const { s, origen } of nuevas) estado.components.push(Object.assign(crearComponente('weld', [red6(aRed(s.x, s.y))], origen.rotation || 0), { nps: origen.nps, schedule: origen.schedule }));
+  });
+  aviso(`Se agregaron ${nuevas.length} juntas soldadas`, 'ok', 2500);
+}
+
+/* ---------- 11c. Catálogo propio (ítems del usuario, también importables desde CSV) ---------- */
+const quitarTildes = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+function registrarPropio(it) {
+  const base = TIPOS[it.simbolo] && !TIPOS[it.simbolo].propio && it.simbolo !== 'pipe' && it.simbolo !== 'weld' ? it.simbolo : 'coupling';
+  TIPOS[it.id] = { grupo: 'propio', cat: it.cat || 'OTRO', mat: 'gen', modo: TIPOS[base].modo || 'linea', orden: 80, nombre: it.nombre,
+    corto: it.nombre.length > 24 ? it.nombre.slice(0, 23) + '…' : it.nombre, base, desc: it.desc || '', uni: it.uni || 'UND', propio: true };
+}
+function agregarItemPropio(it) {
+  const item = { id: 'u_' + nuevoId(), nombre: it.nombre, cat: it.cat, simbolo: it.simbolo, desc: it.desc || '', uni: it.uni || 'UND' };
+  estado.catalogoPropio.push(item); registrarPropio(item);
+}
+const normalizarCategoria = t => { const u = quitarTildes(t).toUpperCase().trim();
+  return CATEGORIAS.find(c => quitarTildes(c).startsWith(u.slice(0, 3)) && u) || 'OTRO'; };
+function buscarSimbolo(txt, cat) {
+  const t = quitarTildes(txt).toLowerCase().trim();
+  if (t && TIPOS[t] && !TIPOS[t].propio && t !== 'pipe') return t;
+  if (t) { const k = Object.keys(TIPOS).find(k => k !== 'pipe' && !TIPOS[k].propio && quitarTildes(TIPOS[k].corto + ' ' + TIPOS[k].nombre).toLowerCase().includes(t)); if (k) return k; }
+  return { 'VÁLVULA': 'v_gate', BRIDA: 'flange_so', INSTRUMENTO: 'pi', SOPORTE: 'sup_shoe', ESPECIAL: 'strainer_y' }[cat] || 'coupling';
+}
+function abrirCatalogoPropio() {
+  toggleSidebar(false);
+  const bases = Object.keys(TIPOS).filter(t => t !== 'pipe' && t !== 'weld' && !TIPOS[t].propio);
+  const lista = estado.catalogoPropio.map(it => `<div style="display:flex;gap:6px;align-items:center;margin:4px 0">
+      <span style="flex:1;font-size:12px">${esc(it.nombre)} <small style="color:var(--s400)">· ${esc(it.cat)} · ${esc(TIPOS[it.simbolo]?.corto || it.simbolo)}</small></span>
+      <button type="button" class="btn peligro" data-quitar-cat="${esc(it.id)}">Quitar</button></div>`).join('');
+  abrirModal({
+    titulo: 'Agregar ítem al catálogo propio',
+    html: `${lista ? `<label>Ítems propios (${estado.catalogoPropio.length})</label><div style="max-height:150px;overflow:auto">${lista}</div>` : ''}
+      <label>Nombre (como saldrá en el BOM)</label><input id="m-cn" placeholder="Ej: VÁLVULA DE BOLA 3 PIEZAS" maxlength="80">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label>Categoría</label><select id="m-cc">${CATEGORIAS.map(c => `<option>${c}</option>`).join('')}</select></div>
+        <div><label>Unidad</label><select id="m-cu">${UNIDADES.map(u => `<option${u === 'UND' ? ' selected' : ''}>${u}</option>`).join('')}</select></div></div>
+      <label>Símbolo a usar en el plano</label><select id="m-cs">${bases.map(t => `<option value="${t}">${esc(TIPOS[t].corto)}</option>`).join('')}</select>
+      <label>Especificación / material (opcional)</label><input id="m-cd" placeholder="Ej: SW 800# ASTM A105, ASIENTO PTFE" maxlength="120">
+      <p>Para cargar muchos ítems use <b>Importar catálogo (.csv)</b>; la plantilla trae el formato.</p>`,
+    alAbrir: () => {
+      $('m-cc').onchange = () => { $('m-cs').value = buscarSimbolo('', $('m-cc').value); };
+      $('modal-cuerpo').onclick = e => {
+        const id = e.target.dataset && e.target.dataset.quitarCat; if (!id) return;
+        if (estado.components.some(c => c.type === id)) { aviso('Ese ítem está en el plano: bórrelo primero', 'error'); return; }
+        estado.catalogoPropio = estado.catalogoPropio.filter(x => x.id !== id); delete TIPOS[id];
+        e.target.closest('div').remove(); if (herramienta === id) setActiveTool('pipe'); construirCatalogo(); guardarLocal();
+      };
+      $('m-cn').focus();
+    },
+    alAceptar: () => {
+      const nombre = $('m-cn').value.trim().toUpperCase();
+      if (!nombre) { aviso('Escriba el nombre del ítem', 'error'); return false; }
+      agregarItemPropio({ nombre, cat: $('m-cc').value, simbolo: $('m-cs').value, desc: $('m-cd').value.trim().toUpperCase(), uni: $('m-cu').value });
+      construirCatalogo(); guardarLocal(); aviso('Ítem agregado al catálogo propio', 'ok');
+    }
+  });
+}
+function parseLineaCSV(linea, sep) {
+  const out = []; let cur = '', q = false;
+  for (let i = 0; i < linea.length; i++) {
+    const ch = linea[i];
+    if (q) { if (ch === '"') { if (linea[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+    else if (ch === '"') q = true; else if (ch === sep) { out.push(cur); cur = ''; } else cur += ch;
+  }
+  out.push(cur); return out.map(v => v.trim());
+}
+$('in-catalogo').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const lineas = (await f.text()).replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim());
+    if (!lineas.length) throw new Error('archivo vacío');
+    const sep = (lineas[0].match(/;/g) || []).length >= (lineas[0].match(/,/g) || []).length ? ';' : ',';
+    let n = 0;
+    for (const [i, l] of lineas.entries()) {
+      const col = parseLineaCSV(l, sep);
+      if (i === 0 && /nombre/i.test(col[0])) continue;
+      const nombre = (col[0] || '').toUpperCase().slice(0, 80); if (!nombre) continue;
+      if (estado.catalogoPropio.length >= 500) break;
+      const cat = normalizarCategoria(col[1] || '');
+      const uni = UNIDADES.find(u => u.toUpperCase() === (col[4] || '').toUpperCase()) || 'UND';
+      agregarItemPropio({ nombre, cat, simbolo: buscarSimbolo(col[2] || '', cat), desc: (col[3] || '').toUpperCase().slice(0, 120), uni }); n++;
+    }
+    construirCatalogo(); guardarLocal(); toggleSidebar(true);
+    const g = document.querySelector('details[data-grupo="propio"]'); if (g) { g.open = true; g.scrollIntoView({ block: 'nearest' }); }
+    aviso(`Catálogo importado: ${n} ítems`, 'ok', 3000);
+  } catch (err) { aviso('No se pudo importar: ' + err.message, 'error', 5000); }
+});
+function descargarPlantillaCatalogo() {
+  const filas = [['NOMBRE', 'CATEGORIA', 'SIMBOLO', 'DESCRIPCION', 'UNIDAD'],
+    ['VÁLVULA DE BOLA 3 PIEZAS', 'VÁLVULA', 'v_ball', 'SW 800# ASTM A105, ASIENTO PTFE', 'UND'],
+    ['CODO 90° SOCKET WELD', 'ACCESORIO', 'elbow90', 'ASTM A105 3000# SW', 'UND'],
+    ['VÁLVULA DE GLOBO SANITARIA', 'VÁLVULA', 'v_globe', 'CLAMP 316L', 'UND'],
+    ['JUEGO DE EMPAQUE Y ESPÁRRAGOS 150#', 'OTRO', 'flange_so', 'ESPIROMETÁLICO + A193 B7', 'JGO'],
+    ['SOPORTE TIPO U-BOLT', 'SOPORTE', 'sup_guide', 'ACERO GALVANIZADO', 'UND']];
+  const csv = filas.map(f => f.map(v => /[;"]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v).join(';')).join('\r\n');
+  descargarBlob(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }), 'Plantilla_catalogo_INDIMON.csv');
+  aviso('Plantilla descargada: llénela en Excel y guárdela como CSV', 'ok', 3500);
+}
+
 /* ---------- 12. Selección y panel de propiedades ---------- */
 function seleccionar(id) { seleccion = id; renderLienzo(); renderPanelSeleccion(); }
 function renderPanelSeleccion() {
@@ -959,8 +1439,10 @@ function renderPanelSeleccion() {
     ${T.reduce ? `<label>Diámetro menor</label><select data-p="npsRed">${opNps(c.npsRed)}</select>` : ''}
     <label>Especificación</label><select data-p="schedule">${Object.keys(SPECS).map(s => `<option value="${esc(s)}"${s === c.schedule ? ' selected' : ''}>${esc(SPECS[s].corto)}</option>`).join('')}</select>
     ${c.type === 'pipe' ? `<label>Longitud (${txtUnidad()})${c.lengthManual ? ' · manual' : ' · por grilla'}</label>
-      <div style="display:flex;gap:5px"><input data-p="length" type="number" step="${enMM() ? 1 : 0.001}" min="0" inputmode="decimal" value="${aUnidad(longitudTubo(c))}">
-      <button class="btn" data-acc="auto" title="Volver a la longitud por grilla">Grilla</button></div>` : ''}
+      <div style="display:flex;gap:5px"><input data-p="length" type="number" step="any" min="0" inputmode="decimal" value="${aUnidad(longitudTubo(c))}">
+      <button class="btn" data-acc="auto" title="Volver a la longitud por grilla">Grilla</button></div>
+      ${c.libre && PLANOS[c.libre.plano] && !dirEntre(c.coords[0], c.coords[1]) ? `<label>Ángulo · plano ${PLANOS[c.libre.plano].nombre} (° desde ${PLANOS[c.libre.plano].ref})</label>
+      <input data-p="angulo" type="number" step="0.1" inputmode="decimal" value="${c.libre.ang}">` : ''}` : ''}
     <div class="acc">${c.type !== 'pipe' && TIPOS[c.type].modo !== 'punto' ? '<button class="btn" data-acc="rotar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-rotate"/></svg>Rotar</button>' : ''}
       <button class="btn peligro" data-acc="borrar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-trash"/></svg>Borrar</button></div>`;
   p.hidden = false;
@@ -971,6 +1453,10 @@ $('panel-sel').addEventListener('change', e => {
     const v = deUnidad(parseFloat(String(e.target.value).replace(',', '.')));
     if (!(v > 0)) { aviso('Longitud no válida', 'error'); renderPanelSeleccion(); return; }
     commit(() => { c.length = r3(v); c.lengthManual = true; });
+  } else if (k === 'angulo') {
+    const a = parseFloat(String(e.target.value).replace(',', '.'));
+    if (!isFinite(a)) { aviso('Ángulo no válido', 'error'); renderPanelSeleccion(); return; }
+    commit(() => cambiarAnguloLibre(c, a));
   } else commit(() => { c[k] = e.target.value; });
 });
 $('panel-sel').addEventListener('click', e => {
@@ -991,6 +1477,7 @@ const PISTAS = {
   select: 'Tocar: seleccione un componente para editarlo',
   pipe: 'Tubería: arrastre, o toque inicio y toque cada punto'
 };
+const pistaTuberia = () => estado.trazo.modo === 'iso' ? PISTAS.pipe : `Tubería libre (${PLANOS[estado.trazo.plano].corto}, cada ${estado.trazo.modo}°)`;
 function setActiveTool(t) {
   if (trazo) terminarTrazo();
   herramienta = t;
@@ -1003,9 +1490,24 @@ function setActiveTool(t) {
 }
 function actualizarBarraEstado() {
   $('pista').textContent = trazo && trazo.cadena ? 'Toque el siguiente punto · toque el mismo punto para terminar'
-    : PISTAS[herramienta] || `${TIPOS[herramienta].corto}: toque sobre la tubería o el nodo`;
+    : herramienta === 'pipe' ? pistaTuberia() : PISTAS[herramienta] || `${TIPOS[herramienta]?.corto || ''}: toque sobre la tubería o el nodo`;
   $('btn-terminar').hidden = !(trazo && trazo.cadena);
 }
+const MODOS_TRAZO = ['iso', '15', '5', '1'];
+function sincronizarTrazo() {
+  const { modo, plano } = estado.trazo;
+  $('sel-trazo').value = modo; $('sel-plano').value = plano;
+  $('fila-plano').hidden = modo === 'iso'; $('btn-plano').hidden = modo === 'iso';
+  $('btn-modo-trazo').textContent = modo === 'iso' ? 'ISO' : `∠${modo}°`;
+  $('btn-plano').textContent = PLANOS[plano].corto;
+  actualizarBarraEstado();
+}
+function ciclarModoTrazo() { estado.trazo.modo = MODOS_TRAZO[(MODOS_TRAZO.indexOf(estado.trazo.modo) + 1) % MODOS_TRAZO.length]; sincronizarTrazo(); guardarLocal();
+  aviso(estado.trazo.modo === 'iso' ? 'Trazo ISO: ejes 30° / 90° / 150°' : `Trazo libre cada ${estado.trazo.modo}° en ${PLANOS[estado.trazo.plano].corto}`); }
+function ciclarPlano() { const k = Object.keys(PLANOS); estado.trazo.plano = k[(k.indexOf(estado.trazo.plano) + 1) % k.length]; sincronizarTrazo(); guardarLocal();
+  aviso(`Ángulo libre en ${PLANOS[estado.trazo.plano].corto} (${PLANOS[estado.trazo.plano].nombre})`); }
+$('sel-trazo').addEventListener('change', () => { estado.trazo.modo = $('sel-trazo').value; sincronizarTrazo(); guardarLocal(); });
+$('sel-plano').addEventListener('change', () => { estado.trazo.plano = $('sel-plano').value; sincronizarTrazo(); guardarLocal(); });
 function terminarTrazo() { trazo = null; limpiarGuia(); actualizarHUD(null, 0, false); actualizarBarraEstado(); }
 function cycleSymbolRotation() {
   rotacionActual = ROTACIONES[(ROTACIONES.indexOf(rotacionActual) + 1) % ROTACIONES.length];
@@ -1084,12 +1586,12 @@ function finPuntero(e, cancelado) {
   if (herramienta !== 'pipe' || !trazo || !trazo.down) { if (e.pointerType !== 'mouse') limpiarGuia(); return; }
   trazo.down = null;
   if (cancelado) { if (!trazo.cadena) terminarTrazo(); return; }
-  const r = bloqueoAxial(trazo.inicio, puntoSVG(e), radioCaptura(e));
-  if (r.pasos >= 1) {
+  const r = resolverFin(trazo.inicio, puntoSVG(e), radioCaptura(e));
+  if (r.pasos >= (estado.trazo.modo === 'iso' ? 1 : 0.25) && !igual(r.fin, trazo.inicio)) {
     const ini = trazo.inicio;
     if (trazo.fresco && trazo.movido) trazo = null;           // trazo por arrastre: un solo tramo
     else { trazo.inicio = r.fin; trazo.cadena = true; }       // trazo por toques: continúa en cadena
-    crearTuberia(ini, r.fin);
+    crearTuberia(ini, r.fin, r);
   } else if (trazo.cadena && !trazo.fresco) terminarTrazo();  // tocó el mismo punto: fin de la cadena
   else trazo.cadena = true;                                    // primer toque: queda esperando el siguiente
   if (trazo) { if (e.pointerType === 'mouse') dibujarFantasma(puntoSVG(e), radioCaptura(e)); else { limpiarGuia(); $('capa-guia').innerHTML = indicadorSnap(trazo.inicio, true); } }
@@ -1150,6 +1652,8 @@ document.addEventListener('keydown', e => {
   else if (k === 'delete' || k === 'backspace') { e.preventDefault(); deleteSelected(); }
   else if (k === 'escape') { if (trazo) terminarTrazo(); else seleccionar(null); }
   else if (k === 'r') cycleSymbolRotation();
+  else if (k === 'a') ciclarModoTrazo();
+  else if (k === 'p') ciclarPlano();
   else if (k === 't') setActiveTool('pipe');
   else if (k === 'v') setActiveTool('select');
   else if (k === 'h' || k === ' ') { e.preventDefault(); setActiveTool('pan'); }
@@ -1218,43 +1722,87 @@ $('in-proyecto').addEventListener('change', async e => {
     const o = JSON.parse(await f.text());
     if (!o || !Array.isArray(o.components)) throw new Error('el archivo no es un proyecto DP-F-009');
     terminarTrazo(); registrar(); aplicarProyecto(o); seleccion = null;
-    pintarCabecera(); sincronizarSelectores(); actualizarTodo(); toggleSidebar(false);
+    pintarCabecera(); sincronizarSelectores(); sincronizarTrazo(); construirCatalogo(); actualizarTodo(); toggleSidebar(false);
     aviso('Proyecto abierto: ' + f.name, 'ok');
   } catch (err) { aviso('No se pudo abrir: ' + err.message, 'error', 5000); }
 });
 
 /* ---------- 18. Exportación: Excel (.xlsx), PDF A3 y app .html ---------- */
 function exportToExcel() {
-  const cab = estado.cabecera;
-  const filasBOM = ultimoBOM.map((f, i) => [i + 1, f.uni, f.desc, Number(f.uni === 'ML' || f.uni === 'm' ? r2(f.cant) : f.cant)]);
-  const aoa = [
-    ['INDIMON S.A.S.  —  NIT 900602215-5'],
-    ['FORMATO BOCETOS ISOMÉTRICOS — LISTADO DE MATERIALES (BOM)'],
-    ['Código', 'DP-F-009', 'Versión', '01', 'Página', `${cab.pagina || 1} de ${cab.paginas || 1}`],
-    [],
-    ['CLIENTE', cab.cliente], ['PROYECTO', cab.proyecto], ['DIBUJO / LÍNEA N°', cab.linea], ['FECHA', cab.fecha],
-    ['CONSECUTIVO', cab.consecutivo], ['DIÁMETRO NOMINAL (NPS)', cab.nps], ['ESPECIFICACIÓN', cab.spec],
-    ['ESCALA', `1 paso de grilla = ${fmtLong(estado.escala)}`], ['FLUIDO / SERVICIO', cab.servicio],
-    ['ELABORÓ', cab.elaboro, 'REVISÓ', cab.reviso, 'APROBÓ', cab.aprobo], ['NOTAS', cab.notas],
-    [],
-    ['ITEM', 'UNI', 'DESCRIPCIÓN TÉCNICA', 'CANTIDAD'],
-    ...filasBOM
-  ];
-  const detalle = [['ID', 'CATEGORÍA', 'TIPO', 'NPS', 'NPS MENOR', 'ESPECIFICACIÓN', 'LONGITUD (' + txtUnidad() + ')', 'LONG. MANUAL', 'COORDENADAS RED [p,q]', 'ROTACIÓN (°)', 'DESCRIPCIÓN']]
-    .concat(estado.components.map(c => [c.id, c.category, TIPOS[c.type].corto, c.nps, c.npsRed || '', c.schedule,
+  const cab = estado.cabecera, esML = u => u === 'ML' || u === 'm';
+  const fecha = /^\d{4}-\d{2}-\d{2}$/.test(cab.fecha || '') ? cab.fecha.split('-').reverse().join('/') : (cab.fecha || '');
+  const numW = numeracionSoldaduras();
+  const filasBOM = ultimoBOM.map((f, i) => [i + 1, f.uni, f.desc, Number(esML(f.uni) ? r2(f.cant) : f.cant)]);
+  const meta = [['CLIENTE', cab.cliente], ['PROYECTO', cab.proyecto], ['DIBUJO / LÍNEA N°', cab.linea], ['FECHA', fecha], ['CONSECUTIVO', cab.consecutivo],
+    ['DIÁMETRO NOMINAL (NPS)', cab.nps], ['ESPECIFICACIÓN DE MATERIAL', cab.spec], ['ESCALA', `S/E · 1 paso de grilla = ${fmtLong(estado.escala)}`],
+    ['FLUIDO / SERVICIO · PRUEBA', cab.servicio], ['ELABORÓ', cab.elaboro], ['REVISÓ', cab.reviso], ['APROBÓ', cab.aprobo], ['NOTAS / OBSERVACIONES', cab.notas]];
+  const totML = r2(ultimoBOM.filter(f => f.uni === 'ML' && !f.consumible).reduce((s, f) => s + Number(f.cant || 0), 0));
+  const nJuntas = estado.components.filter(c => c.type === 'weld').length;
+  let nT = 0;
+  const detalle = [['MARCA', 'CATEGORÍA', 'TIPO', 'NPS', 'NPS MENOR', 'ESPECIFICACIÓN', `LONGITUD (${txtUnidad()})`, 'LONG. MANUAL', 'ÁNGULO / PLANO', 'DESCRIPCIÓN', 'COORDENADAS RED [p,q]']]
+    .concat([...estado.components].sort((a, b) => (a.type === 'weld') - (b.type === 'weld') || (a.type === 'weld' ? numW.get(a.id) - numW.get(b.id) : 0)).map(c => [c.type === 'weld' ? `W${numW.get(c.id)}` : c.type === 'pipe' ? `T${++nT}` : '', c.category, TIPOS[c.type].corto, c.nps, c.npsRed || '', c.schedule,
       c.type === 'pipe' ? aUnidad(longitudTubo(c)) : '', c.type === 'pipe' ? (c.lengthManual ? 'SÍ' : 'NO') : '',
-      c.coords.map(P => `[${P[0]},${P[1]}]`).join(' → '), c.rotation, descripcion(c)]));
+      c.libre && PLANOS[c.libre.plano] && !dirEntre(c.coords[0], c.coords[1]) ? `${anguloAgudo(c)}° · ${PLANOS[c.libre.plano].corto}` : '',
+      descripcion(c), c.coords.map(P => `[${P[0]}, ${P[1]}]`).join(' → ')]));
   if (typeof XLSX === 'undefined') {
     /* respaldo sin librería: CSV compatible con Excel (separador ;) */
-    const csv = aoa.map(f => f.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
+    const filas = [['INDIMON S.A.S. — NIT 900602215-5'], ['FORMATO BOCETOS ISOMÉTRICOS — LISTADO DE MATERIALES (BOM)'], [], ...meta, [], ['ITEM', 'UNI', 'DESCRIPCIÓN TÉCNICA', 'CANTIDAD'], ...filasBOM];
+    const csv = filas.map(f => f.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
     descargarBlob(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }), nombreBase() + '.csv');
     aviso('Librería Excel no disponible: se exportó CSV', 'error', 4500); return;
   }
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 90 }, { wch: 14 }, { wch: 12 }, { wch: 16 }];
-  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } }];
+  /* ----- Hoja 1: rótulo + listado de materiales, con formato ----- */
+  const aoa = [['INDIMON S.A.S.  —  NIT 900602215-5'], ['FORMATO BOCETOS ISOMÉTRICOS — LISTADO DE MATERIALES (BOM)'],
+    [`Código: DP-F-009        Versión: 01        Página: ${cab.pagina || 1} de ${cab.paginas || 1}`], []];
+  const fMeta = aoa.length; meta.forEach(([k, v]) => aoa.push([k, '', v ?? '', '']));
+  aoa.push([]);
+  const fEnc = aoa.length; aoa.push(['ITEM', 'UNI', 'DESCRIPCIÓN TÉCNICA', 'CANTIDAD']);
+  const fDat = aoa.length; filasBOM.forEach(f => aoa.push(f));
+  aoa.push([]);
+  const fTot = aoa.length; aoa.push(['', '', 'TOTAL TUBERÍA (ML)', totML], ['', '', 'TOTAL JUNTAS SOLDADAS (END)', nJuntas]);
+  aoa.push([]); const fPie = aoa.length; aoa.push([`Generado con INDIMON CAD · ${new Date().toLocaleString('es-CO')}`]);
+  const ws = XLSX.utils.aoa_to_sheet(aoa), merges = [];
+  const linea = { style: 'thin', color: { rgb: '000000' } }, borde = { top: linea, bottom: linea, left: linea, right: linea };
+  const est = (r, c, s, z) => { const ref = XLSX.utils.encode_cell({ r, c }); if (!ws[ref]) ws[ref] = { t: 's', v: '' }; ws[ref].s = s; if (z) ws[ref].z = z; };
+  const centro = { horizontal: 'center', vertical: 'center', wrapText: true };
+  [[0, { font: { bold: true, sz: 16, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '0F172A' } } }],
+   [1, { font: { bold: true, sz: 12, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: 'DC2626' } } }],
+   [2, { font: { bold: true, sz: 10 }, fill: { fgColor: { rgb: 'F1F5F9' } } }]].forEach(([r, s]) => {
+    merges.push({ s: { r, c: 0 }, e: { r, c: 3 } });
+    for (let c = 0; c < 4; c++) est(r, c, { ...s, alignment: centro, border: borde });
+  });
+  meta.forEach((_, i) => {
+    const r = fMeta + i; merges.push({ s: { r, c: 0 }, e: { r, c: 1 } }, { s: { r, c: 2 }, e: { r, c: 3 } });
+    for (let c = 0; c < 2; c++) est(r, c, { font: { bold: true, sz: 9, color: { rgb: '1E293B' } }, fill: { fgColor: { rgb: 'E2E8F0' } }, border: borde, alignment: { vertical: 'center' } });
+    for (let c = 2; c < 4; c++) est(r, c, { font: { bold: true, sz: 11 }, border: borde, alignment: { vertical: 'center', wrapText: true } });
+  });
+  for (let c = 0; c < 4; c++) est(fEnc, c, { font: { bold: true, sz: 10, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '1E293B' } }, border: borde, alignment: centro });
+  ultimoBOM.forEach((f, i) => {
+    const r = fDat + i, fondo = i % 2 ? { fill: { fgColor: { rgb: 'F8FAFC' } } } : {};
+    const formato = esML(f.uni) ? '0.00' : Number.isInteger(Number(f.cant)) ? '0' : '0.00';
+    est(r, 0, { ...fondo, font: { bold: true }, border: borde, alignment: centro });
+    est(r, 1, { ...fondo, border: borde, alignment: centro });
+    est(r, 2, { ...fondo, border: borde, alignment: { vertical: 'center', wrapText: true } });
+    est(r, 3, { ...fondo, font: { bold: true }, border: borde, alignment: { horizontal: 'right', vertical: 'center' }, numFmt: formato }, formato);
+  });
+  for (let i = 0; i < 2; i++) {
+    est(fTot + i, 2, { font: { bold: true }, fill: { fgColor: { rgb: 'FEF3C7' } }, border: borde, alignment: { horizontal: 'right' } });
+    est(fTot + i, 3, { font: { bold: true }, fill: { fgColor: { rgb: 'FEF3C7' } }, border: borde, alignment: { horizontal: 'right' }, numFmt: i ? '0' : '0.00' }, i ? '0' : '0.00');
+  }
+  merges.push({ s: { r: fPie, c: 0 }, e: { r: fPie, c: 3 } });
+  est(fPie, 0, { font: { italic: true, sz: 8, color: { rgb: '64748B' } } });
+  ws['!merges'] = merges;
+  ws['!cols'] = [{ wch: 13 }, { wch: 13 }, { wch: 76 }, { wch: 14 }];
+  ws['!margins'] = { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 };
+  ws['!rows'] = aoa.map((_, r) => r === 0 ? { hpt: 26 } : r === 1 ? { hpt: 20 } : r === fEnc ? { hpt: 20 } : r >= fDat && r < fDat + filasBOM.length ? { hpt: 17 } : null);
+  /* ----- Hoja 2: detalle de componentes (trazabilidad de juntas y tramos) ----- */
   const ws2 = XLSX.utils.aoa_to_sheet(detalle);
-  ws2['!cols'] = [12, 12, 18, 8, 10, 26, 12, 12, 30, 11, 80].map(w => ({ wch: w }));
+  ws2['!cols'] = [8, 12, 18, 8, 10, 26, 13, 12, 16, 80, 34].map(w => ({ wch: w }));
+  for (let c = 0; c < detalle[0].length; c++) {
+    ws2[XLSX.utils.encode_cell({ r: 0, c })].s = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '1E293B' } }, border: borde, alignment: centro };
+    for (let r = 1; r < detalle.length; r++) { const ref = XLSX.utils.encode_cell({ r, c }); if (!ws2[ref]) ws2[ref] = { t: 's', v: '' }; ws2[ref].s = { border: borde, alignment: { vertical: 'center', horizontal: c < 9 && c !== 5 ? 'center' : 'left' } }; }
+  }
+  ws2['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(1, detalle.length - 1), c: detalle[0].length - 1 } }) };
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'BOM DP-F-009');
   XLSX.utils.book_append_sheet(wb, ws2, 'Componentes');
@@ -1275,8 +1823,8 @@ async function downloadSelfHtml() {
   try {
     html = await (await fetch(location.href.split('#')[0].split('?')[0], { cache: 'no-store' })).text();
     try {
-      const lib = await (await fetch('vendor/xlsx.full.min.js')).text();
-      if (lib.length > 1000) html = html.replace(/<script src="vendor\/xlsx\.full\.min\.js"[^>]*><\/script>/, () => '<script>' + lib + '</scr' + 'ipt>');
+      const lib = await (await fetch('vendor/xlsx.bundle.js')).text();
+      if (lib.length > 1000) html = html.replace(/<script src="vendor\/xlsx\.bundle\.js"[^>]*><\/script>/, () => '<script>' + lib + '</scr' + 'ipt>');
     } catch (_) { /* queda la referencia al CDN como respaldo */ }
   } catch (_) {
     html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
@@ -1348,6 +1896,23 @@ const ICONOS = {
   code: '<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>', check: '<path d="M20 6 9 17l-5-5"/>',
   target: '<circle cx="12" cy="12" r="8"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/>'
 };
+/* Botones del panel generados desde el catálogo */
+const claro = s => s.replace(/class="sb"/g, 'fill="#0f172a" stroke="#e2e8f0" stroke-width="1.6"').replace(/class="sn"/g, 'fill="#e2e8f0"').replace(/class="s"/g, 'fill="none" stroke="#e2e8f0" stroke-width="1.6"').replace(/<text /g, '<text fill="#fbbf24" ');
+const iconoSimbolo = t => { const b = TIPOS[t].base || t; return claro(ICONO_NODO[b] || SIM[b] || ''); };
+const botonHerr = (tool, etiqueta, dibujo, esIcono) => `<button class="herr" data-tool="${esc(tool)}" onclick="setActiveTool('${esc(tool)}')" title="${esc(TIPOS[tool]?.nombre || etiqueta)}">
+    ${esIcono ? `<svg class="ico" viewBox="0 0 24 24" style="width:22px;height:22px"><use href="#i-${dibujo}"/></svg>` : `<svg class="sim" viewBox="-20 -20 40 40" style="stroke:#e2e8f0">${dibujo}</svg>`}<span>${esc(etiqueta)}</span></button>`;
+const gruposAbiertos = new Set(['acc_bw', 'val', 'junta', 'propio']);
+function construirCatalogo() {
+  const filtro = quitarTildes($('buscar-sim').value).toLowerCase().trim();
+  const html = GRUPOS.map(([g, titulo]) => {
+    const items = Object.keys(TIPOS).filter(t => TIPOS[t].grupo === g && (!filtro || quitarTildes(t + ' ' + TIPOS[t].corto + ' ' + TIPOS[t].nombre + ' ' + (TIPOS[t].desc || '')).toLowerCase().includes(filtro)));
+    if (!items.length) return '';
+    return `<details class="grupo-cat" data-grupo="${g}"${filtro || gruposAbiertos.has(g) ? ' open' : ''}><summary><span>${esc(titulo)}</span><span style="color:var(--s400)">${items.length}</span></summary>
+      <div class="rejilla">${items.map(t => botonHerr(t, TIPOS[t].corto, iconoSimbolo(t))).join('')}</div></details>`;
+  }).join('');
+  $('catalogo').innerHTML = html || '<p style="font-size:12px;color:var(--s400);margin:4px 0 8px">Sin resultados. Puede agregarlo como ítem propio.</p>';
+  document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('activa', b.dataset.tool === herramienta));
+}
 function construirInterfaz() {
   /* sprite de iconos reutilizables + inserción en los botones */
   const sprite = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -1355,17 +1920,9 @@ function construirInterfaz() {
   sprite.innerHTML = Object.entries(ICONOS).map(([k, v]) => `<symbol id="i-${k}" viewBox="0 0 24 24">${v}</symbol>`).join('');
   document.body.prepend(sprite);
   document.querySelectorAll('svg[data-ico]').forEach(s => { s.setAttribute('viewBox', '0 0 24 24'); s.innerHTML = `<use href="#i-${s.dataset.ico}"/>`; });
-
-  /* botones de herramientas generados desde el catálogo */
-  const boton = (tool, etiqueta, dibujo, esIcono) => `<button class="herr" data-tool="${tool}" onclick="setActiveTool('${tool}')" title="${esc(etiqueta)}">
-      ${esIcono ? `<svg class="ico" viewBox="0 0 24 24" style="width:22px;height:22px"><use href="#i-${dibujo}"/></svg>` : `<svg class="sim" viewBox="-20 -20 40 40" style="stroke:#e2e8f0">${dibujo}</svg>`}<span>${esc(etiqueta)}</span></button>`;
-  const claro = s => s.replace(/class="sb"/g, 'fill="#0f172a" stroke="#e2e8f0" stroke-width="1.6"').replace(/class="sn"/g, 'fill="#e2e8f0"').replace(/class="s"/g, 'fill="none" stroke="#e2e8f0" stroke-width="1.6"').replace(/<text /g, '<text fill="#fbbf24" ');
-  const simbolo = t => claro(ICONO_NODO[t] || SIM[t]);
-  $('herr-control').innerHTML = boton('pan', 'Mover', 'move', true) + boton('select', 'Tocar', 'pointer', true) + boton('pipe', 'Tubería', 'pipe', true);
-  $('herr-accesorios').innerHTML = ['elbow90', 'elbow45', 'tee', 'tee_red', 'reducer', 'reducer_ecc', 'cap', 'flange_wn', 'flange_so'].map(t => boton(t, TIPOS[t].corto, simbolo(t))).join('');
-  $('herr-valvulas').innerHTML = ['v_gate', 'v_globe', 'v_ball', 'v_check', 'v_needle'].map(t => boton(t, TIPOS[t].corto, simbolo(t))).join('');
-  $('herr-juntas').innerHTML = boton('weld', 'Punto soldadura (END)', simbolo('weld'));
-
+  $('herr-control').innerHTML = botonHerr('pan', 'Mover', 'move', true) + botonHerr('select', 'Tocar', 'pointer', true) + botonHerr('pipe', 'Tubería', 'pipe', true);
+  $('buscar-sim').addEventListener('input', construirCatalogo);
+  $('catalogo').addEventListener('toggle', e => { const g = e.target.dataset && e.target.dataset.grupo; if (!g || $('buscar-sim').value) return; e.target.open ? gruposAbiertos.add(g) : gruposAbiertos.delete(g); }, true);
   $('spec-nps').innerHTML = NPS_LISTA.map(n => `<option value="${esc(n)}">Ø ${esc(n)}</option>`).join('');
   $('spec-mat').innerHTML = Object.keys(SPECS).map(s => `<option value="${esc(s)}">${esc(SPECS[s].corto)}</option>`).join('');
 }
@@ -1379,7 +1936,7 @@ function sincronizarSelectores() {
   construirInterfaz();
   cargarLocal();
   if (!estado.cabecera.fecha) estado.cabecera.fecha = hoyISO();
-  sincronizarSelectores(); pintarCabecera();
+  sincronizarSelectores(); pintarCabecera(); construirCatalogo(); sincronizarTrazo();
   prepararLienzo();
   setActiveTool('pipe');
   actualizarTodo();
