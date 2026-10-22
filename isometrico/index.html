@@ -300,12 +300,14 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
         </div>
 
         <div class="sec">
-          <h3>4. Calidad: QC-F-004 · QC-F-015</h3>
+          <h3>4. Calidad y avance de obra</h3>
           <div class="qc-resumen" id="qc-resumen">Sin juntas</div>
           <button class="btn ancho" onclick="abrirDatosCalidad()"><svg class="ico" data-ico="file"></svg>Datos de calidad (WPS, lugar, firmas)</button>
           <button class="btn ancho" onclick="abrirRegistroJuntas()"><svg class="ico" data-ico="check"></svg>Registrar soldadura de juntas</button>
           <button class="btn ancho verde" onclick="exportarQC004()"><svg class="ico" data-ico="sheet"></svg>QC-F-004 Reporte de soldadura</button>
           <button class="btn ancho verde" onclick="exportarQC015()"><svg class="ico" data-ico="sheet"></svg>QC-F-015 Mapa de soldadura</button>
+          <button class="btn ancho ambar" onclick="abrirReporteAvance()"><svg class="ico" data-ico="sheet"></svg>Reporte semanal de avance (ML)</button>
+          <button class="btn ancho" onclick="descargarMaestro()"><svg class="ico" data-ico="sheet"></svg>Excel maestro de gerencia (tarifas)</button>
         </div>
 
         <div class="sec">
@@ -675,8 +677,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v14';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-10-22T20:16';      // fecha y hora de la publicación (UTC)
+const APP_VERSION = 'v15';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-10-22T20:53';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -1931,12 +1933,14 @@ function panelJunta(c) {
     <label>Inspección visual</label><select data-pw="visual">${opcionesSel([['OK', 'OK'], ['RECHAZADA', 'Rechazada']], c.visual, 'Pendiente')}</select>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
       <div><label>END aplicada</label><select data-pw="nde">${opcionesSel(NDE_TIPOS.map(x => [x, x]), c.nde, '—')}</select></div>
-      <div><label>Resultado END</label><select data-pw="ndeRes">${opcionesSel(NDE_RESULTADOS.map(x => [x, x]), c.ndeRes, '—')}</select></div></div>`;
+      <div><label>Resultado END</label><select data-pw="ndeRes">${opcionesSel(NDE_RESULTADOS.map(x => [x, x]), c.ndeRes, '—')}</select></div></div>
+    ${ej === 'liberada' ? `<label>Fecha liberación</label><input data-pw="fechaLib" type="date" value="${esc(c.fechaLib || '')}">` : ''}
+    ${c.repSol || c.repLib ? `<div style="font-size:11px;color:var(--s400);margin-top:4px">Reportada a gerencia: ${c.repSol ? 'soldada ' + esc(c.repSol) : ''}${c.repLib ? ' · liberada ' + esc(c.repLib) : ''}</div>` : ''}`;
 }
 $('panel-sel').addEventListener('change', e => {
   const k = e.target.dataset.pw, c = estado.components.find(x => x.id === seleccion); if (!k || !c) return;
   const v = ['tubero', 'raiz', 'pres'].includes(k) ? e.target.value.trim().toUpperCase() : e.target.value;
-  commit(() => { if (v) c[k] = v; else delete c[k]; });
+  commit(() => { if (v) c[k] = v; else delete c[k]; ajustarLiberacion(c); });
 });
 function resumenCalidad() {
   const l = soldadurasOrdenadas(); if (!l.length) { $('qc-resumen').textContent = 'Sin juntas en el plano'; return; }
@@ -1964,6 +1968,8 @@ function abrirRegistroJuntas() {
         <div><label>Inspección visual</label><select id="rj-visual">${opcionesSel([['OK', 'OK'], ['RECHAZADA', 'Rechazada']], '', '— sin cambio —')}</select></div>
         <div><label>END aplicada</label><select id="rj-nde">${opcionesSel(NDE_TIPOS.map(x => [x, x]), '', '— sin cambio —')}</select></div>
         <div><label>Resultado END</label><select id="rj-ndeRes">${opcionesSel(NDE_RESULTADOS.map(x => [x, x]), '', '— sin cambio —')}</select></div>
+        <div><label>Fecha liberación</label><input id="rj-fechaLib" type="date"></div>
+        <div style="align-self:end;font-size:11px;color:var(--s400)">Si se deja vacía, al quedar liberada se pone la fecha de hoy</div>
       </div>
       <label>Juntas</label>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -1981,12 +1987,12 @@ function abrirRegistroJuntas() {
       const ids = [...document.querySelectorAll('[data-rj]:checked')].map(x => x.dataset.rj);
       if (!ids.length) { aviso('Marque al menos una junta', 'error'); return false; }
       const cambios = {};
-      for (const k of ['fecha', 'ubic', 'tubero', 'raiz', 'pres', 'visual', 'nde', 'ndeRes']) {
+      for (const k of ['fecha', 'ubic', 'tubero', 'raiz', 'pres', 'visual', 'nde', 'ndeRes', 'fechaLib']) {
         let v = $('rj-' + k).value.trim(); if (['tubero', 'raiz', 'pres'].includes(k)) v = v.toUpperCase();
         if (v) cambios[k] = v;
       }
       if (!Object.keys(cambios).length) { aviso('No llenó ningún dato para aplicar', 'error'); return false; }
-      commit(() => estado.components.forEach(c => { if (ids.includes(c.id)) Object.assign(c, cambios); }));
+      commit(() => estado.components.forEach(c => { if (ids.includes(c.id)) { Object.assign(c, cambios); ajustarLiberacion(c); } }));
       aviso(`Se actualizaron ${ids.length} juntas`, 'ok');
     }
   });
@@ -2135,6 +2141,153 @@ async function exportarQC015() {
     descargarBlob(new Blob([await wb.xlsx.writeBuffer()], { type: XLSX_MIME }), `QC-F-015_${nombreSeguro(cab.linea) || 'ISO'}_${hoyISO()}.xlsx`);
     aviso('QC-F-015 generado', 'ok', 2500);
   } catch (err) { aviso('No se pudo generar el QC-F-015: ' + err.message, 'error', 5000); }
+}
+
+/* ---------- 11e. Avance de obra: metros lineales por junta y reporte semanal para gerencia ---------- */
+/* fecha de liberación: se pone sola el día en que la junta queda liberada y se borra si deja de estarlo */
+function ajustarLiberacion(c) {
+  if (estadoJunta(c) === 'liberada') { if (!c.fechaLib) c.fechaLib = hoyISO(); }
+  else delete c.fechaLib;
+}
+/* El largo centro a centro de cada tubo se reparte por partes iguales entre las juntas que tiene,
+   así la suma de todas las juntas da los metros de la línea y ningún metro se cobra dos veces */
+function mlPorJunta() {
+  const ml = new Map(), welds = estado.components.filter(c => c.type === 'weld'), sinJunta = [];
+  welds.forEach(w => ml.set(w.id, 0));
+  for (const t of tuberias()) {
+    const a = aPantalla(t.coords[0]), b = aPantalla(t.coords[1]), dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy || 1;
+    const suyas = welds.filter(w => { const s = aPantalla(w.coords[0]); const u = ((s.x - a.x) * dx + (s.y - a.y) * dy) / L2;
+      return u > -0.01 && u < 1.01 && Math.hypot(a.x + u * dx - s.x, a.y + u * dy - s.y) < 4; });
+    const L = longitudTubo(t);
+    if (!suyas.length) { sinJunta.push(t); continue; }
+    suyas.forEach(w => ml.set(w.id, ml.get(w.id) + L / suyas.length));
+  }
+  return { ml, sinJunta };
+}
+/* semana ISO (lunes a domingo) */
+function semanaISO(f) {
+  const d = new Date(f + 'T12:00:00'), dia = (d.getDay() + 6) % 7, jue = new Date(d); jue.setDate(d.getDate() - dia + 3);
+  const ene4 = new Date(jue.getFullYear(), 0, 4), n = 1 + Math.round(((jue - ene4) / 864e5 - 3 + ((ene4.getDay() + 6) % 7)) / 7);
+  const lun = new Date(d); lun.setDate(d.getDate() - dia); const dom = new Date(lun); dom.setDate(lun.getDate() + 6);
+  const iso = x => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  return { clave: `${jue.getFullYear()}-S${String(n).padStart(2, '0')}`, desde: iso(lun), hasta: iso(dom) };
+}
+const UBIC_TXT = { S: 'TALLER', F: 'CAMPO' };
+/* Eventos a reportar en la semana: soldadas y liberadas con fecha hasta el domingo que no se hayan reportado en otra semana
+   (los registros atrasados salen en el siguiente reporte con su fecha real) */
+function eventosAvance(sem) {
+  const { ml, sinJunta } = mlPorJunta(), num = numeracionSoldaduras(), ev = [];
+  for (const c of estado.components) {
+    if (c.type !== 'weld') continue;
+    const base = { c, n: num.get(c.id) || 0, ml: ml.get(c.id) || 0 };
+    if (c.fecha && (c.raiz || c.pres) && c.fecha <= sem.hasta && (!c.repSol || c.repSol === sem.clave)) ev.push({ ...base, evento: 'SOLDADA', fecha: c.fecha, marca: 'repSol' });
+    if (estadoJunta(c) === 'liberada' && c.fechaLib && c.fechaLib <= sem.hasta && (!c.repLib || c.repLib === sem.clave)) ev.push({ ...base, evento: 'LIBERADA', fecha: c.fechaLib, marca: 'repLib' });
+  }
+  ev.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.n - b.n);
+  return { ev, sinJunta, ml };
+}
+function abrirReporteAvance() {
+  toggleSidebar(false);
+  if (!estado.components.some(c => c.type === 'weld')) { aviso('No hay juntas: colóquelas o use «Generar juntas soldadas automáticas»', 'error', 3500); return; }
+  const resumen = () => {
+    const f = $('ra-fecha').value; if (!f) return;
+    const sem = semanaISO(f), { ev, sinJunta } = eventosAvance(sem), sum = e => r2(ev.filter(x => x.evento === e).reduce((s, x) => s + x.ml, 0));
+    const sinUbic = ev.filter(x => !x.c.ubic).length;
+    $('ra-info').innerHTML = `Semana <b>${sem.clave}</b> (${fechaDMY(sem.desde)} a ${fechaDMY(sem.hasta)})<br>
+      Soldadas: <b>${ev.filter(x => x.evento === 'SOLDADA').length}</b> juntas · <b>${fmtNum(sum('SOLDADA'))} ML</b><br>
+      Liberadas: <b>${ev.filter(x => x.evento === 'LIBERADA').length}</b> juntas · <b>${fmtNum(sum('LIBERADA'))} ML</b>
+      ${sinUbic ? `<br><span style="color:#f59e0b">⚠ ${sinUbic} eventos sin taller/campo: llénelo para cobrar con la tarifa correcta</span>` : ''}
+      ${sinJunta.length ? `<br><span style="color:#f59e0b">⚠ ${sinJunta.length} tubos sin juntas: sus metros no entran al reporte</span>` : ''}`;
+  };
+  abrirModal({
+    titulo: 'Reporte semanal de avance',
+    html: `<p>Metros lineales de tubería soldados y liberados en la semana, por diámetro y taller/campo, <b>sin precios</b>: gerencia les pone las tarifas en el Excel maestro.
+      Los metros de cada tubo se reparten entre sus juntas.</p>
+      <label>Obra</label><input id="ra-obra" maxlength="60" value="${esc(estado.cabecera.proyecto || '')}" placeholder="Nombre de la obra (se guarda como proyecto del rótulo)">
+      <label>Cualquier día de la semana a reportar</label><input id="ra-fecha" type="date" value="${hoyISO()}">
+      <div id="ra-info" class="qc-resumen" style="margin-top:8px"></div>
+      <label style="display:flex;gap:8px;align-items:center;text-transform:none;font-size:13px;color:var(--s200);margin-top:8px">
+        <input type="checkbox" id="ra-marcar" checked style="width:18px;height:18px">Marcar estas juntas como reportadas (no se repiten en otra semana)</label>`,
+    okTxt: 'Generar Excel',
+    alAbrir: () => { $('ra-fecha').onchange = resumen; resumen(); },
+    alAceptar: () => {
+      const obra = $('ra-obra').value.trim(), f = $('ra-fecha').value;
+      if (!obra) { aviso('Escriba el nombre de la obra', 'error'); return false; }
+      if (!f) { aviso('Elija la semana', 'error'); return false; }
+      if (obra !== estado.cabecera.proyecto) { estado.cabecera.proyecto = obra; pintarCabecera(); }
+      exportarAvance(semanaISO(f), $('ra-marcar').checked);
+    }
+  });
+}
+const fmtNum = v => Number(v || 0).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+async function exportarAvance(sem, marcar) {
+  try {
+    aviso('Generando reporte de avance…', null, 6000);
+    const { ev, ml } = eventosAvance(sem), cab = estado.cabecera, ExcelJS = await cargarExcelJS(), wb = new ExcelJS.Workbook();
+    const genero = new Date();
+    /* --- Datos: una fila por evento, para que gerencia junte todos los reportes desde una carpeta --- */
+    const ws = wb.addWorksheet('Resumen'), wd = wb.addWorksheet('Datos', { views: [{ state: 'frozen', ySplit: 1 }] });
+    const cols = [['OBRA', 22], ['CLIENTE', 20], ['LINEA', 16], ['JUNTA', 8], ['NPS', 8], ['ESPECIFICACION', 22], ['TALLER_CAMPO', 13], ['EVENTO', 11],
+      ['FECHA', 11], ['MES', 9], ['SEMANA_REPORTE', 15], ['ML', 9], ['TIPO_JUNTA', 10], ['SOLDADOR_RAIZ', 18], ['SOLDADOR_PRES', 18], ['TUBERO', 16], ['ID', 34], ['GENERADO', 17]];
+    wd.columns = cols.map(([h, w]) => ({ header: h, width: w }));
+    ev.forEach(x => wd.addRow([cab.proyecto, cab.cliente, cab.linea, `W${x.n}`, x.c.nps, SPECS[x.c.schedule]?.sch || x.c.schedule, UBIC_TXT[x.c.ubic] || 'SIN DEFINIR', x.evento,
+      new Date(x.fecha + 'T00:00:00Z'), x.fecha.slice(0, 7), sem.clave, Math.round(x.ml * 1000) / 1000, x.c.junta === 'SW' || x.c.junta === 'FILETE' ? 'FW' : 'BW',
+      x.c.raiz || '', x.c.pres || '', x.c.tubero || '', `${cab.proyecto}|${cab.linea}|W${x.n}|${x.evento}`, genero]));
+    wd.getColumn(9).numFmt = 'dd/mm/yyyy'; wd.getColumn(12).numFmt = '0.000'; wd.getColumn(18).numFmt = 'dd/mm/yyyy hh:mm';
+    wd.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }; wd.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
+    wd.autoFilter = { from: 'A1', to: { row: 1, column: cols.length } };
+    /* --- Resumen legible para la obra y gerencia --- */
+    ws.columns = [{ width: 12 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }];
+    const borde = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+    ws.mergeCells('A1:G1'); ws.getCell('A1').value = 'INDIMON S.A.S. — REPORTE SEMANAL DE AVANCE DE TUBERÍA (METROS LINEALES)';
+    ws.getCell('A1').font = { bold: true, size: 13 };
+    [['OBRA', cab.proyecto], ['CLIENTE', cab.cliente], ['LÍNEA / ISOMÉTRICO', cab.linea], ['SEMANA', `${sem.clave}  (${fechaDMY(sem.desde)} a ${fechaDMY(sem.hasta)})`],
+     ['GENERADO', fechaDMY(hoyISO()) + ' ' + genero.toTimeString().slice(0, 5)]].forEach(([k, v], i) => {
+      ws.getCell(3 + i, 1).value = k; ws.getCell(3 + i, 1).font = { bold: true }; ws.mergeCells(3 + i, 3, 3 + i, 7); ws.getCell(3 + i, 3).value = v || ''; });
+    const tabla = (fila, titulo, lista) => {
+      ws.mergeCells(fila, 1, fila, 7); ws.getCell(fila, 1).value = titulo; ws.getCell(fila, 1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      ws.getCell(fila, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
+      const cab2 = ['NPS', 'TALLER SOLDADO ML', 'TALLER LIBERADO ML', 'CAMPO SOLDADO ML', 'CAMPO LIBERADO ML', 'SIN DEFINIR ML', 'JUNTAS'];
+      cab2.forEach((h, i) => { const x = ws.getCell(fila + 1, i + 1); x.value = h; x.font = { bold: true, size: 9 }; x.alignment = { wrapText: true, horizontal: 'center', vertical: 'middle' }; x.border = borde;
+        x.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } }; });
+      ws.getRow(fila + 1).height = 28;
+      const nps = [...new Set(lista.map(x => x.c.nps))].sort((a, b) => npsNum(a) - npsNum(b));
+      const s = (n, u, e) => lista.filter(x => x.c.nps === n && (u === '?' ? !UBIC_TXT[x.c.ubic] : x.c.ubic === u) && (!e || x.evento === e)).reduce((t, x) => t + x.ml, 0);
+      let r = fila + 2; const tot = [0, 0, 0, 0, 0, 0];
+      for (const n of nps) {
+        const v = [s(n, 'S', 'SOLDADA'), s(n, 'S', 'LIBERADA'), s(n, 'F', 'SOLDADA'), s(n, 'F', 'LIBERADA'), s(n, '?'), new Set(lista.filter(x => x.c.nps === n).map(x => x.c.id)).size];
+        [n, ...v.map((y, i) => i < 5 ? Math.round(y * 100) / 100 : y)].forEach((y, i) => { const x = ws.getCell(r, i + 1); x.value = y; x.border = borde; if (i && i < 6) x.numFmt = '#,##0.00'; });
+        v.forEach((y, i) => tot[i] += y); r++;
+      }
+      ['TOTAL', ...tot.map((y, i) => i < 5 ? Math.round(y * 100) / 100 : y)].forEach((y, i) => { const x = ws.getCell(r, i + 1); x.value = y; x.border = borde; x.font = { bold: true }; if (i && i < 6) x.numFmt = '#,##0.00'; });
+      return r + 2;
+    };
+    let fila = tabla(9, `AVANCE DE LA SEMANA ${sem.clave} (incluye registros atrasados no reportados antes)`, ev);
+    /* acumulado de la línea hasta el domingo de la semana, sin importar si ya se reportó */
+    const todas = []; const num = numeracionSoldaduras();
+    for (const c of estado.components) if (c.type === 'weld') {
+      const base = { c, n: num.get(c.id), ml: ml.get(c.id) || 0 };
+      if (c.fecha && (c.raiz || c.pres) && c.fecha <= sem.hasta) todas.push({ ...base, evento: 'SOLDADA' });
+      if (estadoJunta(c) === 'liberada' && c.fechaLib && c.fechaLib <= sem.hasta) todas.push({ ...base, evento: 'LIBERADA' });
+    }
+    fila = tabla(fila, 'ACUMULADO DE LA LÍNEA A LA FECHA', todas);
+    const totalML = [...ml.values()].reduce((a, b) => a + b, 0), sol = todas.filter(x => x.evento === 'SOLDADA').reduce((a, x) => a + x.ml, 0), lib = todas.filter(x => x.evento === 'LIBERADA').reduce((a, x) => a + x.ml, 0);
+    [['ML TOTALES DE LA LÍNEA (con juntas)', totalML], ['% SOLDADO', totalML ? sol / totalML : 0], ['% LIBERADO', totalML ? lib / totalML : 0]].forEach(([k, v], i) => {
+      ws.mergeCells(fila + i, 1, fila + i, 3); ws.getCell(fila + i, 1).value = k; ws.getCell(fila + i, 1).font = { bold: true };
+      const x = ws.getCell(fila + i, 4); x.value = Math.round(v * 10000) / 10000; x.numFmt = i ? '0.0%' : '#,##0.00'; x.font = { bold: true }; });
+    ws.getCell(fila + 4, 1).value = 'Los metros de cada tubo (centro a centro) se reparten por partes iguales entre sus juntas. Los valores en pesos los pone gerencia en el Excel maestro.';
+    ws.getCell(fila + 4, 1).font = { italic: true, size: 9 };
+    ws.pageSetup = { orientation: 'portrait', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+    const buf = await wb.xlsx.writeBuffer();
+    if (marcar && ev.length) commit(() => ev.forEach(x => { x.c[x.marca] = sem.clave; }));
+    descargarBlob(new Blob([buf], { type: XLSX_MIME }), `AVANCE_${nombreSeguro(cab.proyecto)}_${nombreSeguro(cab.linea) || 'ISO'}_${sem.clave}.xlsx`);
+    aviso(`Reporte ${sem.clave} generado: ${ev.length} eventos` + (marcar && ev.length ? '. Guarde el proyecto (.json) para conservar las marcas' : ''), 'ok', 4500);
+  } catch (err) { aviso('No se pudo generar el reporte: ' + err.message, 'error', 5000); }
+}
+async function descargarMaestro() {
+  toggleSidebar(false);
+  try { descargarBlob(new Blob([await plantillaQC('Maestro_Gerencia_Avance')], { type: XLSX_MIME }), 'Maestro_Gerencia_Avance_INDIMON.xlsx'); aviso('Excel maestro descargado', 'ok'); }
+  catch (err) { aviso('No se pudo descargar el maestro: ' + err.message, 'error', 4000); }
 }
 
 /* ---------- 12. Selección y panel de propiedades ---------- */
@@ -2668,7 +2821,7 @@ async function downloadSelfHtml() {
       /* formatos de calidad: librería y plantillas incrustadas para usar sin internet */
       const lib2 = await (await fetch('vendor/exceljs.min.js')).text();
       const b64 = async n => { const a = new Uint8Array(await (await fetch('plantillas/' + n + '.xlsx')).arrayBuffer()); let s = ''; for (let i = 0; i < a.length; i += 32768) s += String.fromCharCode.apply(null, a.subarray(i, i + 32768)); return btoa(s); };
-      const pl = { 'QC-F-004': await b64('QC-F-004'), 'QC-F-015': await b64('QC-F-015') };
+      const pl = { 'QC-F-004': await b64('QC-F-004'), 'QC-F-015': await b64('QC-F-015'), 'Maestro_Gerencia_Avance': await b64('Maestro_Gerencia_Avance') };
       const fin = html.lastIndexOf('</' + 'body>');  /* el último: el texto también aparece dentro de este script */
       if (lib2.length > 1000 && fin > 0) html = html.slice(0, fin) + '<script>' + lib2 + '</scr' + 'ipt><script>window.PLANTILLAS_QC=' + JSON.stringify(pl) + '</scr' + 'ipt>' + html.slice(fin);
     } catch (_) { /* sin formatos de calidad en el archivo único */ }
