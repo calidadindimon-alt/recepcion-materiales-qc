@@ -174,6 +174,7 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
 .cota{font:700 10.5px Arial;fill:#0f172a;paint-order:stroke;stroke:#fff;stroke-width:3px}
 .cota.err{fill:#dc2626}
 .wl{font:700 9.5px Arial;fill:#b91c1c;paint-order:stroke;stroke:#fff;stroke-width:2.5px}
+.tagq{font:800 11px Arial;fill:#0f172a;paint-order:stroke;stroke:#fff;stroke-width:3px}
 .pend{font:italic 800 9.5px Arial;fill:#1d4ed8;paint-order:stroke;stroke:#fff;stroke-width:2.5px}
 .angl{font:italic 700 9.5px Arial;fill:#334155;paint-order:stroke;stroke:#fff;stroke-width:2.5px}
 
@@ -281,6 +282,8 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
 
         <div class="sec">
           <h3>3. Juntas y BOM</h3>
+          <div class="fila-opc"><span>Apertura de raíz BW (mm)</span><input id="in-apertura" type="number" step="any" min="0" value="1.6" inputmode="decimal"></div>
+          <div class="fila-opc"><span>Separación SW (mm)</span><input id="in-sepsw" type="number" step="any" min="0" value="1.6" inputmode="decimal"></div>
           <button class="btn ancho ambar" onclick="generarJuntas()"><svg class="ico" data-ico="check"></svg>Generar juntas soldadas automáticas</button>
           <button class="btn ancho" onclick="openConsumableModal()"><svg class="ico" data-ico="plus"></svg>Añadir consumible al BOM</button>
           <button class="btn ancho peligro" onclick="clearCanvas()"><svg class="ico" data-ico="trash"></svg>Limpiar todo el plano</button>
@@ -502,6 +505,10 @@ const TIPOS = {
   weldolet:      { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 19, nombre: 'WELDOLET', corto: 'Weldolet', reduce: true },
   sockolet:      { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 20, nombre: 'SOCKOLET', corto: 'Sockolet', reduce: true },
   threadolet:    { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'linea',   orden: 21, nombre: 'THREADOLET', corto: 'Threadolet', reduce: true },
+  elbow90_sw:    { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'nodo',    orden: 21.1, nombre: 'CODO 90° SOCKET WELD 3000#', corto: 'Codo 90° SW', base: 'elbow90', union: 'SW' },
+  elbow45_sw:    { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'nodo',    orden: 21.2, nombre: 'CODO 45° SOCKET WELD 3000#', corto: 'Codo 45° SW', base: 'elbow45', union: 'SW' },
+  tee_sw:        { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'nodo',    orden: 21.3, nombre: 'TEE SOCKET WELD 3000#', corto: 'Tee SW', base: 'tee', union: 'SW' },
+  cross_sw:      { grupo: 'acc_rs', cat: 'ACCESORIO', mat: 'forj', modo: 'nodo',    orden: 21.4, nombre: 'CRUZ SOCKET WELD 3000#', corto: 'Cruz SW', base: 'cross', union: 'SW' },
   /* bridas */
   flange_wn:     { grupo: 'brida', cat: 'BRIDA', mat: 'brida', modo: 'extremo', orden: 22, nombre: 'BRIDA WELDING NECK', corto: 'Brida WN', conSch: true },
   flange_so:     { grupo: 'brida', cat: 'BRIDA', mat: 'brida', modo: 'extremo', orden: 23, nombre: 'BRIDA SLIP-ON', corto: 'Brida SO' },
@@ -548,6 +555,21 @@ const TIPOS = {
   sup_spring:    { grupo: 'sop', cat: 'SOPORTE', mat: 'sop', modo: 'linea', orden: 60, nombre: 'SOPORTE DE RESORTE', corto: 'Resorte' },
   /* juntas */
   weld:          { grupo: 'junta', cat: 'JUNTA', mat: 'junta', modo: 'punto', orden: 70, nombre: 'JUNTA SOLDADA A TOPE', corto: 'Soldadura (END)' },
+  /* equipos (se conectan en el extremo de un tramo; el cuerpo se dibuja hacia afuera de la tubería) */
+  eq_pump_h:     { grupo: 'equipo', cat: 'EQUIPO', mat: 'equipo', modo: 'equipo', orden: 75.0, off: 34, nombre: 'BOMBA CENTRÍFUGA HORIZONTAL', corto: 'Bomba centrífuga' },
+  eq_pump_v:     { grupo: 'equipo', cat: 'EQUIPO', mat: 'equipo', modo: 'equipo', orden: 75.1, off: 26, nombre: 'BOMBA CENTRÍFUGA VERTICAL EN LÍNEA', corto: 'Bomba vertical en línea' },
+  eq_pump_multi: { grupo: 'equipo', cat: 'EQUIPO', mat: 'equipo', modo: 'equipo', orden: 75.2, off: 30, nombre: 'BOMBA CENTRÍFUGA MULTIETAPA', corto: 'Bomba multietapa' },
+  eq_pump_sub:   { grupo: 'equipo', cat: 'EQUIPO', mat: 'equipo', modo: 'equipo', orden: 75.3, off: 26, nombre: 'BOMBA SUMERGIBLE', corto: 'Bomba sumergible' },
+  eq_pump_pd:    { grupo: 'equipo', cat: 'EQUIPO', mat: 'equipo', modo: 'equipo', orden: 75.4, off: 26, nombre: 'BOMBA DE DESPLAZAMIENTO POSITIVO (ENGRANAJES / TORNILLO)', corto: 'Bomba despl. positivo' },
+  eq_pump_dos:   { grupo: 'equipo', cat: 'EQUIPO', mat: 'equipo', modo: 'equipo', orden: 75.5, off: 24, nombre: 'BOMBA DOSIFICADORA DE DIAFRAGMA', corto: 'Bomba dosificadora' },
+  eq_tank_v:     { grupo: 'equipo', cat: 'EQUIPO', mat: 'equipo', modo: 'equipo', orden: 76.0, off: 30, nombre: 'TANQUE VERTICAL ATMOSFÉRICO', corto: 'Tanque vertical' },
+  eq_tank_h:     { grupo: 'equipo', cat: 'EQUIPO', mat: 'equipo', modo: 'equipo', orden: 76.1, off: 38, nombre: 'TANQUE HORIZONTAL', corto: 'Tanque horizontal' },
+  eq_vessel:     { grupo: 'equipo', cat: 'EQUIPO', mat: 'equipo', modo: 'equipo', orden: 76.2, off: 32, nombre: 'RECIPIENTE A PRESIÓN', corto: 'Recipiente a presión' },
+  eq_hydro:      { grupo: 'equipo', cat: 'EQUIPO', mat: 'equipo', modo: 'equipo', orden: 76.3, off: 26, nombre: 'TANQUE HIDROACUMULADOR / HIDRONEUMÁTICO', corto: 'Hidroacumulador' },
+  eq_hx_st:      { grupo: 'equipo', cat: 'EQUIPO', mat: 'equipo', modo: 'equipo', orden: 77.0, off: 38, nombre: 'INTERCAMBIADOR DE CALOR DE CASCO Y TUBOS', corto: 'Interc. casco y tubos' },
+  eq_hx_pl:      { grupo: 'equipo', cat: 'EQUIPO', mat: 'equipo', modo: 'equipo', orden: 77.1, off: 26, nombre: 'INTERCAMBIADOR DE CALOR DE PLACAS', corto: 'Interc. de placas' },
+  eq_comp:       { grupo: 'equipo', cat: 'EQUIPO', mat: 'equipo', modo: 'equipo', orden: 77.2, off: 26, nombre: 'COMPRESOR', corto: 'Compresor' },
+  eq_filter:     { grupo: 'equipo', cat: 'EQUIPO', mat: 'equipo', modo: 'equipo', orden: 77.3, off: 26, nombre: 'FILTRO DE CARTUCHO / BOLSA', corto: 'Filtro cartucho' },
   /* anotaciones del plano (no van al BOM) */
   flow:          { grupo: 'anot', cat: 'ANOTACIÓN', mat: 'anot', modo: 'linea', orden: 90, nombre: 'FLECHA DE DIRECCIÓN DE FLUJO', corto: 'Flecha de flujo', noBOM: true },
   slope:         { grupo: 'anot', cat: 'ANOTACIÓN', mat: 'anot', modo: 'linea', orden: 91, nombre: 'PENDIENTE DEL TRAMO', corto: 'Pendiente', noBOM: true, propiedad: true }
@@ -604,7 +626,7 @@ for (const [marca, { items }] of Object.entries(FABRICANTES))
     TIPOS[id] = { grupo: 'fab_' + marca, cat: B.cat, mat: 'gen', modo: B.modo, orden: 61 + i / 100, nombre, corto, base, uni: 'UND' };
   });
 const GRUPOS = [['acc_bw', 'Accesorios soldables (BW)'], ['acc_rs', 'Roscados · Socket weld · Derivaciones'], ['brida', 'Bridas'], ['val', 'Válvulas'],
-  ['esp', 'Especiales de línea'], ['inst', 'Instrumentos'], ['sop', 'Soportes'], ['junta', 'Juntas'], ['anot', 'Anotaciones (flujo y pendiente)'],
+  ['esp', 'Especiales de línea'], ['inst', 'Instrumentos'], ['sop', 'Soportes'], ['equipo', 'Equipos: bombas, tanques e intercambiadores'], ['junta', 'Juntas'], ['anot', 'Anotaciones (flujo y pendiente)'],
   ...Object.entries(FABRICANTES).map(([m, f]) => ['fab_' + m, `Fabricante: ${f.titulo}`]), ['propio', 'Catálogo propio']];
 const CATEGORIAS = ['ACCESORIO', 'BRIDA', 'VÁLVULA', 'ESPECIAL', 'INSTRUMENTO', 'SOPORTE', 'OTRO'];
 const CONSUMIBLES = [
@@ -637,6 +659,8 @@ const estado = {
   catalogoPropio: [],   // ítems agregados por el usuario: { id, nombre, cat, simbolo, desc, uni }
   cotas: 'ambas',       // texto de cotas: 'cc' (centro a centro), 'corte' o 'ambas'
   descontar: true,      // el BOM suma longitud de corte (descontando accesorios), no centro a centro
+  apertura: 1.6,        // apertura de raíz en juntas a tope BW (mm)
+  sepSW: 1.6,           // separación entre tubo y fondo del socket antes de soldar SW (mm)
   trazo: { modo: 'iso', plano: 'H' }   // modo: 'iso' o paso angular libre ('15' | '5' | '1'); plano del ángulo libre
 };
 let historial = [], rehacerPila = [];
@@ -868,6 +892,20 @@ const SIM = {
   sup_guide: '<path d="M-7 -6H7M-7 6H7" class="s" style="stroke-width:2.2"/><path d="M-10 11H10" class="s"/>',
   sup_anchor: '<path d="M-6 -6L6 6M-6 6L6 -6" class="s" style="stroke-width:2.2"/><path d="M-10 11H10" class="s"/>',
   sup_hanger: '<path d="M0 -5V-18M-6 -18H6M-5 -4H5" class="s"/>',
+  eq_pump_h: '<path d="M-26 20H30" class="s"/><circle r="13" class="sb"/><circle r="4" class="s"/><rect x="13" y="-8" width="18" height="16" class="sb"/><path d="M-6 13L-10 20M6 13L10 20" class="s"/>',
+  eq_pump_v: '<circle cy="6" r="11" class="sb"/><rect x="-7" y="-27" width="14" height="22" class="sb"/><path d="M-4 -20H4M-4 -14H4" class="s" style="stroke-width:1"/>',
+  eq_pump_multi: '<rect x="-20" y="-9" width="34" height="18" class="sb"/><path d="M-11 -9V9M-3 -9V9M5 -9V9" class="s" style="stroke-width:1"/><rect x="14" y="-7" width="14" height="14" class="sb"/>',
+  eq_pump_sub: '<path d="M-18 -18Q-12 -22 -6 -18T6 -18T18 -18" class="s" style="stroke-width:1"/><rect x="-6" y="-14" width="12" height="32" rx="4" class="sb"/><path d="M-6 6H6" class="s"/>',
+  eq_pump_pd: '<rect x="-15" y="-10" width="30" height="20" rx="4" class="sb"/><circle cx="-5" r="5.5" class="s"/><circle cx="5.5" r="5.5" class="s"/>',
+  eq_pump_dos: '<rect x="-11" y="-11" width="22" height="22" class="sb"/><path d="M-4 -11A6 11 0 0 1 -4 11" class="s"/><text x="5" y="3.5" font-size="9" font-weight="800" text-anchor="middle">D</text>',
+  eq_tank_v: '<path d="M-17 -18Q0 -30 17 -18V24H-17Z" class="sb"/><path d="M-13 24V29M13 24V29" class="s"/>',
+  eq_tank_h: '<rect x="-30" y="-13" width="60" height="26" rx="13" class="sb"/><path d="M-18 13L-21 19H-11L-14 13M14 13L11 19H21L18 13" class="s" style="stroke-width:1.2"/>',
+  eq_vessel: '<rect x="-14" y="-28" width="28" height="56" rx="14" class="sb"/><path d="M-10 28V33M10 28V33" class="s"/>',
+  eq_hydro: '<rect x="-12" y="-18" width="24" height="36" rx="12" class="sb"/><path d="M-12 0H12" class="s" style="stroke-dasharray:3 2;stroke-width:1"/>',
+  eq_hx_st: '<rect x="-30" y="-11" width="60" height="22" rx="7" class="sb"/><path d="M-24 -4H24M-24 0H24M-24 4H24" class="s" style="stroke-width:.8"/><path d="M-18 -11V-16M18 11V16" class="s"/>',
+  eq_hx_pl: '<rect x="-13" y="-18" width="26" height="36" class="sb"/><path d="M-7 -18V18M-2 -18V18M3 -18V18M8 -18V18" class="s" style="stroke-width:.8"/>',
+  eq_comp: '<circle r="14" class="sb"/><path d="M-9 -9L11 -5V5L-9 9Z" class="s"/>',
+  eq_filter: '<rect x="-10" y="-18" width="20" height="36" rx="5" class="sb"/><path d="M-5 -12V12M0 -12V12M5 -12V12" class="s" style="stroke-width:.8"/>',
   flow: '<path d="M-13 0H2" class="s" style="stroke-width:2"/><polygon points="12,0 0,-6 0,6" class="sn"/>',
   slope: '<polygon points="-12,4 12,4 12,-6" class="sb"/><text x="3" y="2.5" font-size="7" font-weight="800" text-anchor="middle">%</text>',
   sup_spring: '<path d="M-5 -4H5M0 -4V-7L-4 -9L4 -11L-4 -13L4 -15L0 -17V-20M-6 -20H6" class="s" style="stroke-width:1.2"/>'
@@ -952,6 +990,21 @@ const ROSCA_VALV = {
   v_globe: tablaRosca([null, null, 62, 72, 85, 100, 110, 130]),
   v_check: tablaRosca([null, null, 62, 72, 82, 95, 105, 120])
 };
+/* Socket weld 3000# (ASME B16.11, ficha del fabricante): A = centro a fondo de socket (codo 90°, tee, cruz),
+   E = fondo a fondo de socket (copla), J = profundidad mínima del socket. Codo 45°: valores de la norma B16.11. */
+const SW_A90 = tablaRosca([11.0, 13.5, 15.5, 19.0, 22.5, 27.0, 32.0, 38.0, 41.0, 57.0, 66.5]);
+const SW_A45 = tablaRosca([8.0, 8.0, 11.0, 13.0, 14.0, 17.0, 21.0, 25.0, 29.0, 31.0, 41.0]);
+const SW_E_COPLA = tablaRosca([6.5, 6.5, 9.5, 9.5, 12.5, 12.5, 12.5, 19.0, 19.0, 19.0, 19.0]);
+const SW_J = tablaRosca([9.5, 9.5, 9.5, 12.5, 12.5, 12.5, 12.5, 16.0, 16.0, 16.0, 19.0]);
+/* Olets 3000# (ficha FEINSA): A = altura desde la superficie del tubo principal, por diámetro del ramal */
+const OLET_A = {
+  weldolet:   { '1/2"': 19.05, '3/4"': 22.2, '1"': 27, '1-1/4"': 31.8, '1-1/2"': 33.3, '2"': 38.1, '2-1/2"': 41.3, '3"': 44.5, '4"': 50.8, '6"': 66.7, '8"': 69.8 },
+  sockolet:   { '1/2"': 25.5, '3/4"': 27, '1"': 33.3, '1-1/4"': 33.3, '1-1/2"': 35, '2"': 38.1, '2-1/2"': 46, '3"': 50.8, '4"': 57.2 },
+  threadolet: { '1/2"': 25.5, '3/4"': 27, '1"': 33.3, '1-1/4"': 33.3, '1-1/2"': 35, '2"': 38.1, '2-1/2"': 46, '3"': 50.8, '4"': 57.2 }
+};
+/* Diámetro exterior del tubo (ASME B36.10), para ubicar el extremo del ramal sobre un olet */
+const OD_MM = { '1/4"': 13.7, '3/8"': 17.1, '1/2"': 21.3, '3/4"': 26.7, '1"': 33.4, '1-1/4"': 42.2, '1-1/2"': 48.3, '2"': 60.3, '2-1/2"': 73.0, '3"': 88.9,
+  '4"': 114.3, '6"': 168.3, '8"': 219.1, '10"': 273.0, '12"': 323.8, '14"': 355.6, '16"': 406.4, '18"': 457.0, '20"': 508.0, '24"': 610.0 };
 /* Danfoss: largo de cuerpo L (mm) según hoja técnica del fabricante (DN15=1/2", DN20=3/4", DN25=1",
    DN32=1-1/4", DN40=1-1/2", DN50=2"…). rosca: descuento L − 2E; wafer: va entre bridas (descuento L). */
 const LARGO_FAB = {
@@ -960,10 +1013,40 @@ const LARGO_FAB = {
   d_asvpv:  { rosca: true, mm: { '1/2"': 65, '2"': 130 } },
   d_asvbd:  { rosca: true, mm: { '1/2"': 65 } },
   d_msvbd:  { rosca: true, mm: { '1/2"': 65, '2"': 130 } },
-  d_vfy:    { rosca: false, mm: { '2"': 43, '2-1/2"': 46, '3"': 46, '4"': 52, '6"': 56, '8"': 60 } }
+  d_vfy:    { rosca: false, mm: { '2"': 43, '2-1/2"': 46, '3"': 46, '4"': 52, '6"': 56, '8"': 60 } },
+  /* ICM (extremos a tope, hoja AI236186442940): L por DN 20–150 */
+  d_icm:    { union: 'BW', mm: { '3/4"': 107, '1"': 135, '1-1/4"': 145, '1-1/2"': 180, '2"': 200, '2-1/2"': 230, '4"': 295, '6"': 445 } },
+  /* SVA-S paso recto (extremos a tope, hoja AI242886444057): G por DN 6–200 */
+  d_sva:    { union: 'BW', mm: { '1/4"': 70, '3/8"': 120, '1/2"': 120, '3/4"': 120, '1"': 155, '1-1/4"': 155, '1-1/2"': 155, '2"': 148, '2-1/2"': 176, '3"': 216, '4"': 264, '6"': 370, '8"': 464 } }
 };
+/* Tipo de unión del accesorio con el tubo: BW (a tope), SW (socket weld), ROSCA, BRIDA/WAFER, CEMENTO… */
+function tipoUnion(c) {
+  const T = TIPOS[c.type];
+  if (T.union) return T.union;
+  const fab = LARGO_FAB[c.type]; if (fab) return fab.union || (fab.rosca ? 'ROSCA' : 'BRIDA');
+  if (OLET_A[c.type]) return c.type === 'weldolet' ? 'BW' : c.type === 'sockolet' ? 'SW' : 'ROSCA';
+  const j = SPECS[c.schedule]?.junta || 'BW';
+  if (j !== 'BW') return j;
+  if (T.mat === 'acc' || c.type === 'flange_wn') return 'BW';
+  if (T.mat === 'forj' && !c.type.startsWith('flange')) return 'SW';
+  return 'BRIDA';
+}
+/* Holgura por junta (m): apertura de raíz en BW; separación antes de soldar en SW (pipe retirado del fondo) */
+const holgura = c => { const u = tipoUnion(c); return u === 'BW' ? (Number(estado.apertura) || 0) / 1000 : u === 'SW' ? (Number(estado.sepSW) || 0) / 1000 : 0; };
+/* Olet: el tubo principal pasa sin corte; el ramal termina en OD/2 + A (+ apertura, − socket + separación, o − rosca) */
+function descuentoOlet(c) {
+  if (c.largo != null && c.largo !== '') return Math.max(0, Number(c.largo) || 0);
+  const r = c.npsRed || c.nps, A = OLET_A[c.type]?.[r]; if (!A) return 0;
+  let d = (OD_MM[c.nps] || 0) / 2 + A;
+  if (c.type === 'weldolet') d += Number(estado.apertura) || 0;
+  else if (c.type === 'sockolet') d += -(SW_J[r] || 0) + (Number(estado.sepSW) || 0);
+  else d -= ROSCA_E[r] || 0;
+  return Math.max(0, d) / 1000;
+}
 /* Origen del largo por defecto de un accesorio (para el panel); null si no hay dato */
 function fuenteLargo(c) {
+  if (OLET_A[c.type]) return OLET_A[c.type][c.npsRed || c.nps] ? 'ficha FEINSA (ramal)' : null;
+  if (tipoUnion(c) === 'SW') return largoAccesorio(c) ? 'ASME B16.11' : null;
   const fab = LARGO_FAB[c.type];
   if (fab) return fab.mm[c.nps] ? 'hoja Danfoss' : null;
   const j = SPECS[c.schedule]?.junta || 'BW';
@@ -972,7 +1055,12 @@ function fuenteLargo(c) {
 }
 /* Largo que un accesorio le quita al tubo (m): valor del usuario o de la tabla que corresponda */
 function largoAccesorio(c) {
+  if (OLET_A[c.type]) return descuentoOlet(c);
   if (c.largo != null && c.largo !== '') return Math.max(0, Number(c.largo) || 0);
+  if (tipoUnion(c) === 'SW') {
+    const tabla = { elbow90_sw: SW_A90, tee_sw: SW_A90, cross_sw: SW_A90, elbow45_sw: SW_A45, coupling: SW_E_COPLA }[c.type];
+    return tabla && tabla[c.nps] ? tabla[c.nps] / 1000 : 0;
+  }
   const E = ROSCA_E[c.nps] || 0, fab = LARGO_FAB[c.type];
   if (fab) { const L = fab.mm[c.nps] || 0; return L ? Math.max(0, fab.rosca ? L - 2 * E : L) / 1000 : 0; }
   const junta = SPECS[c.schedule]?.junta || 'BW';
@@ -990,17 +1078,27 @@ function largoAccesorio(c) {
 function descuentoTubo(c) {
   const [A, B] = c.coords, a = aPantalla(A), b = aPantalla(B), dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy || 1;
   let total = 0;
+  const ocupado = { A: false, B: false };
   for (const o of estado.components) {
     if (o.type === 'pipe' || o.type === 'weld' || TIPOS[o.type].noBOM) continue;
-    const L = largoAccesorio(o); if (!(L > 0)) continue;
-    const P = o.coords[0], enExtremo = igual(P, A) || igual(P, B);
+    const P = o.coords[0], enA = igual(P, A), enB = igual(P, B), enExtremo = enA || enB;
     let interior = false;
     if (!enExtremo) { const s = aPantalla(P), t = ((s.x - a.x) * dx + (s.y - a.y) * dy) / L2; interior = t > 0 && t < 1 && Math.hypot(a.x + t * dx - s.x, a.y + t * dy - s.y) < 0.5; }
     if (!enExtremo && !interior) continue;
-    if (TIPOS[o.type].modo === 'nodo') total += interior ? 2 * L : L;
-    else if (interior) total += L;
-    else total += L / Math.max(1, tuberias().filter(p => igual(p.coords[0], P) || igual(p.coords[1], P)).length);
+    if (enA) ocupado.A = true;
+    if (enB) ocupado.B = true;
+    if (OLET_A[o.type]) { if (enExtremo) total += descuentoOlet(o); continue; }   // ramal sobre el olet; el principal no se corta
+    if (TIPOS[o.type].modo === 'equipo') continue;                                // la boquilla del equipo es el extremo del tubo
+    const L = largoAccesorio(o), g = holgura(o);
+    if (!(L > 0) && !(g > 0)) continue;
+    if (TIPOS[o.type].modo === 'nodo') total += interior ? 2 * (L + g) : L + g;
+    else if (interior) total += L + 2 * g;
+    else total += L / Math.max(1, tuberias().filter(p => igual(p.coords[0], P) || igual(p.coords[1], P)).length) + g;
   }
+  /* unión directa tubo con tubo (sin accesorio): la apertura de raíz se reparte entre los dos tramos */
+  if ((SPECS[c.schedule]?.junta || 'BW') === 'BW')
+    for (const [k, P] of [['A', A], ['B', B]])
+      if (!ocupado[k] && tuberias().some(p => p !== c && (igual(p.coords[0], P) || igual(p.coords[1], P)))) total += (Number(estado.apertura) || 0) / 2000;
   return total;
 }
 const longitudCorte = c => r3(longitudTubo(c) - descuentoTubo(c));
@@ -1069,6 +1167,9 @@ function renderLienzo() {
     if (c.type === 'pipe') {
       const A = aPantalla(c.coords[0]), B = aPantalla(c.coords[1]), n = Math.max(1, Math.ceil(Math.hypot(B.x - A.x, B.y - A.y) / 5));
       for (let i = 0; i <= n; i++) obst.push({ x: A.x + (B.x - A.x) * i / n, y: A.y + (B.y - A.y) * i / n });
+    } else if (TIPOS[c.type].modo === 'equipo') {
+      const P = aPantalla(c.coords[0]), u = unitAng(c.rotation), d = TIPOS[c.type].off || 30;
+      const C = { x: P.x + u.x * d, y: P.y + u.y * d }; obst.push(C); anillo(C, 14, 10); anillo(C, 26, 16);
     } else { const P = aPantalla(c.coords[0]); obst.push(P); anillo(P, c.type === 'weld' ? 4 : 9, c.type === 'weld' ? 4 : 8); }
   }
   anillo({ x: LIENZO.w - 70, y: 60 }, 30, 12);
@@ -1124,11 +1225,22 @@ function renderLienzo() {
     const P = aPantalla(c.coords[0]), T = TIPOS[c.type], dib = T.base || c.type;
     if (T.modo === 'nodo') {
       simbolos += simboloNodo(c, P, sel);
-      const tag = { elbow45: '45°', elbow90_sr: 'RC', tee_red: 'TR' }[dib];
+      const tag = { elbow90_sw: 'SW', elbow45_sw: 'SW 45°', tee_sw: 'SW', cross_sw: 'SW' }[c.type] || { elbow45: '45°', elbow90_sr: 'RC', tee_red: 'TR' }[dib];
       if (tag) {
         const cand = [];
         for (const d of [12, 18, 25]) for (const k of [7, 5, 1, 3, 6, 2, 0, 4]) { const a = k * Math.PI / 4; cand.push({ x: P.x + Math.cos(a) * d, y: P.y - Math.sin(a) * d }); }
         etiquetas.push({ texto: tag, clase: 'angl', w: tag.length * 5.6 + 3, h: 11, rot: 0, cand, prio: 3 });
+      }
+      continue;
+    }
+    if (T.modo === 'equipo') {
+      const u = unitAng(c.rotation), d = T.off || 30, C = { x: P.x + u.x * d, y: P.y + u.y * d };
+      simbolos += `<g class="cmp${sel}" data-id="${c.id}"><line x1="${P.x}" y1="${P.y}" x2="${C.x.toFixed(1)}" y2="${C.y.toFixed(1)}" stroke="#000" stroke-width="3"/>
+        <circle cx="${P.x}" cy="${P.y}" r="2.6" fill="#000"/><g transform="translate(${C.x.toFixed(1)} ${C.y.toFixed(1)})"><rect class="hit" x="-30" y="-30" width="60" height="60"/>${SIM[dib] || ''}</g></g>`;
+      if (c.tag) {
+        const cand = [];
+        for (const r of [34, 42, 50]) for (const k of [2, 6, 0, 4, 1, 3, 5, 7]) { const a = k * Math.PI / 4; cand.push({ x: C.x + Math.cos(a) * r, y: C.y - Math.sin(a) * r }); }
+        etiquetas.push({ texto: c.tag, clase: 'tagq', w: c.tag.length * 6.6 + 6, h: 13, rot: 0, cand, prio: 0.2 });
       }
       continue;
     }
@@ -1265,6 +1377,8 @@ function aplicarProyecto(o) {
   estado.unidad = o.unidad === 'm' ? 'm' : 'mm';
   estado.cotas = ['cc', 'corte', 'ambas'].includes(o.cotas) ? o.cotas : 'ambas';
   estado.descontar = o.descontar !== false;
+  estado.apertura = Number(o.apertura) >= 0 ? Number(o.apertura) : 1.6;
+  estado.sepSW = Number(o.sepSW) >= 0 ? Number(o.sepSW) : 1.6;
   estado.catalogoPropio = Array.isArray(o.catalogoPropio) ? o.catalogoPropio.filter(it => it && /^u_/.test(it.id) && it.nombre) : [];
   for (const t of Object.keys(TIPOS)) if (TIPOS[t].propio) delete TIPOS[t];
   estado.catalogoPropio.forEach(registrarPropio);
@@ -1320,6 +1434,12 @@ function cambiarAnguloLibre(c, a) {
 /* Calcula dónde y con qué orientación queda un símbolo según el cursor */
 function posicionSimbolo(tipo, pt, R) {
   const T = TIPOS[tipo];
+  if (T.modo === 'equipo') {
+    /* el equipo se conecta en el extremo libre de un tramo; su cuerpo queda hacia afuera de la tubería */
+    const pp = puertoCercano(pt, R * 1.5);
+    if (pp) { const br = brazos(pp); return { P: pp, rot: br.length ? br[0] + 180 : rotacionActual, iman: true }; }
+    return { P: nodoMasCercano(pt.x, pt.y), rot: rotacionActual, iman: false };
+  }
   if (T.modo === 'nodo' || T.modo === 'punto') {
     const pp = puertoCercano(pt, R);
     if (pp) { const br = brazos(pp); return { P: pp, rot: br[0] ?? rotacionActual, iman: true }; }
@@ -1401,6 +1521,7 @@ function descripcionBase(c) {
     case 'inst':  return `${T.nombre}, CONEXIÓN 1/2" NPT, PARA LÍNEA ${med}`;
     case 'sop':   return `${T.nombre} PARA TUBERÍA ${med}`;
     case 'gen':   return `${T.nombre} ${med}${T.desc ? ' ' + T.desc : ''}`;
+    case 'equipo': return `${T.nombre}${c.tag ? ' — TAG ' + c.tag : ''}, CONEXIÓN ${med}`;
     default: {
       const j = sp.junta || 'BW';
       return `${TIPO_JUNTA[j] || TIPO_JUNTA.BW} ${med}${j === 'BW' ? ` ${sp.sch} — INSPECCIÓN END (VT/PT)` : ''}`;
@@ -1412,7 +1533,7 @@ function recalculateBOM() {
   const grupos = new Map();
   for (const c of estado.components) {
     if (TIPOS[c.type].noBOM) continue;
-    const T = TIPOS[c.type], key = [c.type, c.nps, c.npsRed || '', c.schedule, c.ref || ''].join('|');
+    const T = TIPOS[c.type], key = [c.type, c.nps, c.npsRed || '', c.schedule, c.ref || '', c.tag || ''].join('|');
     const g = grupos.get(key) || { key, orden: T.orden, nps: npsNum(c.nps), uni: c.type === 'pipe' ? 'ML' : (T.uni || 'UND'), desc: descripcion(c), cant: 0 };
     g.cant += c.type === 'pipe' ? (estado.descontar ? Math.max(0, longitudCorte(c)) : longitudTubo(c)) : 1;
     grupos.set(key, g);
@@ -1645,12 +1766,14 @@ function renderPanelSeleccion() {
       ${c.libre && PLANOS[c.libre.plano] && !dirEntre(c.coords[0], c.coords[1]) ? `<label>Ángulo · plano ${PLANOS[c.libre.plano].nombre} (° desde ${PLANOS[c.libre.plano].ref})</label>
       <input data-p="angulo" type="number" step="0.1" inputmode="decimal" value="${c.libre.ang}">` : ''}` : ''}
     ${c.type === 'pipe' ? `<div style="margin-top:6px;font:600 12px var(--mono);color:${longitudCorte(c) <= 0 ? '#f87171' : 'var(--verde)'}">Corte: ${fmtLong(Math.max(0, longitudCorte(c)))} · descuento acc.: ${fmtLong(descuentoTubo(c))}</div>` : ''}
-    ${c.type !== 'pipe' && c.type !== 'weld' && !TIPOS[c.type].noBOM ? `<label>Largo / descuento al tubo (${txtUnidad()})${c.largo != null ? ' · manual' : fuenteLargo(c) ? ' · ' + fuenteLargo(c) : ' · sin dato'}</label>
+    ${c.type !== 'pipe' && c.type !== 'weld' && !TIPOS[c.type].noBOM && T.modo !== 'equipo' ? `<label>Largo / descuento al tubo (${txtUnidad()})${c.largo != null ? ' · manual' : fuenteLargo(c) ? ' · ' + fuenteLargo(c) : ' · sin dato'}</label>
       <input data-p="largo" type="number" step="any" min="0" inputmode="decimal" placeholder="vacío = tabla" value="${c.largo != null || largoAccesorio(c) ? aUnidad(largoAccesorio(c)) : ''}">` : ''}
     ${c.type === 'pipe' ? `<label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:12px;color:var(--s200)"><input type="checkbox" data-p="sinCota" style="width:18px;height:18px"${c.sinCota ? ' checked' : ''}> Ocultar cota de este tramo</label>` : ''}
     ${c.type === 'pipe' ? `<label>Pendiente</label><button class="btn" style="width:100%" data-acc="pend">${c.pendiente ? `PEND. ${c.pendiente.valor}% · baja hacia el ${c.pendiente.haciaFin === false ? 'inicio' : 'final'}` : 'Agregar pendiente'}</button>` : ''}
+    ${T.modo === 'equipo' ? `<label>TAG del equipo</label><input data-p="tag" maxlength="24" placeholder="Ej: P-101, TK-01" value="${esc(c.tag || '')}">` : ''}
+    ${c.type !== 'pipe' && c.type !== 'weld' && !TIPOS[c.type].noBOM && T.modo !== 'equipo' ? `<div style="margin-top:6px;font:600 11px var(--mono);color:var(--s300)">Unión: ${tipoUnion(c)}${holgura(c) ? ` · holgura ${fmtLong(holgura(c))} por junta` : ''}</div>` : ''}
     ${c.type !== 'weld' && !TIPOS[c.type].noBOM ? `<label>Código / ref. fabricante</label><input data-p="ref" maxlength="60" placeholder="Ej: 032U1247" value="${esc(c.ref || '')}">` : ''}
-    <div class="acc">${c.type !== 'pipe' && TIPOS[c.type].modo !== 'punto' ? `<button class="btn" data-acc="rotar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-rotate"/></svg>${c.type === 'flow' ? 'Invertir' : 'Rotar'}</button>` : ''}
+    <div class="acc">${c.type !== 'pipe' && TIPOS[c.type].modo !== 'punto' ? `<button class="btn" data-acc="rotar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-rotate"/></svg>${c.type === 'flow' ? 'Invertir' : T.modo === 'equipo' ? 'Girar' : 'Rotar'}</button>` : ''}
       <button class="btn peligro" data-acc="borrar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-trash"/></svg>Borrar</button></div>`;
   p.hidden = false;
 }
@@ -1670,6 +1793,9 @@ $('panel-sel').addEventListener('change', e => {
     commit(() => { if (t === '') delete c.largo; else c.largo = r3(v); });
   } else if (k === 'sinCota') {
     commit(() => { if (e.target.checked) c.sinCota = true; else delete c.sinCota; });
+  } else if (k === 'tag') {
+    const v = e.target.value.trim().toUpperCase();
+    commit(() => { if (v) c.tag = v; else delete c.tag; });
   } else if (k === 'ref') {
     const v = e.target.value.trim().toUpperCase();
     commit(() => { if (v) c.ref = v; else delete c.ref; });
@@ -1891,16 +2017,23 @@ function pintarCabecera() {
   document.querySelectorAll('[data-h]').forEach(i => { i.value = estado.cabecera[i.dataset.h] ?? ''; });
   $('sel-unidad').value = estado.unidad;
   $('sel-cotas').value = estado.cotas; $('chk-descontar').checked = estado.descontar;
+  $('in-apertura').value = estado.apertura; $('in-sepsw').value = estado.sepSW;
   $('lbl-unidad-paso').textContent = txtUnidad();
   $('grid-scale').step = enMM() ? '50' : '0.05';
   $('grid-scale').value = aUnidad(estado.escala);
   $('txt-escala').value = `S/E · 1 paso de grilla = ${fmtLong(estado.escala)}`;
-  $('etq-dibujo').textContent = `ISOMÉTRICO — SIN ESCALA (COTAS EN ${enMM() ? 'MILÍMETROS' : 'METROS'})`;
+  $('etq-dibujo').textContent = `ISOMÉTRICO — SIN ESCALA (COTAS EN ${enMM() ? 'MILÍMETROS' : 'METROS'}) · JUNTA BW: RAÍZ ${String(estado.apertura).replace('.', ',')} mm · SW: SEPARACIÓN ${String(estado.sepSW).replace('.', ',')} mm`;
 }
 document.querySelectorAll('[data-h]').forEach(i => i.addEventListener('input', () => { estado.cabecera[i.dataset.h] = i.value; guardarLocal(); }));
 $('spec-nps').addEventListener('change', () => { estado.cabecera.nps = $('spec-nps').value; pintarCabecera(); guardarLocal(); });
 $('spec-mat').addEventListener('change', () => { estado.cabecera.spec = $('spec-mat').value; pintarCabecera(); guardarLocal(); });
 $('sel-cotas').addEventListener('change', () => { estado.cotas = $('sel-cotas').value; actualizarTodo(); });
+for (const [id, k] of [['in-apertura', 'apertura'], ['in-sepsw', 'sepSW']])
+  $(id).addEventListener('change', () => {
+    const v = parseFloat(String($(id).value).replace(',', '.'));
+    if (!(v >= 0 && v <= 10)) { aviso('Valor no válido (0 a 10 mm)', 'error'); $(id).value = estado[k]; return; }
+    estado[k] = v; pintarCabecera(); actualizarTodo();
+  });
 $('chk-descontar').addEventListener('change', () => { estado.descontar = $('chk-descontar').checked; actualizarTodo(); });
 $('sel-unidad').addEventListener('change', () => {
   estado.unidad = $('sel-unidad').value === 'm' ? 'm' : 'mm';
@@ -1962,16 +2095,18 @@ function exportToExcel() {
   const filasBOM = ultimoBOM.map((f, i) => [i + 1, f.uni, f.desc, Number(esML(f.uni) ? r2(f.cant) : f.cant)]);
   const meta = [['CLIENTE', cab.cliente], ['PROYECTO', cab.proyecto], ['DIBUJO / LÍNEA N°', cab.linea], ['FECHA', fecha], ['CONSECUTIVO', cab.consecutivo],
     ['DIÁMETRO NOMINAL (NPS)', cab.nps], ['ESPECIFICACIÓN DE MATERIAL', cab.spec], ['ESCALA', `S/E · 1 paso de grilla = ${fmtLong(estado.escala)}`],
-    ['FLUIDO / SERVICIO · PRUEBA', cab.servicio], ['ELABORÓ', cab.elaboro], ['REVISÓ', cab.reviso], ['APROBÓ', cab.aprobo], ['NOTAS / OBSERVACIONES', cab.notas]];
+    ['FLUIDO / SERVICIO · PRUEBA', cab.servicio], ['ELABORÓ', cab.elaboro], ['REVISÓ', cab.reviso], ['APROBÓ', cab.aprobo], ['NOTAS / OBSERVACIONES', cab.notas],
+    ['JUNTAS', `BW: apertura de raíz ${estado.apertura} mm, bisel 37,5° ± 2,5° (ASME B16.25) · SW: separación ${estado.sepSW} mm entre tubo y fondo del socket antes de soldar`]];
   const totML = r2(ultimoBOM.filter(f => f.uni === 'ML' && !f.consumible).reduce((s, f) => s + Number(f.cant || 0), 0));
   const nJuntas = estado.components.filter(c => c.type === 'weld').length;
   let nT = 0;
-  const detalle = [['MARCA', 'CATEGORÍA', 'TIPO', 'NPS', 'NPS MENOR', 'ESPECIFICACIÓN', `CENTRO-CENTRO (${txtUnidad()})`, `DESCUENTO / LARGO ACC. (${txtUnidad()})`, `LONG. CORTE (${txtUnidad()})`, 'LONG. MANUAL', 'ÁNGULO / PLANO', 'PENDIENTE', 'DESCRIPCIÓN', 'COORDENADAS RED [p,q]']]
+  const detalle = [['MARCA', 'CATEGORÍA', 'TIPO', 'NPS', 'NPS MENOR', 'ESPECIFICACIÓN', `CENTRO-CENTRO (${txtUnidad()})`, `DESCUENTO / LARGO ACC. (${txtUnidad()})`, `LONG. CORTE (${txtUnidad()})`, 'LONG. MANUAL', 'ÁNGULO / PLANO', 'PENDIENTE', 'UNIÓN', 'DESCRIPCIÓN', 'COORDENADAS RED [p,q]']]
     .concat([...estado.components].filter(c => !TIPOS[c.type].noBOM).sort((a, b) => (a.type === 'weld') - (b.type === 'weld') || (a.type === 'weld' ? numW.get(a.id) - numW.get(b.id) : 0)).map(c => [c.type === 'weld' ? `W${numW.get(c.id)}` : c.type === 'pipe' ? `T${++nT}` : '', c.category, TIPOS[c.type].corto, c.nps, c.npsRed || '', c.schedule,
       c.type === 'pipe' ? aUnidad(longitudTubo(c)) : '', c.type === 'pipe' ? aUnidad(descuentoTubo(c)) : (largoAccesorio(c) ? aUnidad(largoAccesorio(c)) : ''),
       c.type === 'pipe' ? aUnidad(Math.max(0, longitudCorte(c))) : '', c.type === 'pipe' ? (c.lengthManual ? 'SÍ' : 'NO') : '',
       c.libre && PLANOS[c.libre.plano] && !dirEntre(c.coords[0], c.coords[1]) ? `${anguloAgudo(c)}° · ${PLANOS[c.libre.plano].corto}` : '',
       c.pendiente ? `${c.pendiente.valor}% hacia el ${c.pendiente.haciaFin === false ? 'inicio' : 'final'}` : '',
+      c.type === 'pipe' || c.type === 'weld' || TIPOS[c.type].modo === 'equipo' ? '' : tipoUnion(c),
       descripcion(c), c.coords.map(P => `[${P[0]}, ${P[1]}]`).join(' → ')]));
   if (typeof XLSX === 'undefined') {
     /* respaldo sin librería: CSV compatible con Excel (separador ;) */
@@ -2026,10 +2161,10 @@ function exportToExcel() {
   ws['!rows'] = aoa.map((_, r) => r === 0 ? { hpt: 26 } : r === 1 ? { hpt: 20 } : r === fEnc ? { hpt: 20 } : r >= fDat && r < fDat + filasBOM.length ? { hpt: 17 } : null);
   /* ----- Hoja 2: detalle de componentes (trazabilidad de juntas y tramos) ----- */
   const ws2 = XLSX.utils.aoa_to_sheet(detalle);
-  ws2['!cols'] = [8, 12, 18, 8, 10, 26, 13, 15, 13, 12, 16, 18, 80, 34].map(w => ({ wch: w }));
+  ws2['!cols'] = [8, 12, 18, 8, 10, 26, 13, 15, 13, 12, 16, 18, 9, 80, 34].map(w => ({ wch: w }));
   for (let c = 0; c < detalle[0].length; c++) {
     ws2[XLSX.utils.encode_cell({ r: 0, c })].s = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '1E293B' } }, border: borde, alignment: centro };
-    for (let r = 1; r < detalle.length; r++) { const ref = XLSX.utils.encode_cell({ r, c }); if (!ws2[ref]) ws2[ref] = { t: 's', v: '' }; ws2[ref].s = { border: borde, alignment: { vertical: 'center', horizontal: c < 12 && c !== 5 ? 'center' : 'left' } }; }
+    for (let r = 1; r < detalle.length; r++) { const ref = XLSX.utils.encode_cell({ r, c }); if (!ws2[ref]) ws2[ref] = { t: 's', v: '' }; ws2[ref].s = { border: borde, alignment: { vertical: 'center', horizontal: c < 13 && c !== 5 ? 'center' : 'left' } }; }
   }
   ws2['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(1, detalle.length - 1), c: detalle[0].length - 1 } }) };
   const wb = XLSX.utils.book_new();
@@ -2127,10 +2262,10 @@ const ICONOS = {
 };
 /* Botones del panel generados desde el catálogo */
 const claro = s => s.replace(/class="sb"/g, 'fill="#0f172a" stroke="#e2e8f0" stroke-width="1.6"').replace(/class="sn"/g, 'fill="#e2e8f0"').replace(/class="s"/g, 'fill="none" stroke="#e2e8f0" stroke-width="1.6"').replace(/<text /g, '<text fill="#fbbf24" ');
-const iconoSimbolo = t => { const b = TIPOS[t].base || t; return claro(ICONO_NODO[b] || SIM[b] || ''); };
+const iconoSimbolo = t => { const b = TIPOS[t].base || t, s = claro(ICONO_NODO[b] || SIM[b] || ''); return TIPOS[t].modo === 'equipo' ? `<g transform="scale(.6)">${s}</g>` : s; };
 const botonHerr = (tool, etiqueta, dibujo, esIcono) => `<button class="herr" data-tool="${esc(tool)}" onclick="setActiveTool('${esc(tool)}')" title="${esc(TIPOS[tool]?.nombre || etiqueta)}">
     ${esIcono ? `<svg class="ico" viewBox="0 0 24 24" style="width:22px;height:22px"><use href="#i-${dibujo}"/></svg>` : `<svg class="sim" viewBox="-20 -20 40 40" style="stroke:#e2e8f0">${dibujo}</svg>`}<span>${esc(etiqueta)}</span></button>`;
-const gruposAbiertos = new Set(['acc_bw', 'val', 'junta', 'anot', 'propio', 'fab_danfoss']);
+const gruposAbiertos = new Set(['acc_bw', 'val', 'equipo', 'junta', 'anot', 'propio', 'fab_danfoss']);
 function construirCatalogo() {
   const filtro = quitarTildes($('buscar-sim').value).toLowerCase().trim();
   const html = GRUPOS.map(([g, titulo]) => {
