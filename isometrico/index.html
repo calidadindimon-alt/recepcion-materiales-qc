@@ -173,6 +173,7 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
 .sn{fill:#000;stroke:#000;stroke-width:1.2}
 .cota{font:700 10.5px Arial;fill:#0f172a;paint-order:stroke;stroke:#fff;stroke-width:3px}
 .wl{font:700 9.5px Arial;fill:#b91c1c;paint-order:stroke;stroke:#fff;stroke-width:2.5px}
+.pend{font:italic 800 9.5px Arial;fill:#1d4ed8;paint-order:stroke;stroke:#fff;stroke-width:2.5px}
 .angl{font:italic 700 9.5px Arial;fill:#334155;paint-order:stroke;stroke:#fff;stroke-width:2.5px}
 
 /* ---------- Adaptación a tableta y móvil ---------- */
@@ -542,7 +543,10 @@ const TIPOS = {
   sup_hanger:    { grupo: 'sop', cat: 'SOPORTE', mat: 'sop', modo: 'linea', orden: 59, nombre: 'SOPORTE COLGANTE', corto: 'Colgante' },
   sup_spring:    { grupo: 'sop', cat: 'SOPORTE', mat: 'sop', modo: 'linea', orden: 60, nombre: 'SOPORTE DE RESORTE', corto: 'Resorte' },
   /* juntas */
-  weld:          { grupo: 'junta', cat: 'JUNTA', mat: 'junta', modo: 'punto', orden: 70, nombre: 'JUNTA SOLDADA A TOPE', corto: 'Soldadura (END)' }
+  weld:          { grupo: 'junta', cat: 'JUNTA', mat: 'junta', modo: 'punto', orden: 70, nombre: 'JUNTA SOLDADA A TOPE', corto: 'Soldadura (END)' },
+  /* anotaciones del plano (no van al BOM) */
+  flow:          { grupo: 'anot', cat: 'ANOTACIÓN', mat: 'anot', modo: 'linea', orden: 90, nombre: 'FLECHA DE DIRECCIÓN DE FLUJO', corto: 'Flecha de flujo', noBOM: true },
+  slope:         { grupo: 'anot', cat: 'ANOTACIÓN', mat: 'anot', modo: 'linea', orden: 91, nombre: 'PENDIENTE DEL TRAMO', corto: 'Pendiente', noBOM: true, propiedad: true }
 };
 /* Catálogo de fabricante: series Danfoss (válvulas, reguladores, filtros e instrumentos).
    Cada serie usa un símbolo base del catálogo; el código de pedido exacto según diámetro y
@@ -596,7 +600,7 @@ for (const [marca, { items }] of Object.entries(FABRICANTES))
     TIPOS[id] = { grupo: 'fab_' + marca, cat: B.cat, mat: 'gen', modo: B.modo, orden: 61 + i / 100, nombre, corto, base, uni: 'UND' };
   });
 const GRUPOS = [['acc_bw', 'Accesorios soldables (BW)'], ['acc_rs', 'Roscados · Socket weld · Derivaciones'], ['brida', 'Bridas'], ['val', 'Válvulas'],
-  ['esp', 'Especiales de línea'], ['inst', 'Instrumentos'], ['sop', 'Soportes'], ['junta', 'Juntas'],
+  ['esp', 'Especiales de línea'], ['inst', 'Instrumentos'], ['sop', 'Soportes'], ['junta', 'Juntas'], ['anot', 'Anotaciones (flujo y pendiente)'],
   ...Object.entries(FABRICANTES).map(([m, f]) => ['fab_' + m, `Fabricante: ${f.titulo}`]), ['propio', 'Catálogo propio']];
 const CATEGORIAS = ['ACCESORIO', 'BRIDA', 'VÁLVULA', 'ESPECIAL', 'INSTRUMENTO', 'SOPORTE', 'OTRO'];
 const CONSUMIBLES = [
@@ -745,8 +749,9 @@ function bloqueoAxial(A, pt, R) {
   const s = aPantalla(A), w = { x: pt.x - s.x, y: pt.y - s.y };
   let mejor = DIRS[0], dmax = -Infinity;
   for (const D of DIRS) { const u = unitAng(D.ang), dot = w.x * u.x + w.y * u.y; if (dot > dmax) { dmax = dot; mejor = D; } }
-  const n = Math.max(0, Math.round(dmax / PASO_PX));
-  return { fin: [A[0] + n * mejor.d[0], A[1] + n * mejor.d[1]], ang: mejor.ang, d: mejor.d, pasos: n, iman: false };
+  /* longitud en medios pasos: permite tramos cortos entre accesorios (ej. 250 mm con paso de 500 mm) */
+  const n = Math.max(0, Math.round(dmax / PASO_PX * 2) / 2);
+  return { fin: red6([A[0] + n * mejor.d[0], A[1] + n * mejor.d[1]]), ang: mejor.ang, d: mejor.d, pasos: n, iman: false };
 }
 /* Trazo a ángulo libre: el cursor se proyecta sobre el plano elegido (horizontal o vertical);
    el ángulo se ajusta al paso elegido (15°, 5° o 1°) y la longitud a medios pasos de grilla */
@@ -857,6 +862,8 @@ const SIM = {
   sup_guide: '<path d="M-7 -6H7M-7 6H7" class="s" style="stroke-width:2.2"/><path d="M-10 11H10" class="s"/>',
   sup_anchor: '<path d="M-6 -6L6 6M-6 6L6 -6" class="s" style="stroke-width:2.2"/><path d="M-10 11H10" class="s"/>',
   sup_hanger: '<path d="M0 -5V-18M-6 -18H6M-5 -4H5" class="s"/>',
+  flow: '<path d="M-13 0H2" class="s" style="stroke-width:2"/><polygon points="12,0 0,-6 0,6" class="sn"/>',
+  slope: '<polygon points="-12,4 12,4 12,-6" class="sb"/><text x="3" y="2.5" font-size="7" font-weight="800" text-anchor="middle">%</text>',
   sup_spring: '<path d="M-5 -4H5M0 -4V-7L-4 -9L4 -11L-4 -13L4 -15L0 -17V-20M-6 -20H6" class="s" style="stroke-width:1.2"/>'
 };
 /* Iconos del panel (vista frontal simple) */
@@ -910,7 +917,7 @@ function dentroRect(px, py, L, m) {
 }
 function muestrasRect(L) {
   const r = L.rot * Math.PI / 180, c = Math.cos(r), s = Math.sin(r), pts = [];
-  for (const i of [-1, 0, 1]) for (const j of [-1, 0, 1]) { const lx = i * L.w / 2, ly = j * L.h / 2; pts.push({ x: L.cx + lx * c - ly * s, y: L.cy + lx * s + ly * c }); }
+  for (const i of [-1, -0.5, 0, 0.5, 1]) for (const j of [-1, 0, 1]) { const lx = i * L.w / 2, ly = j * L.h / 2; pts.push({ x: L.cx + lx * c - ly * s, y: L.cy + lx * s + ly * c }); }
   return pts;
 }
 function acomodarEtiquetas(etiquetas, obst) {
@@ -919,14 +926,14 @@ function acomodarEtiquetas(etiquetas, obst) {
     let mejor = null, costoMin = Infinity;
     for (const p of E.cand) {
       const L = { cx: p.x, cy: p.y, w: E.w, h: E.h, rot: E.rot }, rad = (E.w + E.h) / 2 + 3, pts = muestrasRect(L);
-      let costo = 0;
+      let costo = p.pen || 0;
       for (const o of obst) if (Math.abs(o.x - L.cx) < rad && Math.abs(o.y - L.cy) < rad && dentroRect(o.x, o.y, L, 1.5)) costo++;
       if (pts.some(q => q.x < 2 || q.y < 14 || q.x > LIENZO.w - 2 || q.y > LIENZO.h - 2)) costo += 40;
       for (const Q of puestas) {
         if (Math.abs(Q.cx - L.cx) > (Q.w + L.w) / 2 + 4 && Math.abs(Q.cy - L.cy) > (Q.h + L.h) / 2 + 4 && Math.abs(Q.cx - L.cx) + Math.abs(Q.cy - L.cy) > Q.w + L.w + 8) continue;
         if (pts.some(q => dentroRect(q.x, q.y, Q, 1)) || muestrasRect(Q).some(q => dentroRect(q.x, q.y, L, 1))) costo += 25;
       }
-      if (costo < costoMin) { costoMin = costo; mejor = L; if (!costo) break; }
+      if (costo < costoMin) { costoMin = costo; mejor = L; if (costo < 0.3) break; }
     }
     E.pos = mejor; puestas.push(mejor);
   }
@@ -995,12 +1002,21 @@ function renderLienzo() {
       if (nrm.y > 0.05 || (Math.abs(nrm.y) <= 0.05 && nrm.x > 0)) nrm = { x: -nrm.x, y: -nrm.y };
       let rot = -ang; while (rot < -90) rot += 180; while (rot >= 90) rot -= 180;
       const texto = `${fmtLong(longitudTubo(c))}${c.lengthManual ? '*' : ''}`, w = texto.length * 6.1 + 4, h = 13;
-      const m = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 }, cand = [];
-      for (const d of [10, 19, 28]) for (const f of [0, 0.25, -0.25, 0.4, -0.4]) {
-        if (f && Math.abs(f) * Lpx + w / 2 > Lpx / 2 + 4) continue;
-        for (const lado of [1, -1]) cand.push({ x: m.x + e.x * f * Lpx + nrm.x * lado * d, y: m.y + e.y * f * Lpx + nrm.y * lado * d });
+      const m = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
+      const candidatos = (ancho, lados) => { const lista = [];
+        for (const d of [10, 19, 28, 38]) for (const f of [0, 0.25, -0.25, 0.4, -0.4, 0.6, -0.6]) {
+          const fuera = Math.abs(f) * Lpx + ancho / 2 > Lpx / 2 + 4;   // el texto se sale del tramo: se permite con penalización
+          for (const lado of lados) lista.push({ x: m.x + e.x * f * Lpx + nrm.x * lado * d, y: m.y + e.y * f * Lpx + nrm.y * lado * d, pen: (fuera ? 4 : 0) + d / 40 });
+        }
+        return lista.sort((a, b) => a.pen - b.pen); };
+      if (!c.sinCota) etiquetas.push({ texto, clase: 'cota', w, h, rot, cand: candidatos(w, [1, -1]), prio: 0 });
+      if (c.pendiente && Number(c.pendiente.valor) > 0) {
+        /* pendiente: la flecha apunta hacia donde baja el tramo */
+        const baja = c.pendiente.haciaFin === false ? { x: -e.x, y: -e.y } : e, tr = rot * Math.PI / 180;
+        const derecha = baja.x * Math.cos(tr) + baja.y * Math.sin(tr) > 0, v = String(c.pendiente.valor).replace('.', ',');
+        const tp = `PEND. ${v}%`, wp = tp.length * 5.9 + 20, cp = candidatos(wp, [-1, 1]);
+        etiquetas.push({ texto: tp, clase: 'pend', w: wp, h: 12, rot, cand: cp, prio: 0.5, flecha: derecha ? 1 : -1 });
       }
-      etiquetas.push({ texto, clase: 'cota', w, h, rot, cand, prio: 0 });
       continue;
     }
     const P = aPantalla(c.coords[0]), T = TIPOS[c.type], dib = T.base || c.type;
@@ -1037,7 +1053,13 @@ function renderLienzo() {
       const dx = L.cx - E.ancla.x, dy = L.cy - E.ancla.y, d = Math.hypot(dx, dy), corte = Math.min(Math.abs(L.w / 2 / (dx / d || 1e-9)), Math.abs(L.h / 2 / (dy / d || 1e-9)));
       textos += `<line x1="${E.ancla.x.toFixed(1)}" y1="${E.ancla.y.toFixed(1)}" x2="${(L.cx - dx / d * corte).toFixed(1)}" y2="${(L.cy - dy / d * corte).toFixed(1)}" stroke="#b91c1c" stroke-width=".7"/>`;
     }
-    textos += `<text class="${E.clase}" text-anchor="middle" dominant-baseline="central" transform="translate(${L.cx.toFixed(1)} ${L.cy.toFixed(1)}) rotate(${L.rot.toFixed(2)})">${esc(E.texto)}</text>`;
+    const tf = `translate(${L.cx.toFixed(1)} ${L.cy.toFixed(1)}) rotate(${L.rot.toFixed(2)})`;
+    if (E.flecha) {
+      /* pendiente: texto + flecha dibujada que apunta hacia donde baja el tramo */
+      const s = E.flecha, xt = -s * 8, xa = s * (L.w / 2 - 15), xb = s * (L.w / 2 - 2);
+      textos += `<g transform="${tf}"><text class="${E.clase}" x="${xt}" text-anchor="middle" dominant-baseline="central">${esc(E.texto)}</text>
+        <path d="M${xa} 0H${xb - s * 4}" stroke="#1d4ed8" stroke-width="1.4"/><polygon points="${xb},0 ${xb - s * 6},-3.2 ${xb - s * 6},3.2" fill="#1d4ed8"/></g>`;
+    } else textos += `<text class="${E.clase}" text-anchor="middle" dominant-baseline="central" transform="${tf}">${esc(E.texto)}</text>`;
   }
   $('capa-tuberia').innerHTML = tubos;
   $('capa-simbolos').innerHTML = simbolos;
@@ -1218,7 +1240,28 @@ function posicionSimbolo(tipo, pt, R) {
   if (pp) { const br = brazos(pp); return { P: pp, rot: br[0] ?? rotacionActual, iman: true }; }
   return { P: nodoMasCercano(pt.x, pt.y), rot: rotacionActual, iman: false };
 }
+function pedirPendiente(c) {
+  const p = c.pendiente || {};
+  abrirModal({
+    titulo: 'Pendiente del tramo',
+    html: `<label>Pendiente (%)</label><input id="m-pend" type="number" step="any" min="0" inputmode="decimal" value="${p.valor ?? 1}">
+      <label>El tramo baja hacia</label><select id="m-pend-s"><option value="fin"${p.haciaFin !== false ? ' selected' : ''}>El final del tramo (sentido en que se trazó)</option>
+      <option value="ini"${p.haciaFin === false ? ' selected' : ''}>El inicio del tramo</option></select>
+      <p>Se rotula como «PEND. 1% →» con la flecha hacia donde baja. Escriba 0 para quitarla. Referencia: 1% = 10 mm por metro.</p>`,
+    alAbrir: () => { const i = $('m-pend'); i.focus(); i.select(); },
+    alAceptar: () => {
+      const v = parseFloat(String($('m-pend').value).replace(',', '.'));
+      if (!(v >= 0)) { aviso('Pendiente no válida', 'error'); return false; }
+      commit(() => { if (v > 0) c.pendiente = { valor: Math.round(v * 1000) / 1000, haciaFin: $('m-pend-s').value === 'fin' }; else delete c.pendiente; });
+    }
+  });
+}
 function colocarSimbolo(tipo, pt, R) {
+  if (TIPOS[tipo].propiedad) {
+    const tb = tuberiaCercana(pt, R * 1.5);
+    if (!tb) { aviso('Toque sobre un tramo de tubería', 'error'); return; }
+    pedirPendiente(tb.c); return;
+  }
   const pos = posicionSimbolo(tipo, pt, R), T = TIPOS[tipo], s = aPantalla(pos.P);
   /* evita duplicados: misma pieza en el mismo punto (las juntas, con radio mayor) */
   const dup = estado.components.find(o => o.type === tipo && (() => { const q = aPantalla(o.coords[0]); return Math.hypot(q.x - s.x, q.y - s.y) < (tipo === 'weld' ? 7 : 3); })());
@@ -1264,6 +1307,7 @@ function descripcionBase(c) {
 function recalculateBOM() {
   const grupos = new Map();
   for (const c of estado.components) {
+    if (TIPOS[c.type].noBOM) continue;
     const T = TIPOS[c.type], key = [c.type, c.nps, c.npsRed || '', c.schedule, c.ref || ''].join('|');
     const g = grupos.get(key) || { key, orden: T.orden, nps: npsNum(c.nps), uni: c.type === 'pipe' ? 'ML' : (T.uni || 'UND'), desc: descripcion(c), cant: 0 };
     g.cant += c.type === 'pipe' ? longitudTubo(c) : 1;
@@ -1496,8 +1540,10 @@ function renderPanelSeleccion() {
       <button class="btn" data-acc="auto" title="Volver a la longitud por grilla">Grilla</button></div>
       ${c.libre && PLANOS[c.libre.plano] && !dirEntre(c.coords[0], c.coords[1]) ? `<label>Ángulo · plano ${PLANOS[c.libre.plano].nombre} (° desde ${PLANOS[c.libre.plano].ref})</label>
       <input data-p="angulo" type="number" step="0.1" inputmode="decimal" value="${c.libre.ang}">` : ''}` : ''}
-    ${c.type !== 'weld' ? `<label>Código / ref. fabricante</label><input data-p="ref" maxlength="60" placeholder="Ej: 032U1247" value="${esc(c.ref || '')}">` : ''}
-    <div class="acc">${c.type !== 'pipe' && TIPOS[c.type].modo !== 'punto' ? '<button class="btn" data-acc="rotar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-rotate"/></svg>Rotar</button>' : ''}
+    ${c.type === 'pipe' ? `<label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:12px;color:var(--s200)"><input type="checkbox" data-p="sinCota" style="width:18px;height:18px"${c.sinCota ? ' checked' : ''}> Ocultar cota de este tramo</label>` : ''}
+    ${c.type === 'pipe' ? `<label>Pendiente</label><button class="btn" style="width:100%" data-acc="pend">${c.pendiente ? `PEND. ${c.pendiente.valor}% · baja hacia el ${c.pendiente.haciaFin === false ? 'inicio' : 'final'}` : 'Agregar pendiente'}</button>` : ''}
+    ${c.type !== 'weld' && !TIPOS[c.type].noBOM ? `<label>Código / ref. fabricante</label><input data-p="ref" maxlength="60" placeholder="Ej: 032U1247" value="${esc(c.ref || '')}">` : ''}
+    <div class="acc">${c.type !== 'pipe' && TIPOS[c.type].modo !== 'punto' ? `<button class="btn" data-acc="rotar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-rotate"/></svg>${c.type === 'flow' ? 'Invertir' : 'Rotar'}</button>` : ''}
       <button class="btn peligro" data-acc="borrar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-trash"/></svg>Borrar</button></div>`;
   p.hidden = false;
 }
@@ -1511,6 +1557,8 @@ $('panel-sel').addEventListener('change', e => {
     const a = parseFloat(String(e.target.value).replace(',', '.'));
     if (!isFinite(a)) { aviso('Ángulo no válido', 'error'); renderPanelSeleccion(); return; }
     commit(() => cambiarAnguloLibre(c, a));
+  } else if (k === 'sinCota') {
+    commit(() => { if (e.target.checked) c.sinCota = true; else delete c.sinCota; });
   } else if (k === 'ref') {
     const v = e.target.value.trim().toUpperCase();
     commit(() => { if (v) c.ref = v; else delete c.ref; });
@@ -1519,7 +1567,8 @@ $('panel-sel').addEventListener('change', e => {
 $('panel-sel').addEventListener('click', e => {
   const b = e.target.closest('[data-acc]'), c = estado.components.find(x => x.id === seleccion); if (!b || !c) return;
   if (b.dataset.acc === 'borrar') deleteSelected();
-  if (b.dataset.acc === 'rotar') commit(() => { c.rotation = normAng(c.rotation + 60); });
+  if (b.dataset.acc === 'rotar') commit(() => { c.rotation = normAng(c.rotation + (c.type === 'flow' ? 180 : 60)); });
+  if (b.dataset.acc === 'pend') pedirPendiente(c);
   if (b.dataset.acc === 'auto') commit(() => { c.lengthManual = false; c.length = longitudTubo(c); });
 });
 function deleteSelected() {
@@ -1593,8 +1642,15 @@ svg.addEventListener('pointerdown', e => {
   const pt = puntoSVG(e), R = radioCaptura(e);
   if (herramienta === 'pan' || e.button === 1) { arrastreHoja = { x: e.clientX, y: e.clientY }; svg.style.cursor = 'grabbing'; return; }
   if (herramienta === 'select') {
-    const g = e.target.closest('[data-id]');
-    if (g) seleccionar(g.dataset.id); else { seleccionar(null); arrastreHoja = { x: e.clientX, y: e.clientY }; }
+    /* piezas bajo el dedo: si ya hay una seleccionada aquí, un nuevo toque pasa a la siguiente (codo → tramo corto…) */
+    const ids = [...new Set(document.elementsFromPoint(e.clientX, e.clientY).map(el => el.closest && el.closest('#iso-svg [data-id]')).filter(Boolean).map(g => g.dataset.id))];
+    /* la más cercana al punto tocado primero (un tramo corto gana al codo vecino si se toca sobre él) */
+    const dist = id => { const c = estado.components.find(x => x.id === id); if (!c) return 1e9;
+      if (c.type !== 'pipe') { const s = aPantalla(c.coords[0]); return Math.hypot(s.x - pt.x, s.y - pt.y); }
+      const a = aPantalla(c.coords[0]), b = aPantalla(c.coords[1]), dx = b.x - a.x, dy = b.y - a.y, t = Math.max(0, Math.min(1, ((pt.x - a.x) * dx + (pt.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
+      return Math.hypot(a.x + t * dx - pt.x, a.y + t * dy - pt.y); };
+    ids.sort((x, y) => dist(x) - dist(y));
+    if (ids.length) seleccionar(ids[(ids.indexOf(seleccion) + 1) % ids.length]); else { seleccionar(null); arrastreHoja = { x: e.clientX, y: e.clientY }; }
     return;
   }
   if (herramienta === 'pipe') {
@@ -1644,7 +1700,7 @@ function finPuntero(e, cancelado) {
   trazo.down = null;
   if (cancelado) { if (!trazo.cadena) terminarTrazo(); return; }
   const r = resolverFin(trazo.inicio, puntoSVG(e), radioCaptura(e));
-  if (r.pasos >= (estado.trazo.modo === 'iso' ? 1 : 0.25) && !igual(r.fin, trazo.inicio)) {
+  if (r.pasos >= 0.25 && !igual(r.fin, trazo.inicio)) {
     const ini = trazo.inicio;
     if (trazo.fresco && trazo.movido) trazo = null;           // trazo por arrastre: un solo tramo
     else { trazo.inicio = r.fin; trazo.cadena = true; }       // trazo por toques: continúa en cadena
@@ -1796,10 +1852,11 @@ function exportToExcel() {
   const totML = r2(ultimoBOM.filter(f => f.uni === 'ML' && !f.consumible).reduce((s, f) => s + Number(f.cant || 0), 0));
   const nJuntas = estado.components.filter(c => c.type === 'weld').length;
   let nT = 0;
-  const detalle = [['MARCA', 'CATEGORÍA', 'TIPO', 'NPS', 'NPS MENOR', 'ESPECIFICACIÓN', `LONGITUD (${txtUnidad()})`, 'LONG. MANUAL', 'ÁNGULO / PLANO', 'DESCRIPCIÓN', 'COORDENADAS RED [p,q]']]
-    .concat([...estado.components].sort((a, b) => (a.type === 'weld') - (b.type === 'weld') || (a.type === 'weld' ? numW.get(a.id) - numW.get(b.id) : 0)).map(c => [c.type === 'weld' ? `W${numW.get(c.id)}` : c.type === 'pipe' ? `T${++nT}` : '', c.category, TIPOS[c.type].corto, c.nps, c.npsRed || '', c.schedule,
+  const detalle = [['MARCA', 'CATEGORÍA', 'TIPO', 'NPS', 'NPS MENOR', 'ESPECIFICACIÓN', `LONGITUD (${txtUnidad()})`, 'LONG. MANUAL', 'ÁNGULO / PLANO', 'PENDIENTE', 'DESCRIPCIÓN', 'COORDENADAS RED [p,q]']]
+    .concat([...estado.components].filter(c => !TIPOS[c.type].noBOM).sort((a, b) => (a.type === 'weld') - (b.type === 'weld') || (a.type === 'weld' ? numW.get(a.id) - numW.get(b.id) : 0)).map(c => [c.type === 'weld' ? `W${numW.get(c.id)}` : c.type === 'pipe' ? `T${++nT}` : '', c.category, TIPOS[c.type].corto, c.nps, c.npsRed || '', c.schedule,
       c.type === 'pipe' ? aUnidad(longitudTubo(c)) : '', c.type === 'pipe' ? (c.lengthManual ? 'SÍ' : 'NO') : '',
       c.libre && PLANOS[c.libre.plano] && !dirEntre(c.coords[0], c.coords[1]) ? `${anguloAgudo(c)}° · ${PLANOS[c.libre.plano].corto}` : '',
+      c.pendiente ? `${c.pendiente.valor}% hacia el ${c.pendiente.haciaFin === false ? 'inicio' : 'final'}` : '',
       descripcion(c), c.coords.map(P => `[${P[0]}, ${P[1]}]`).join(' → ')]));
   if (typeof XLSX === 'undefined') {
     /* respaldo sin librería: CSV compatible con Excel (separador ;) */
@@ -1854,10 +1911,10 @@ function exportToExcel() {
   ws['!rows'] = aoa.map((_, r) => r === 0 ? { hpt: 26 } : r === 1 ? { hpt: 20 } : r === fEnc ? { hpt: 20 } : r >= fDat && r < fDat + filasBOM.length ? { hpt: 17 } : null);
   /* ----- Hoja 2: detalle de componentes (trazabilidad de juntas y tramos) ----- */
   const ws2 = XLSX.utils.aoa_to_sheet(detalle);
-  ws2['!cols'] = [8, 12, 18, 8, 10, 26, 13, 12, 16, 80, 34].map(w => ({ wch: w }));
+  ws2['!cols'] = [8, 12, 18, 8, 10, 26, 13, 12, 16, 18, 80, 34].map(w => ({ wch: w }));
   for (let c = 0; c < detalle[0].length; c++) {
     ws2[XLSX.utils.encode_cell({ r: 0, c })].s = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '1E293B' } }, border: borde, alignment: centro };
-    for (let r = 1; r < detalle.length; r++) { const ref = XLSX.utils.encode_cell({ r, c }); if (!ws2[ref]) ws2[ref] = { t: 's', v: '' }; ws2[ref].s = { border: borde, alignment: { vertical: 'center', horizontal: c < 9 && c !== 5 ? 'center' : 'left' } }; }
+    for (let r = 1; r < detalle.length; r++) { const ref = XLSX.utils.encode_cell({ r, c }); if (!ws2[ref]) ws2[ref] = { t: 's', v: '' }; ws2[ref].s = { border: borde, alignment: { vertical: 'center', horizontal: c < 10 && c !== 5 ? 'center' : 'left' } }; }
   }
   ws2['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(1, detalle.length - 1), c: detalle[0].length - 1 } }) };
   const wb = XLSX.utils.book_new();
@@ -1958,7 +2015,7 @@ const claro = s => s.replace(/class="sb"/g, 'fill="#0f172a" stroke="#e2e8f0" str
 const iconoSimbolo = t => { const b = TIPOS[t].base || t; return claro(ICONO_NODO[b] || SIM[b] || ''); };
 const botonHerr = (tool, etiqueta, dibujo, esIcono) => `<button class="herr" data-tool="${esc(tool)}" onclick="setActiveTool('${esc(tool)}')" title="${esc(TIPOS[tool]?.nombre || etiqueta)}">
     ${esIcono ? `<svg class="ico" viewBox="0 0 24 24" style="width:22px;height:22px"><use href="#i-${dibujo}"/></svg>` : `<svg class="sim" viewBox="-20 -20 40 40" style="stroke:#e2e8f0">${dibujo}</svg>`}<span>${esc(etiqueta)}</span></button>`;
-const gruposAbiertos = new Set(['acc_bw', 'val', 'junta', 'propio', 'fab_danfoss']);
+const gruposAbiertos = new Set(['acc_bw', 'val', 'junta', 'anot', 'propio', 'fab_danfoss']);
 function construirCatalogo() {
   const filtro = quitarTildes($('buscar-sim').value).toLowerCase().trim();
   const html = GRUPOS.map(([g, titulo]) => {
