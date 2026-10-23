@@ -182,6 +182,14 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
   .wl-pendiente{fill:#475569}.wl-soldada{fill:#1d4ed8}.wl-liberada{fill:#15803d}.wl-rechazada{fill:#dc2626;text-decoration:underline}
 }
 .qc-resumen{font:600 11px var(--mono);color:var(--s300);margin:6px 0 2px;line-height:1.5}
+.ob-linea{display:flex;gap:6px;align-items:center;padding:6px 8px;border:1px solid var(--s700);border-radius:8px;margin:4px 0}
+.ob-linea.actual{border-color:var(--cian)}
+.ob-linea .btn{min-height:32px;padding:4px 10px}
+.sd-fila{border:1px solid var(--s700);border-radius:8px;padding:6px 8px;margin:6px 0}
+.fotos-lista{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.foto-mini{position:relative;width:64px;height:64px;padding:0;border:1px solid var(--s600);border-radius:6px;overflow:hidden;background:#000;cursor:pointer}
+.foto-mini img{width:100%;height:100%;object-fit:cover;display:block}
+.foto-mini span{position:absolute;left:0;right:0;bottom:0;font:700 9px var(--mono);color:#fff;background:#0009;text-align:center}
 .rj-lista{max-height:34vh;overflow:auto;border:1px solid var(--s700);border-radius:8px;padding:4px 8px;margin-top:6px}
 .wl{font:700 9.5px Arial;fill:#b91c1c;paint-order:stroke;stroke:#fff;stroke-width:2.5px}
 .tagq{font:800 11px Arial;fill:#0f172a;paint-order:stroke;stroke:#fff;stroke-width:3px}
@@ -266,6 +274,14 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
         </div>
 
         <div class="sec">
+          <h3>Obra y línea abiertas</h3>
+          <div class="qc-resumen" id="obra-actual"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+            <button class="btn" onclick="abrirObras()"><svg class="ico" data-ico="layers"></svg>Obras y líneas</button>
+            <button class="btn" onclick="abrirSoldadores()"><svg class="ico" data-ico="users"></svg>Soldadores</button></div>
+        </div>
+
+        <div class="sec">
           <h3>1. Control y trazado</h3>
           <div class="rejilla" id="herr-control"></div>
           <div class="fila-opc"><span>Unidad de cotas</span><select id="sel-unidad" class="sel" style="min-height:30px;padding:3px 6px;color:var(--cian)"><option value="mm">Milímetros (mm)</option><option value="m">Metros (m)</option></select></div>
@@ -306,6 +322,7 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
           <button class="btn ancho" onclick="abrirRegistroJuntas()"><svg class="ico" data-ico="check"></svg>Registrar soldadura de juntas</button>
           <button class="btn ancho verde" onclick="exportarQC004()"><svg class="ico" data-ico="sheet"></svg>QC-F-004 Reporte de soldadura</button>
           <button class="btn ancho verde" onclick="exportarQC015()"><svg class="ico" data-ico="sheet"></svg>QC-F-015 Mapa de soldadura</button>
+          <button class="btn ancho verde" onclick="exportarAnexo()"><svg class="ico" data-ico="camera"></svg>Anexo fotográfico de juntas</button>
           <button class="btn ancho ambar" onclick="abrirReporteAvance()"><svg class="ico" data-ico="sheet"></svg>Reporte semanal de avance (ML)</button>
           <button class="btn ancho" onclick="descargarMaestro()"><svg class="ico" data-ico="sheet"></svg>Excel maestro de gerencia (tarifas)</button>
         </div>
@@ -318,6 +335,9 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
           <button class="btn ancho" onclick="downloadSelfHtml()"><svg class="ico" data-ico="code"></svg>Descargar app (.html sin internet)</button>
           <button class="btn ancho ambar" onclick="instalarApp(true)"><svg class="ico" data-ico="download"></svg>Instalar app (Android · iOS · PC)</button>
           <input type="file" id="in-proyecto" accept=".json,application/json" hidden>
+          <input type="file" id="in-obra" accept=".json,application/json" multiple hidden>
+          <input type="file" id="in-foto-cam" accept="image/*" capture="environment" hidden>
+          <input type="file" id="in-foto-gal" accept="image/*" multiple hidden>
         </div>
       </div>
 
@@ -677,8 +697,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v15';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-10-22T20:53';      // fecha y hora de la publicación (UTC)
+const APP_VERSION = 'v16';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-10-23T20:30';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -693,6 +713,7 @@ const estado = {
   apertura: 1.6,        // apertura de raíz en juntas a tope BW (mm)
   sepSW: 1.6,           // separación entre tubo y fondo del socket antes de soldar SW (mm)
   trazo: { modo: 'iso', plano: 'H' },  // modo: 'iso' o paso angular libre ('15' | '5' | '1'); plano del ángulo libre
+  lineaId: null,        // identificador de la línea en la lista de obras del equipo
   qc: {}                // datos de calidad para QC-F-004 / QC-F-015 (WPS, PQR, lugar, reporte, contrato, equipo, TAG, firmas…)
 };
 let historial = [], rehacerPila = [];
@@ -1298,7 +1319,7 @@ function renderLienzo() {
       const ej = estadoJunta(c);
       simbolos += `<g class="cmp${sel} jt-${ej}" data-id="${c.id}"><circle class="hit" cx="${P.x}" cy="${P.y}" r="11"/>
         <circle class="pt" cx="${P.x}" cy="${P.y}" r="4.2" fill="#000" stroke="#fff" stroke-width="1"/></g>`;
-      const texto = `W${numW.get(c.id) || '?'}`, w = texto.length * 5.8 + 3, h = 11, cand = [];
+      const texto = etiquetaJ(numW.get(c.id) || '?', (c.reps || []).length), w = texto.length * 5.8 + 3, h = 11, cand = [];
       for (const d of [8, 14, 21, 29]) for (const k of [1, 3, 7, 5, 2, 6, 0, 4]) {
         const a = k * Math.PI / 4, ux = Math.cos(a), uy = -Math.sin(a);
         cand.push({ x: P.x + ux * (d + w / 2 * Math.abs(ux)), y: P.y + uy * (d + h / 2 * Math.abs(uy)) });
@@ -1412,8 +1433,10 @@ let tGuardar;
 function guardarLocal() {
   clearTimeout(tGuardar);
   tGuardar = setTimeout(() => {
+    if (enIntercambio) return;
     try { localStorage.setItem(CLAVE_LOCAL, JSON.stringify(estado)); }
     catch (e) { aviso('No se pudo guardar el borrador en este equipo', 'error'); }
+    guardarLineaBD();
   }, 250);
 }
 function cargarLocal() {
@@ -1429,6 +1452,7 @@ function aplicarProyecto(o) {
   estado.cotas = ['cc', 'corte', 'ambas'].includes(o.cotas) ? o.cotas : 'ambas';
   estado.descontar = o.descontar !== false;
   estado.qc = o.qc && typeof o.qc === 'object' ? o.qc : {};
+  estado.lineaId = typeof o.lineaId === 'string' ? o.lineaId : null;
   estado.apertura = Number(o.apertura) >= 0 ? Number(o.apertura) : 1.6;
   estado.sepSW = Number(o.sepSW) >= 0 ? Number(o.sepSW) : 1.6;
   estado.catalogoPropio = Array.isArray(o.catalogoPropio) ? o.catalogoPropio.filter(it => it && /^u_/.test(it.id) && it.nombre) : [];
@@ -1440,7 +1464,9 @@ function aplicarProyecto(o) {
   estado.ajustes = o.ajustes && typeof o.ajustes === 'object' ? o.ajustes : {};
 }
 function actualizarTodo() {
-  renderLienzo(); recalculateBOM(); renderPanelSeleccion(); resumenCalidad(); guardarLocal();
+  if (enIntercambio) return;
+  renderLienzo(); recalculateBOM(); renderPanelSeleccion(); resumenCalidad(); pintarObraActual(); guardarLocal();
+  const w = estado.components.find(x => x.id === seleccion && x.type === 'weld'); if (w) pintarFotos(w);
 }
 /* Ejecuta una modificación del estado con registro en historial */
 function commit(fn) { registrar(); fn(); actualizarTodo(); }
@@ -1902,11 +1928,28 @@ const ESTADOS_JUNTA = { pendiente: ['Pendiente', '#64748b'], soldada: ['Soldada'
 const NDE_TIPOS = ['N/A', 'VT', 'PT', 'MT', 'RT', 'UT'];
 const NDE_RESULTADOS = ['N/A', 'APROBADO', 'RECHAZADO', 'PENDIENTE'];
 /* pendiente → soldada (fecha y soldador) → liberada (visual OK y END aprobado o no aplica); rechazada si falla alguna inspección */
-function estadoJunta(w) {
+function estadoRegistro(w) {
   if (w.visual === 'RECHAZADA' || w.ndeRes === 'RECHAZADO') return 'rechazada';
   if (!w.fecha || !(w.raiz || w.pres)) return 'pendiente';
   const endOk = !w.nde || w.nde === 'N/A' || w.ndeRes === 'APROBADO';
   return w.visual === 'OK' && endOk ? 'liberada' : 'soldada';
+}
+/* Una junta rechazada se repara: cada reparación (W5-R1, W5-R2…) es un registro nuevo en c.reps y el estado
+   de la junta es el de su último registro; el registro original se conserva tal cual para el QC-F-004 */
+const CAMPOS_REGISTRO = ['fecha', 'ubic', 'tubero', 'raiz', 'pres', 'visual', 'nde', 'ndeRes', 'fechaLib', 'repSol', 'repLib'];
+const registrosJunta = c => [c, ...(c.reps || [])];
+const regJ = c => (c.reps && c.reps.length) ? c.reps[c.reps.length - 1] : c;
+const estadoJunta = c => estadoRegistro(regJ(c));
+const etiquetaJ = (n, k) => k ? `W${n}-R${k}` : `W${n}`;
+function crearReparacion() {
+  const c = estado.components.find(x => x.id === seleccion); if (!c || estadoJunta(c) !== 'rechazada') return;
+  commit(() => { c.reps = c.reps || []; c.reps.push({ ubic: regJ(c).ubic }); });
+  aviso(`Reparación R${c.reps.length} creada: registre su soldadura e inspección`, 'ok', 3500);
+}
+function borrarReparacion() {
+  const c = estado.components.find(x => x.id === seleccion); if (!c || !(c.reps || []).length) return;
+  if (!confirm(`¿Borrar la reparación R${c.reps.length} y sus datos?`)) return;
+  commit(() => { c.reps.pop(); if (!c.reps.length) delete c.reps; });
 }
 const fechaDMY = f => /^\d{4}-\d{2}-\d{2}$/.test(f || '') ? f.split('-').reverse().join('/') : (f || '');
 function soldadurasOrdenadas() {
@@ -1916,31 +1959,42 @@ function soldadurasOrdenadas() {
 /* nombres usados antes (tubero, soldadores) para sugerirlos */
 function datalistPersonal() {
   const v = new Set();
-  for (const c of estado.components) if (c.type === 'weld') for (const k of ['tubero', 'raiz', 'pres']) if (c[k]) v.add(c[k]);
-  return `<datalist id="dl-personal">${[...v].sort().map(x => `<option value="${esc(x)}">`).join('')}</datalist>`;
+  for (const c of estado.components) if (c.type === 'weld') for (const r of registrosJunta(c)) for (const k of ['tubero', 'raiz', 'pres']) if (r[k] && !buscarSoldador(r[k])) v.add(r[k]);
+  return `<datalist id="dl-personal">${soldadores.map(s => `<option value="${esc(s.estampa)}" label="${esc(s.nombre || '')}">${esc(s.nombre || '')}</option>`).join('')}${[...v].sort().map(x => `<option value="${esc(x)}">`).join('')}</datalist>`;
 }
 const opcionesSel = (lista, val, vacio) => (vacio !== undefined ? `<option value="">${vacio}</option>` : '') + lista.map(([v, t]) => `<option value="${esc(v)}"${v === val ? ' selected' : ''}>${esc(t)}</option>`).join('');
 function panelJunta(c) {
-  const ej = estadoJunta(c), [nom, col] = ESTADOS_JUNTA[ej];
-  return `<div style="margin:6px 0;font-weight:800;color:${col}">● ${nom}</div>${datalistPersonal()}
+  const r = regJ(c), k = (c.reps || []).length, ej = estadoRegistro(r), [nom, col] = ESTADOS_JUNTA[ej], num = numeracionSoldaduras().get(c.id) || 0;
+  const avisos = [...avisosSoldador(c, r, 'raiz'), ...avisosSoldador(c, r, 'pres')];
+  const historia = registrosJunta(c).slice(0, -1).map((x, i) => `${etiquetaJ(num, i)}: ${ESTADOS_JUNTA[estadoRegistro(x)][0].toLowerCase()}${x.fecha ? ' ' + fechaDMY(x.fecha) : ''}${x.raiz ? ' · ' + esc(x.raiz) : ''}`).join('<br>');
+  return `<div style="margin:6px 0;font-weight:800;color:${col}">● ${etiquetaJ(num, k)} · ${nom}</div>${datalistPersonal()}
+    ${historia ? `<div style="font-size:11px;color:var(--s400);margin-bottom:4px">${historia}</div>` : ''}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-      <div><label>Fecha soldadura</label><input data-pw="fecha" type="date" value="${esc(c.fecha || '')}"></div>
-      <div><label>Taller / campo</label><select data-pw="ubic">${opcionesSel([['S', 'Taller (S)'], ['F', 'Campo (F)']], c.ubic, '—')}</select></div></div>
-    <label>Tubero</label><input data-pw="tubero" list="dl-personal" maxlength="40" value="${esc(c.tubero || '')}">
+      <div><label>Fecha soldadura</label><input data-pw="fecha" type="date" value="${esc(r.fecha || '')}"></div>
+      <div><label>Taller / campo</label><select data-pw="ubic">${opcionesSel([['S', 'Taller (S)'], ['F', 'Campo (F)']], r.ubic, '—')}</select></div></div>
+    <label>Tubero</label><input data-pw="tubero" list="dl-personal" maxlength="40" value="${esc(r.tubero || '')}">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-      <div><label>Soldador raíz</label><input data-pw="raiz" list="dl-personal" maxlength="40" value="${esc(c.raiz || '')}"></div>
-      <div><label>Soldador present.</label><input data-pw="pres" list="dl-personal" maxlength="40" value="${esc(c.pres || '')}"></div></div>
-    <label>Inspección visual</label><select data-pw="visual">${opcionesSel([['OK', 'OK'], ['RECHAZADA', 'Rechazada']], c.visual, 'Pendiente')}</select>
+      <div><label>Soldador raíz</label><input data-pw="raiz" list="dl-personal" maxlength="40" value="${esc(r.raiz || '')}"></div>
+      <div><label>Soldador present.</label><input data-pw="pres" list="dl-personal" maxlength="40" value="${esc(r.pres || '')}"></div></div>
+    ${avisos.length ? `<div style="font-size:11px;color:#f59e0b;margin-top:4px">⚠ ${avisos.map(esc).join('<br>⚠ ')}</div>` : ''}
+    <label>Inspección visual</label><select data-pw="visual">${opcionesSel([['OK', 'OK'], ['RECHAZADA', 'Rechazada']], r.visual, 'Pendiente')}</select>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-      <div><label>END aplicada</label><select data-pw="nde">${opcionesSel(NDE_TIPOS.map(x => [x, x]), c.nde, '—')}</select></div>
-      <div><label>Resultado END</label><select data-pw="ndeRes">${opcionesSel(NDE_RESULTADOS.map(x => [x, x]), c.ndeRes, '—')}</select></div></div>
-    ${ej === 'liberada' ? `<label>Fecha liberación</label><input data-pw="fechaLib" type="date" value="${esc(c.fechaLib || '')}">` : ''}
-    ${c.repSol || c.repLib ? `<div style="font-size:11px;color:var(--s400);margin-top:4px">Reportada a gerencia: ${c.repSol ? 'soldada ' + esc(c.repSol) : ''}${c.repLib ? ' · liberada ' + esc(c.repLib) : ''}</div>` : ''}`;
+      <div><label>END aplicada</label><select data-pw="nde">${opcionesSel(NDE_TIPOS.map(x => [x, x]), r.nde, '—')}</select></div>
+      <div><label>Resultado END</label><select data-pw="ndeRes">${opcionesSel(NDE_RESULTADOS.map(x => [x, x]), r.ndeRes, '—')}</select></div></div>
+    ${ej === 'liberada' ? `<label>Fecha liberación</label><input data-pw="fechaLib" type="date" value="${esc(r.fechaLib || '')}">` : ''}
+    ${r.repSol || r.repLib ? `<div style="font-size:11px;color:var(--s400);margin-top:4px">Reportada a gerencia: ${r.repSol ? (k ? 'reparación ' : 'soldada ') + esc(r.repSol) : ''}${r.repLib ? ' · liberada ' + esc(r.repLib) : ''}</div>` : ''}
+    ${ej === 'rechazada' ? `<button type="button" class="btn ancho ambar" style="margin-top:6px" onclick="crearReparacion()">Crear reparación ${etiquetaJ(num, k + 1)}</button>` : ''}
+    ${k ? `<button type="button" class="btn ancho" style="margin-top:6px" onclick="borrarReparacion()">Borrar reparación R${k}</button>` : ''}
+    <label>Fotos de la junta</label>
+    <div style="display:flex;gap:6px"><select id="foto-tipo" style="flex:1">${opcionesSel(FOTO_TIPOS.map(t => [t, t]), k ? 'Reparación' : ej === 'pendiente' ? FOTO_TIPOS[0] : FOTO_TIPOS[2])}</select>
+      <button type="button" class="btn" onclick="document.getElementById('in-foto-cam').click()" title="Tomar foto"><svg class="ico" viewBox="0 0 24 24"><use href="#i-camera"/></svg></button>
+      <button type="button" class="btn" onclick="document.getElementById('in-foto-gal').click()" title="Elegir de la galería"><svg class="ico" viewBox="0 0 24 24"><use href="#i-folder"/></svg></button></div>
+    <div id="fotos-junta" class="fotos-lista"></div>`;
 }
 $('panel-sel').addEventListener('change', e => {
   const k = e.target.dataset.pw, c = estado.components.find(x => x.id === seleccion); if (!k || !c) return;
-  const v = ['tubero', 'raiz', 'pres'].includes(k) ? e.target.value.trim().toUpperCase() : e.target.value;
-  commit(() => { if (v) c[k] = v; else delete c[k]; ajustarLiberacion(c); });
+  const v = ['tubero', 'raiz', 'pres'].includes(k) ? e.target.value.trim().toUpperCase() : e.target.value, r = regJ(c);
+  commit(() => { if (v) r[k] = v; else delete r[k]; ajustarLiberacion(c); });
 });
 function resumenCalidad() {
   const l = soldadurasOrdenadas(); if (!l.length) { $('qc-resumen').textContent = 'Sin juntas en el plano'; return; }
@@ -1952,10 +2006,10 @@ function abrirRegistroJuntas() {
   toggleSidebar(false);
   const l = soldadurasOrdenadas();
   if (!l.length) { aviso('No hay juntas: colóquelas o use «Generar juntas soldadas automáticas»', 'error', 3500); return; }
-  const filas = l.map(({ c, n }) => { const [t, col] = ESTADOS_JUNTA[estadoJunta(c)];
+  const filas = l.map(({ c, n }) => { const ej = estadoJunta(c), [t, col] = ESTADOS_JUNTA[ej], r = regJ(c);
     return `<label style="display:flex;gap:8px;align-items:center;text-transform:none;font-size:13px;margin:4px 0;color:var(--s200)">
-      <input type="checkbox" data-rj="${c.id}" data-estado="${estadoJunta(c)}"${estadoJunta(c) === 'pendiente' ? ' checked' : ''} style="width:18px;height:18px">
-      <b>W${n}</b> · Ø ${esc(c.nps)} · ${c.junta === 'SW' || c.junta === 'FILETE' ? 'FW' : 'BW'} · <span style="color:${col}">${t}</span>${c.raiz ? ` · ${esc(c.raiz)}` : ''}</label>`; }).join('');
+      <input type="checkbox" data-rj="${c.id}" data-estado="${ej}"${ej === 'pendiente' ? ' checked' : ''} style="width:18px;height:18px">
+      <b>${etiquetaJ(n, (c.reps || []).length)}</b> · Ø ${esc(c.nps)} · ${c.junta === 'SW' || c.junta === 'FILETE' ? 'FW' : 'BW'} · <span style="color:${col}">${t}</span>${r.raiz ? ` · ${esc(r.raiz)}` : ''}</label>`; }).join('');
   abrirModal({
     titulo: 'Registrar soldadura de juntas',
     html: `${datalistPersonal()}<p>Llene solo lo que quiera cambiar y marque las juntas. Los campos vacíos no se modifican.</p>
@@ -1975,6 +2029,7 @@ function abrirRegistroJuntas() {
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <button type="button" class="btn" data-rjsel="todas">Todas</button><button type="button" class="btn" data-rjsel="pendiente">Pendientes</button>
         <button type="button" class="btn" data-rjsel="soldada">Soldadas</button><button type="button" class="btn" data-rjsel="ninguna">Ninguna</button></div>
+      <div style="font-size:11px;color:var(--s400);margin-top:4px">En juntas reparadas los datos van a la última reparación. Las rechazadas se reparan desde el panel de la junta.</div>
       <div class="rj-lista">${filas}</div>`,
     okTxt: 'Aplicar a las marcadas',
     alAbrir: () => {
@@ -1992,13 +2047,16 @@ function abrirRegistroJuntas() {
         if (v) cambios[k] = v;
       }
       if (!Object.keys(cambios).length) { aviso('No llenó ningún dato para aplicar', 'error'); return false; }
-      commit(() => estado.components.forEach(c => { if (ids.includes(c.id)) { Object.assign(c, cambios); ajustarLiberacion(c); } }));
+      const avisos = new Set();
+      estado.components.forEach(c => { if (ids.includes(c.id)) { const r = { ...regJ(c), ...cambios }; [...avisosSoldador(c, r, 'raiz'), ...avisosSoldador(c, r, 'pres')].forEach(a => avisos.add(a)); } });
+      if (avisos.size && !confirm('Revise la calificación de los soldadores:\n\n• ' + [...avisos].slice(0, 8).join('\n• ') + (avisos.size > 8 ? `\n… y ${avisos.size - 8} más` : '') + '\n\n¿Aplicar de todas formas?')) return false;
+      commit(() => estado.components.forEach(c => { if (ids.includes(c.id)) { Object.assign(regJ(c), cambios); ajustarLiberacion(c); } }));
       aviso(`Se actualizaron ${ids.length} juntas`, 'ok');
     }
   });
 }
 /* Datos del encabezado y firmas de los formatos de calidad (cliente, proyecto, línea y nombres vienen del rótulo) */
-const CAMPOS_QC = [['wps', 'WPS'], ['pqr', 'PQR'], ['lugar', 'Lugar'], ['reporte', 'Reporte No.'], ['contrato', 'Contrato No.'], ['equipo', 'Equipo / estructura'],
+const CAMPOS_QC = [['wps', 'WPS'], ['pqr', 'PQR'], ['procesos', 'Proceso(s) de la WPS (ej. GTAW/SMAW)'], ['lugar', 'Lugar'], ['reporte', 'Reporte No.'], ['contrato', 'Contrato No.'], ['equipo', 'Equipo / estructura'],
   ['tag', 'TAG de la línea'], ['interventoria', 'Interventoría'], ['cargoElaboro', 'Cargo de quien elaboró'], ['cargoAprobo', 'Cargo de quien aprobó'], ['observaciones', 'Observaciones']];
 function abrirDatosCalidad() {
   toggleSidebar(false);
@@ -2059,9 +2117,9 @@ async function plantillaQC(nombre) {
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 async function exportarQC004() {
   toggleSidebar(false);
-  const l = soldadurasOrdenadas();
+  const l = soldadurasOrdenadas().flatMap(({ c, n }) => registrosJunta(c).map((r, k) => ({ c, n, r, k })));
   if (!l.length) { aviso('No hay juntas para el reporte: colóquelas o use «Generar juntas soldadas automáticas»', 'error', 3500); return; }
-  if (l.length > 120) aviso('El reporte admite 120 juntas (10 hojas): se exportan las primeras 120', 'error', 4000);
+  if (l.length > 120) aviso('El reporte admite 120 registros (10 hojas): se exportan los primeros 120', 'error', 4000);
   try {
     aviso('Generando QC-F-004…', null, 6000);
     const ExcelJS = await cargarExcelJS(), wb = new ExcelJS.Workbook(); await wb.xlsx.load(await plantillaQC('QC-F-004'));
@@ -2073,20 +2131,20 @@ async function exportarQC004() {
       const v = (ref, val) => { ws.getCell(ref).value = val == null ? '' : val; };
       v('M1', `Página: ${p + 1} de ${pags}`); v('B6', q.wps); v('B7', q.pqr);
       v('C6', 'REFERENCIA: ' + [cab.proyecto, cab.linea].filter(Boolean).join(' · ')); v('H6', 'LUGAR: ' + (q.lugar || '')); v('M6', 'REPORTE No ' + (q.reporte || ''));
-      juntas.slice(p * 12, p * 12 + 12).forEach(({ c, n }, k) => {
+      juntas.slice(p * 12, p * 12 + 12).forEach(({ c, n, r: g, k: kr }, k) => {
         const r = 9 + 2 * k, [e1, e2] = elementosJunta(c), cel = (rr, col, val) => {
           const x = ws.getCell(rr, col); x.value = val == null ? '' : val;
           if (typeof val === 'string' && val.length > 6) x.alignment = { ...(x.alignment || {}), shrinkToFit: true, wrapText: false };  /* textos largos en celdas angostas */
         };
-        cel(r, 1, fechaDMY(c.fecha)); cel(r, 2, cab.linea); cel(r, 3, e1.desc); cel(r, 4, `W${n}`); cel(r, 5, c.junta === 'SW' || c.junta === 'FILETE' ? 'FW' : 'BW');
-        cel(r, 6, c.nps); cel(r, 7, e1.mm); cel(r, 9, c.ubic); cel(r, 10, c.tubero); cel(r, 11, c.raiz); cel(r, 12, c.pres); cel(r, 13, c.visual); cel(r, 14, c.nde); cel(r, 15, c.ndeRes);
+        cel(r, 1, fechaDMY(g.fecha)); cel(r, 2, cab.linea); cel(r, 3, e1.desc); cel(r, 4, etiquetaJ(n, kr)); cel(r, 5, c.junta === 'SW' || c.junta === 'FILETE' ? 'FW' : 'BW');
+        cel(r, 6, c.nps); cel(r, 7, e1.mm); cel(r, 9, g.ubic); cel(r, 10, g.tubero); cel(r, 11, estampaDe(g.raiz)); cel(r, 12, estampaDe(g.pres)); cel(r, 13, g.visual); cel(r, 14, g.nde); cel(r, 15, g.ndeRes);
         cel(r + 1, 3, e2.desc); cel(r + 1, 7, e2.mm);
       });
       v('C33', 'OBSERVACIONES: ' + (q.observaciones || ''));
       v('B38', cab.elaboro); v('C38', cab.aprobo); v('G38', q.interventoria); v('K38', cab.cliente); v('B39', q.cargoElaboro); v('C39', q.cargoAprobo);
     });
     descargarBlob(new Blob([await wb.xlsx.writeBuffer()], { type: XLSX_MIME }), `QC-F-004_${nombreSeguro(cab.linea) || 'ISO'}_${hoyISO()}.xlsx`);
-    aviso(`QC-F-004 generado: ${juntas.length} juntas en ${pags} hoja${pags > 1 ? 's' : ''}`, 'ok', 3000);
+    aviso(`QC-F-004 generado: ${juntas.length} registros en ${pags} hoja${pags > 1 ? 's' : ''}`, 'ok', 3000);
   } catch (err) { aviso('No se pudo generar el QC-F-004: ' + err.message, 'error', 5000); }
 }
 /* Imagen del isométrico (recortada al dibujo, sin grilla) para el mapa de soldadura */
@@ -2144,10 +2202,11 @@ async function exportarQC015() {
 }
 
 /* ---------- 11e. Avance de obra: metros lineales por junta y reporte semanal para gerencia ---------- */
-/* fecha de liberación: se pone sola el día en que la junta queda liberada y se borra si deja de estarlo */
+/* fecha de liberación: se pone sola el día en que el registro vigente de la junta queda liberado y se borra si deja de estarlo */
 function ajustarLiberacion(c) {
-  if (estadoJunta(c) === 'liberada') { if (!c.fechaLib) c.fechaLib = hoyISO(); }
-  else delete c.fechaLib;
+  const r = regJ(c);
+  if (estadoRegistro(r) === 'liberada') { if (!r.fechaLib) r.fechaLib = hoyISO(); }
+  else delete r.fechaLib;
 }
 /* El largo centro a centro de cada tubo se reparte por partes iguales entre las juntas que tiene,
    así la suma de todas las juntas da los metros de la línea y ningún metro se cobra dos veces */
@@ -2173,115 +2232,159 @@ function semanaISO(f) {
   return { clave: `${jue.getFullYear()}-S${String(n).padStart(2, '0')}`, desde: iso(lun), hasta: iso(dom) };
 }
 const UBIC_TXT = { S: 'TALLER', F: 'CAMPO' };
-/* Eventos a reportar en la semana: soldadas y liberadas con fecha hasta el domingo que no se hayan reportado en otra semana
-   (los registros atrasados salen en el siguiente reporte con su fecha real) */
-function eventosAvance(sem) {
-  const { ml, sinJunta } = mlPorJunta(), num = numeracionSoldaduras(), ev = [];
+/* Eventos de la línea abierta hasta el domingo de la semana: soldada / reparación / liberada.
+   soloNuevos: los que no se reportaron en otra semana (los registros atrasados salen en el siguiente reporte con su fecha real) */
+function eventosLinea(sem, soloNuevos) {
+  const { ml, sinJunta } = mlPorJunta(), num = numeracionSoldaduras(), ev = [], cab = estado.cabecera;
+  const vale = (r, marca, f) => f && f <= sem.hasta && (!soloNuevos || !r[marca] || r[marca] === sem.clave);
   for (const c of estado.components) {
     if (c.type !== 'weld') continue;
-    const base = { c, n: num.get(c.id) || 0, ml: ml.get(c.id) || 0 };
-    if (c.fecha && (c.raiz || c.pres) && c.fecha <= sem.hasta && (!c.repSol || c.repSol === sem.clave)) ev.push({ ...base, evento: 'SOLDADA', fecha: c.fecha, marca: 'repSol' });
-    if (estadoJunta(c) === 'liberada' && c.fechaLib && c.fechaLib <= sem.hasta && (!c.repLib || c.repLib === sem.clave)) ev.push({ ...base, evento: 'LIBERADA', fecha: c.fechaLib, marca: 'repLib' });
+    const n = num.get(c.id) || 0;
+    registrosJunta(c).forEach((r, k) => {
+      const base = { c, r, k, n, etiqueta: etiquetaJ(n, k), ml: ml.get(c.id) || 0, ubic: r.ubic || (k ? c.ubic : ''), lineaId: estado.lineaId, linea: cab.linea, obra: cab.proyecto, cliente: cab.cliente };
+      if ((r.raiz || r.pres) && vale(r, 'repSol', r.fecha)) ev.push({ ...base, evento: k ? 'REPARACION' : 'SOLDADA', fecha: r.fecha, marca: 'repSol' });
+      if (estadoRegistro(r) === 'liberada' && vale(r, 'repLib', r.fechaLib)) ev.push({ ...base, evento: 'LIBERADA', fecha: r.fechaLib, marca: 'repLib' });
+    });
   }
-  ev.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.n - b.n);
-  return { ev, sinJunta, ml };
+  ev.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.n - b.n || a.k - b.k);
+  return { ev, sinJunta, totalML: [...ml.values()].reduce((a, b) => a + b, 0), juntas: ml.size };
+}
+/* pone la marca de semana reportada en los registros de unos datos de línea (estado o copia guardada) */
+function marcarEventos(datos, evs, clave) {
+  for (const x of evs) {
+    const c = datos.components.find(o => o.id === x.c.id); if (!c) continue;
+    const r = x.k ? (c.reps || [])[x.k - 1] : c; if (r) r[x.marca] = clave;
+  }
 }
 function abrirReporteAvance() {
   toggleSidebar(false);
-  if (!estado.components.some(c => c.type === 'weld')) { aviso('No hay juntas: colóquelas o use «Generar juntas soldadas automáticas»', 'error', 3500); return; }
-  const resumen = () => {
-    const f = $('ra-fecha').value; if (!f) return;
-    const sem = semanaISO(f), { ev, sinJunta } = eventosAvance(sem), sum = e => r2(ev.filter(x => x.evento === e).reduce((s, x) => s + x.ml, 0));
-    const sinUbic = ev.filter(x => !x.c.ubic).length;
-    $('ra-info').innerHTML = `Semana <b>${sem.clave}</b> (${fechaDMY(sem.desde)} a ${fechaDMY(sem.hasta)})<br>
-      Soldadas: <b>${ev.filter(x => x.evento === 'SOLDADA').length}</b> juntas · <b>${fmtNum(sum('SOLDADA'))} ML</b><br>
-      Liberadas: <b>${ev.filter(x => x.evento === 'LIBERADA').length}</b> juntas · <b>${fmtNum(sum('LIBERADA'))} ML</b>
-      ${sinUbic ? `<br><span style="color:#f59e0b">⚠ ${sinUbic} eventos sin taller/campo: llénelo para cobrar con la tarifa correcta</span>` : ''}
-      ${sinJunta.length ? `<br><span style="color:#f59e0b">⚠ ${sinJunta.length} tubos sin juntas: sus metros no entran al reporte</span>` : ''}`;
-  };
   abrirModal({
     titulo: 'Reporte semanal de avance',
-    html: `<p>Metros lineales de tubería soldados y liberados en la semana, por diámetro y taller/campo, <b>sin precios</b>: gerencia les pone las tarifas en el Excel maestro.
+    html: `<p>Metros lineales de tubería soldados, reparados y liberados en la semana, por diámetro y taller/campo, <b>sin precios</b>: gerencia les pone las tarifas en el Excel maestro.
       Los metros de cada tubo se reparten entre sus juntas.</p>
       <label>Obra</label><input id="ra-obra" maxlength="60" value="${esc(estado.cabecera.proyecto || '')}" placeholder="Nombre de la obra (se guarda como proyecto del rótulo)">
       <label>Cualquier día de la semana a reportar</label><input id="ra-fecha" type="date" value="${hoyISO()}">
-      <div id="ra-info" class="qc-resumen" style="margin-top:8px"></div>
+      <label style="display:flex;gap:8px;align-items:center;text-transform:none;font-size:13px;color:var(--s200);margin-top:8px">
+        <input type="checkbox" id="ra-obra-toda" checked style="width:18px;height:18px">Todas las líneas de la obra guardadas en este equipo</label>
+      <div id="ra-info" class="qc-resumen" style="margin-top:8px">Calculando…</div>
       <label style="display:flex;gap:8px;align-items:center;text-transform:none;font-size:13px;color:var(--s200);margin-top:8px">
         <input type="checkbox" id="ra-marcar" checked style="width:18px;height:18px">Marcar estas juntas como reportadas (no se repiten en otra semana)</label>`,
     okTxt: 'Generar Excel',
-    alAbrir: () => { $('ra-fecha').onchange = resumen; resumen(); },
+    alAbrir: () => {
+      const resumen = async () => {
+        const f = $('ra-fecha').value; if (!f) return;
+        try {
+          const sem = semanaISO(f), d = await datosAvance(sem, $('ra-obra').value.trim(), $('ra-obra-toda').checked);
+          const sum = e => r2(d.ev.filter(x => x.evento === e).reduce((s, x) => s + x.ml, 0)), cnt = e => d.ev.filter(x => x.evento === e).length;
+          const sinUbic = d.ev.filter(x => !UBIC_TXT[x.ubic]).length;
+          $('ra-info').innerHTML = `Semana <b>${sem.clave}</b> (${fechaDMY(sem.desde)} a ${fechaDMY(sem.hasta)}) · ${d.lineas.length} línea${d.lineas.length === 1 ? '' : 's'}<br>
+            Soldadas: <b>${cnt('SOLDADA')}</b> · <b>${fmtNum(sum('SOLDADA'))} ML</b><br>
+            Reparaciones: <b>${cnt('REPARACION')}</b> · <b>${fmtNum(sum('REPARACION'))} ML</b><br>
+            Liberadas: <b>${cnt('LIBERADA')}</b> · <b>${fmtNum(sum('LIBERADA'))} ML</b>
+            ${sinUbic ? `<br><span style="color:#f59e0b">⚠ ${sinUbic} eventos sin taller/campo: llénelo para cobrar con la tarifa correcta</span>` : ''}
+            ${d.sinJunta ? `<br><span style="color:#f59e0b">⚠ ${d.sinJunta} tubos sin juntas: sus metros no entran al reporte</span>` : ''}`;
+        } catch (err) { $('ra-info').textContent = 'No se pudo calcular: ' + err.message; }
+      };
+      $('ra-fecha').onchange = resumen; $('ra-obra-toda').onchange = resumen; $('ra-obra').onchange = resumen; resumen();
+    },
     alAceptar: () => {
       const obra = $('ra-obra').value.trim(), f = $('ra-fecha').value;
       if (!obra) { aviso('Escriba el nombre de la obra', 'error'); return false; }
       if (!f) { aviso('Elija la semana', 'error'); return false; }
-      if (obra !== estado.cabecera.proyecto) { estado.cabecera.proyecto = obra; pintarCabecera(); }
-      exportarAvance(semanaISO(f), $('ra-marcar').checked);
+      if (obra !== estado.cabecera.proyecto) { estado.cabecera.proyecto = obra; pintarCabecera(); guardarLocal(); }
+      exportarAvance(semanaISO(f), $('ra-marcar').checked, $('ra-obra-toda').checked);
     }
   });
 }
 const fmtNum = v => Number(v || 0).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-async function exportarAvance(sem, marcar) {
+/* Junta los eventos de la semana de la línea abierta y, si se pide, de las demás líneas de la misma obra guardadas en el equipo */
+async function datosAvance(sem, obra, todaObra) {
+  const res = { ev: [], acum: [], lineas: [], sinJunta: 0, otras: [] };
+  const procesar = () => {
+    const a = eventosLinea(sem, true), b = eventosLinea(sem, false);
+    res.ev.push(...a.ev); res.acum.push(...b.ev); res.sinJunta += a.sinJunta.length;
+    const s = e => b.ev.filter(x => x.evento === e).reduce((t, x) => t + x.ml, 0);
+    res.lineas.push({ linea: estado.cabecera.linea || '(sin número)', juntas: a.juntas, total: a.totalML, sol: s('SOLDADA'), lib: s('LIBERADA'), rep: b.ev.filter(x => x.evento === 'REPARACION').length });
+    return a.ev;
+  };
+  procesar();
+  if (todaObra) {
+    const clave = x => String(x || '').trim().toUpperCase();
+    const otras = (await todasLineas()).filter(L => L.id !== estado.lineaId && clave(L.obra) === clave(obra || estado.cabecera.proyecto));
+    await conLineas(otras, L => { res.otras.push({ L, ev: procesar() }); });
+  }
+  return res;
+}
+async function exportarAvance(sem, marcar, todaObra) {
   try {
     aviso('Generando reporte de avance…', null, 6000);
-    const { ev, ml } = eventosAvance(sem), cab = estado.cabecera, ExcelJS = await cargarExcelJS(), wb = new ExcelJS.Workbook();
-    const genero = new Date();
-    /* --- Datos: una fila por evento, para que gerencia junte todos los reportes desde una carpeta --- */
+    await guardarLineaBD();
+    const d = await datosAvance(sem, estado.cabecera.proyecto, todaObra), ev = d.ev, cab = estado.cabecera;
+    const ExcelJS = await cargarExcelJS(), wb = new ExcelJS.Workbook(), genero = new Date();
     const ws = wb.addWorksheet('Resumen'), wd = wb.addWorksheet('Datos', { views: [{ state: 'frozen', ySplit: 1 }] });
-    const cols = [['OBRA', 22], ['CLIENTE', 20], ['LINEA', 16], ['JUNTA', 8], ['NPS', 8], ['ESPECIFICACION', 22], ['TALLER_CAMPO', 13], ['EVENTO', 11],
-      ['FECHA', 11], ['MES', 9], ['SEMANA_REPORTE', 15], ['ML', 9], ['TIPO_JUNTA', 10], ['SOLDADOR_RAIZ', 18], ['SOLDADOR_PRES', 18], ['TUBERO', 16], ['ID', 34], ['GENERADO', 17]];
+    /* --- Datos: una fila por evento, para que gerencia junte todos los reportes desde una carpeta --- */
+    const cols = [['OBRA', 22], ['CLIENTE', 20], ['LINEA', 16], ['JUNTA', 9], ['NPS', 8], ['ESPECIFICACION', 22], ['TALLER_CAMPO', 13], ['EVENTO', 12],
+      ['FECHA', 11], ['MES', 9], ['SEMANA_REPORTE', 15], ['ML', 9], ['TIPO_JUNTA', 10], ['SOLDADOR_RAIZ', 18], ['SOLDADOR_PRES', 18], ['TUBERO', 16], ['ID', 36], ['GENERADO', 17]];
     wd.columns = cols.map(([h, w]) => ({ header: h, width: w }));
-    ev.forEach(x => wd.addRow([cab.proyecto, cab.cliente, cab.linea, `W${x.n}`, x.c.nps, SPECS[x.c.schedule]?.sch || x.c.schedule, UBIC_TXT[x.c.ubic] || 'SIN DEFINIR', x.evento,
+    ev.forEach(x => wd.addRow([x.obra, x.cliente, x.linea, x.etiqueta, x.c.nps, SPECS[x.c.schedule]?.sch || x.c.schedule, UBIC_TXT[x.ubic] || 'SIN DEFINIR', x.evento,
       new Date(x.fecha + 'T00:00:00Z'), x.fecha.slice(0, 7), sem.clave, Math.round(x.ml * 1000) / 1000, x.c.junta === 'SW' || x.c.junta === 'FILETE' ? 'FW' : 'BW',
-      x.c.raiz || '', x.c.pres || '', x.c.tubero || '', `${cab.proyecto}|${cab.linea}|W${x.n}|${x.evento}`, genero]));
+      estampaDe(x.r.raiz), estampaDe(x.r.pres), x.r.tubero || '', `${x.obra}|${x.linea}|${x.etiqueta}|${x.evento}`, genero]));
     wd.getColumn(9).numFmt = 'dd/mm/yyyy'; wd.getColumn(12).numFmt = '0.000'; wd.getColumn(18).numFmt = 'dd/mm/yyyy hh:mm';
     wd.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }; wd.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
     wd.autoFilter = { from: 'A1', to: { row: 1, column: cols.length } };
     /* --- Resumen legible para la obra y gerencia --- */
-    ws.columns = [{ width: 12 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }];
+    ws.columns = [{ width: 14 }, { width: 13 }, { width: 13 }, { width: 13 }, { width: 13 }, { width: 13 }, { width: 13 }, { width: 10 }];
     const borde = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-    ws.mergeCells('A1:G1'); ws.getCell('A1').value = 'INDIMON S.A.S. — REPORTE SEMANAL DE AVANCE DE TUBERÍA (METROS LINEALES)';
+    const azul = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } }, gris = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+    ws.mergeCells('A1:H1'); ws.getCell('A1').value = 'INDIMON S.A.S. — REPORTE SEMANAL DE AVANCE DE TUBERÍA (METROS LINEALES)';
     ws.getCell('A1').font = { bold: true, size: 13 };
-    [['OBRA', cab.proyecto], ['CLIENTE', cab.cliente], ['LÍNEA / ISOMÉTRICO', cab.linea], ['SEMANA', `${sem.clave}  (${fechaDMY(sem.desde)} a ${fechaDMY(sem.hasta)})`],
+    [['OBRA', cab.proyecto], ['CLIENTE', cab.cliente], ['LÍNEAS', d.lineas.map(l => l.linea).join(', ')], ['SEMANA', `${sem.clave}  (${fechaDMY(sem.desde)} a ${fechaDMY(sem.hasta)})`],
      ['GENERADO', fechaDMY(hoyISO()) + ' ' + genero.toTimeString().slice(0, 5)]].forEach(([k, v], i) => {
-      ws.getCell(3 + i, 1).value = k; ws.getCell(3 + i, 1).font = { bold: true }; ws.mergeCells(3 + i, 3, 3 + i, 7); ws.getCell(3 + i, 3).value = v || ''; });
-    const tabla = (fila, titulo, lista) => {
-      ws.mergeCells(fila, 1, fila, 7); ws.getCell(fila, 1).value = titulo; ws.getCell(fila, 1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      ws.getCell(fila, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
-      const cab2 = ['NPS', 'TALLER SOLDADO ML', 'TALLER LIBERADO ML', 'CAMPO SOLDADO ML', 'CAMPO LIBERADO ML', 'SIN DEFINIR ML', 'JUNTAS'];
-      cab2.forEach((h, i) => { const x = ws.getCell(fila + 1, i + 1); x.value = h; x.font = { bold: true, size: 9 }; x.alignment = { wrapText: true, horizontal: 'center', vertical: 'middle' }; x.border = borde;
-        x.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } }; });
+      ws.getCell(3 + i, 1).value = k; ws.getCell(3 + i, 1).font = { bold: true }; ws.mergeCells(3 + i, 2, 3 + i, 8); ws.getCell(3 + i, 2).value = v || '';
+      ws.getCell(3 + i, 2).alignment = { wrapText: true, vertical: 'top' }; });
+    const encabezado = (fila, titulo, heads) => {
+      ws.mergeCells(fila, 1, fila, 8); ws.getCell(fila, 1).value = titulo; ws.getCell(fila, 1).font = { bold: true, color: { argb: 'FFFFFFFF' } }; ws.getCell(fila, 1).fill = azul;
+      heads.forEach((h, i) => { const x = ws.getCell(fila + 1, i + 1); x.value = h; x.font = { bold: true, size: 9 }; x.alignment = { wrapText: true, horizontal: 'center', vertical: 'middle' }; x.border = borde; x.fill = gris; });
       ws.getRow(fila + 1).height = 28;
+    };
+    const celdas = (r, vals, negrita, fmts) => vals.forEach((y, i) => { const x = ws.getCell(r, i + 1); x.value = y; x.border = borde; if (negrita) x.font = { bold: true }; if (fmts && fmts[i]) x.numFmt = fmts[i]; });
+    const tabla = (fila, titulo, lista) => {
+      encabezado(fila, titulo, ['NPS', 'TALLER SOLDADO ML', 'TALLER LIBERADO ML', 'CAMPO SOLDADO ML', 'CAMPO LIBERADO ML', 'REPARACIÓN ML', 'SIN DEFINIR ML', 'JUNTAS']);
       const nps = [...new Set(lista.map(x => x.c.nps))].sort((a, b) => npsNum(a) - npsNum(b));
-      const s = (n, u, e) => lista.filter(x => x.c.nps === n && (u === '?' ? !UBIC_TXT[x.c.ubic] : x.c.ubic === u) && (!e || x.evento === e)).reduce((t, x) => t + x.ml, 0);
-      let r = fila + 2; const tot = [0, 0, 0, 0, 0, 0];
+      const s = (n, u, e) => lista.filter(x => x.c.nps === n && (u === '*' || (u === '?' ? !UBIC_TXT[x.ubic] : x.ubic === u)) && (!e || x.evento === e)).reduce((t, x) => t + x.ml, 0);
+      const f2 = [null, '#,##0.00', '#,##0.00', '#,##0.00', '#,##0.00', '#,##0.00', '#,##0.00', '0'];
+      let r = fila + 2; const tot = [0, 0, 0, 0, 0, 0, 0];
       for (const n of nps) {
-        const v = [s(n, 'S', 'SOLDADA'), s(n, 'S', 'LIBERADA'), s(n, 'F', 'SOLDADA'), s(n, 'F', 'LIBERADA'), s(n, '?'), new Set(lista.filter(x => x.c.nps === n).map(x => x.c.id)).size];
-        [n, ...v.map((y, i) => i < 5 ? Math.round(y * 100) / 100 : y)].forEach((y, i) => { const x = ws.getCell(r, i + 1); x.value = y; x.border = borde; if (i && i < 6) x.numFmt = '#,##0.00'; });
-        v.forEach((y, i) => tot[i] += y); r++;
+        const v = [s(n, 'S', 'SOLDADA'), s(n, 'S', 'LIBERADA'), s(n, 'F', 'SOLDADA'), s(n, 'F', 'LIBERADA'), s(n, '*', 'REPARACION'), s(n, '?'),
+          new Set(lista.filter(x => x.c.nps === n).map(x => x.lineaId + x.c.id)).size];
+        celdas(r++, [n, ...v.map((y, i) => i < 6 ? r2(y) : y)], false, f2); v.forEach((y, i) => tot[i] += y);
       }
-      ['TOTAL', ...tot.map((y, i) => i < 5 ? Math.round(y * 100) / 100 : y)].forEach((y, i) => { const x = ws.getCell(r, i + 1); x.value = y; x.border = borde; x.font = { bold: true }; if (i && i < 6) x.numFmt = '#,##0.00'; });
+      celdas(r, ['TOTAL', ...tot.map((y, i) => i < 6 ? r2(y) : y)], true, f2);
       return r + 2;
     };
     let fila = tabla(9, `AVANCE DE LA SEMANA ${sem.clave} (incluye registros atrasados no reportados antes)`, ev);
-    /* acumulado de la línea hasta el domingo de la semana, sin importar si ya se reportó */
-    const todas = []; const num = numeracionSoldaduras();
-    for (const c of estado.components) if (c.type === 'weld') {
-      const base = { c, n: num.get(c.id), ml: ml.get(c.id) || 0 };
-      if (c.fecha && (c.raiz || c.pres) && c.fecha <= sem.hasta) todas.push({ ...base, evento: 'SOLDADA' });
-      if (estadoJunta(c) === 'liberada' && c.fechaLib && c.fechaLib <= sem.hasta) todas.push({ ...base, evento: 'LIBERADA' });
+    fila = tabla(fila, 'ACUMULADO A LA FECHA', d.acum);
+    /* avance por línea: metros totales y porcentajes soldado / liberado */
+    encabezado(fila, 'AVANCE POR LÍNEA (ACUMULADO)', ['LÍNEA', 'JUNTAS', 'ML LÍNEA', 'ML SOLDADO', '% SOLDADO', 'ML LIBERADO', '% LIBERADO', 'REPARAC.']);
+    let r = fila + 2; const T = { juntas: 0, total: 0, sol: 0, lib: 0, rep: 0 };
+    const fl = [null, '0', '#,##0.00', '#,##0.00', '0.0%', '#,##0.00', '0.0%', '0'];
+    for (const l of d.lineas) {
+      celdas(r++, [l.linea, l.juntas, r2(l.total), r2(l.sol), l.total ? l.sol / l.total : 0, r2(l.lib), l.total ? l.lib / l.total : 0, l.rep], false, fl);
+      for (const k in T) T[k] += l[k];
     }
-    fila = tabla(fila, 'ACUMULADO DE LA LÍNEA A LA FECHA', todas);
-    const totalML = [...ml.values()].reduce((a, b) => a + b, 0), sol = todas.filter(x => x.evento === 'SOLDADA').reduce((a, x) => a + x.ml, 0), lib = todas.filter(x => x.evento === 'LIBERADA').reduce((a, x) => a + x.ml, 0);
-    [['ML TOTALES DE LA LÍNEA (con juntas)', totalML], ['% SOLDADO', totalML ? sol / totalML : 0], ['% LIBERADO', totalML ? lib / totalML : 0]].forEach(([k, v], i) => {
-      ws.mergeCells(fila + i, 1, fila + i, 3); ws.getCell(fila + i, 1).value = k; ws.getCell(fila + i, 1).font = { bold: true };
-      const x = ws.getCell(fila + i, 4); x.value = Math.round(v * 10000) / 10000; x.numFmt = i ? '0.0%' : '#,##0.00'; x.font = { bold: true }; });
-    ws.getCell(fila + 4, 1).value = 'Los metros de cada tubo (centro a centro) se reparten por partes iguales entre sus juntas. Los valores en pesos los pone gerencia en el Excel maestro.';
-    ws.getCell(fila + 4, 1).font = { italic: true, size: 9 };
+    celdas(r, ['TOTAL', T.juntas, r2(T.total), r2(T.sol), T.total ? T.sol / T.total : 0, r2(T.lib), T.total ? T.lib / T.total : 0, T.rep], true, fl);
+    ws.getCell(r + 2, 1).value = 'Los metros de cada tubo (centro a centro) se reparten por partes iguales entre sus juntas. Las reparaciones se informan aparte para cobrarlas o descontarlas. Los valores en pesos los pone gerencia en el Excel maestro.';
+    ws.getCell(r + 2, 1).font = { italic: true, size: 9 }; ws.mergeCells(r + 2, 1, r + 3, 8); ws.getCell(r + 2, 1).alignment = { wrapText: true, vertical: 'top' };
     ws.pageSetup = { orientation: 'portrait', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
     const buf = await wb.xlsx.writeBuffer();
-    if (marcar && ev.length) commit(() => ev.forEach(x => { x.c[x.marca] = sem.clave; }));
-    descargarBlob(new Blob([buf], { type: XLSX_MIME }), `AVANCE_${nombreSeguro(cab.proyecto)}_${nombreSeguro(cab.linea) || 'ISO'}_${sem.clave}.xlsx`);
-    aviso(`Reporte ${sem.clave} generado: ${ev.length} eventos` + (marcar && ev.length ? '. Guarde el proyecto (.json) para conservar las marcas' : ''), 'ok', 4500);
+    if (marcar) {
+      const propios = ev.filter(x => x.lineaId === estado.lineaId);
+      if (propios.length) commit(() => marcarEventos(estado, propios, sem.clave));
+      for (const { L, ev: e2 } of d.otras) if (e2.length) { marcarEventos(L.datos, e2, sem.clave); await ponerLinea(L); }
+    }
+    const nombre = todaObra && d.lineas.length > 1 ? `AVANCE_${nombreSeguro(cab.proyecto)}_${sem.clave}.xlsx` : `AVANCE_${nombreSeguro(cab.proyecto)}_${nombreSeguro(cab.linea) || 'ISO'}_${sem.clave}.xlsx`;
+    descargarBlob(new Blob([buf], { type: XLSX_MIME }), nombre);
+    aviso(`Reporte ${sem.clave} generado: ${ev.length} eventos de ${d.lineas.length} línea${d.lineas.length === 1 ? '' : 's'}`, 'ok', 4500);
   } catch (err) { aviso('No se pudo generar el reporte: ' + err.message, 'error', 5000); }
 }
 async function descargarMaestro() {
@@ -2289,6 +2392,331 @@ async function descargarMaestro() {
   try { descargarBlob(new Blob([await plantillaQC('Maestro_Gerencia_Avance')], { type: XLSX_MIME }), 'Maestro_Gerencia_Avance_INDIMON.xlsx'); aviso('Excel maestro descargado', 'ok'); }
   catch (err) { aviso('No se pudo descargar el maestro: ' + err.message, 'error', 4000); }
 }
+
+/* ---------- 11f. Obras y líneas guardadas en el equipo (IndexedDB) ---------- */
+/* Cada isométrico es una «línea» de una obra. La línea abierta sigue en localStorage como siempre y además se copia aquí
+   en cada cambio, así se puede cambiar de línea sin manejar archivos .json. Las fotos de las juntas también viven aquí. */
+let bdPromesa = null, enIntercambio = false;
+function abrirBD() {
+  if (!bdPromesa) bdPromesa = new Promise((ok, ko) => {
+    if (!window.indexedDB) { ko(new Error('este navegador no permite guardar datos locales')); return; }
+    const r = indexedDB.open('indimon_cad', 1);
+    r.onupgradeneeded = () => { const d = r.result; d.createObjectStore('lineas', { keyPath: 'id' }); d.createObjectStore('fotos', { keyPath: 'id' }).createIndex('linea', 'linea'); };
+    r.onsuccess = () => ok(r.result); r.onerror = () => ko(r.error || new Error('no se pudo abrir la base local'));
+  });
+  return bdPromesa;
+}
+async function bdOp(almacen, modo, fn) {
+  const d = await abrirBD();
+  return new Promise((ok, ko) => {
+    const tx = d.transaction(almacen, modo), q = fn(tx.objectStore(almacen)); let res;
+    if (q) q.onsuccess = () => { res = q.result; };
+    tx.oncomplete = () => ok(res); tx.onerror = () => ko(tx.error); tx.onabort = () => ko(tx.error || new Error('operación cancelada'));
+  });
+}
+const todasLineas = () => bdOp('lineas', 'readonly', s => s.getAll()).then(l => (l || []).sort((a, b) => String(a.obra).localeCompare(String(b.obra)) || String(a.linea).localeCompare(String(b.linea), 'es', { numeric: true })));
+const ponerLinea = L => bdOp('lineas', 'readwrite', s => s.put({ ...L, actualizado: new Date().toISOString() }));
+/* copia la línea abierta a la base local (crea su identificador la primera vez que tiene algo dibujado) */
+async function guardarLineaBD(forzar) {
+  if (enIntercambio) return;
+  if (!estado.lineaId) { if (!forzar && !estado.components.length) return; estado.lineaId = nuevoId(); try { localStorage.setItem(CLAVE_LOCAL, JSON.stringify(estado)); } catch (_) {} }
+  const cab = estado.cabecera;
+  try { await ponerLinea({ id: estado.lineaId, obra: (cab.proyecto || '').trim() || 'SIN OBRA', linea: (cab.linea || '').trim(), datos: JSON.parse(JSON.stringify(estado)) }); }
+  catch (_) { /* sin base local: la línea sigue guardada en localStorage */ }
+}
+/* Recorre otras líneas cargándolas temporalmente en «estado» (para usar las mismas funciones de cálculo) y deja todo como estaba */
+async function conLineas(lineas, fn) {
+  if (!lineas.length) return;
+  clearTimeout(tGuardar);
+  const respaldo = JSON.parse(JSON.stringify(estado)), sel = seleccion;
+  enIntercambio = true;
+  try { for (const L of lineas) { aplicarProyecto(L.datos); estado.lineaId = L.id; await fn(L); } }
+  finally { aplicarProyecto(respaldo); seleccion = sel; enIntercambio = false; }
+}
+function contarJuntas(datos) {
+  const w = (datos.components || []).filter(c => c.type === 'weld'), e = { pendiente: 0, soldada: 0, liberada: 0, rechazada: 0 };
+  w.forEach(c => e[estadoJunta(c)]++);
+  return { total: w.length, ...e, reparaciones: w.reduce((t, c) => t + (c.reps || []).length, 0) };
+}
+function pintarObraActual() {
+  const cab = estado.cabecera;
+  $('obra-actual').innerHTML = `<b>${esc(cab.proyecto || 'Sin obra')}</b> · línea <b>${esc(cab.linea || '—')}</b>`;
+}
+async function abrirObras() {
+  toggleSidebar(false);
+  await guardarLineaBD();
+  let lineas = [];
+  try { lineas = await todasLineas(); } catch (err) { aviso('No se pudo leer la lista de líneas: ' + err.message, 'error', 5000); return; }
+  const obras = [...new Set(lineas.map(L => L.obra))];
+  const fila = L => { const k = contarJuntas(L.datos), actual = L.id === estado.lineaId, pct = k.total ? Math.round(100 * k.liberada / k.total) : 0;
+    return `<div class="ob-linea${actual ? ' actual' : ''}">
+      <div style="flex:1;min-width:0"><b>${esc(L.linea || '(sin número)')}</b>${actual ? ' <span style="color:var(--cian)">· abierta</span>' : ''}
+        <div style="font-size:11px;color:var(--s400)">${k.total} juntas · soldadas ${k.soldada + k.liberada + k.rechazada} · liberadas ${k.liberada} (${pct}%)${k.rechazada ? ` · <span style="color:#f87171">rechazadas ${k.rechazada}</span>` : ''}${k.reparaciones ? ` · reparaciones ${k.reparaciones}` : ''}
+        · ${fechaDMY((L.actualizado || '').slice(0, 10))}</div></div>
+      ${actual ? '' : `<button type="button" class="btn" data-ob="abrir" data-id="${L.id}">Abrir</button>`}
+      <button type="button" class="btn" data-ob="duplicar" data-id="${L.id}" title="Duplicar">⧉</button>
+      <button type="button" class="btn" data-ob="borrar" data-id="${L.id}" title="Borrar" style="color:#f87171">✕</button></div>`; };
+  abrirModal({
+    titulo: 'Obras y líneas (isométricos)',
+    html: `<p>Las líneas se guardan solas en este equipo. Toque <b>Abrir</b> para cambiar de isométrico. Para pasar una obra a otro equipo use <b>Exportar obra</b> y en el otro equipo <b>Importar</b>.</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+        <button type="button" class="btn ambar" data-ob="nueva">+ Nueva línea en esta obra</button>
+        <button type="button" class="btn" data-ob="importar">Importar (.json)</button></div>
+      ${obras.length ? obras.map(o => { const ls = lineas.filter(L => L.obra === o), t = ls.map(L => contarJuntas(L.datos)).reduce((a, k) => ({ total: a.total + k.total, lib: a.lib + k.liberada }), { total: 0, lib: 0 });
+        return `<div class="ob-obra"><div style="display:flex;align-items:center;gap:6px;margin:10px 0 4px">
+          <div style="flex:1"><b style="color:var(--cian)">${esc(o)}</b> <span style="font-size:11px;color:var(--s400)">${ls.length} líneas · ${t.total} juntas · ${t.total ? Math.round(100 * t.lib / t.total) : 0}% liberado</span></div>
+          <button type="button" class="btn" data-ob="exportar" data-obra="${esc(o)}">Exportar obra</button></div>${ls.map(fila).join('')}</div>`; }).join('') : '<p>Aún no hay líneas guardadas.</p>'}
+      <label style="display:flex;gap:8px;align-items:center;text-transform:none;font-size:12px;color:var(--s300);margin-top:10px">
+        <input type="checkbox" id="ob-fotos" checked style="width:16px;height:16px">Incluir las fotos al exportar una obra (el archivo queda más pesado)</label>`,
+    okTxt: 'Cerrar',
+    alAbrir: () => { $('modal-cuerpo').onclick = e => { const b = e.target.closest('[data-ob]'); if (b) accionObra(b.dataset.ob, b.dataset.id, b.dataset.obra); }; }
+  });
+}
+async function accionObra(acc, id, obra) {
+  try {
+    if (acc === 'nueva') { cerrarModal(); await nuevaLinea(); return; }
+    if (acc === 'importar') { $('in-obra').click(); return; }
+    if (acc === 'exportar') { await exportarObra(obra, $('ob-fotos').checked); return; }
+    const L = (await todasLineas()).find(x => x.id === id); if (!L) return;
+    if (acc === 'abrir') { cerrarModal(); await abrirLineaGuardada(L); return; }
+    if (acc === 'duplicar') {
+      const datos = JSON.parse(JSON.stringify(L.datos)), nuevo = nuevoId();
+      datos.lineaId = nuevo; datos.cabecera.linea = (datos.cabecera.linea || 'LÍNEA') + ' (copia)';
+      datos.components.forEach(c => { if (c.type === 'weld') { for (const k of CAMPOS_REGISTRO) delete c[k]; delete c.reps; } });
+      await ponerLinea({ id: nuevo, obra: L.obra, linea: datos.cabecera.linea, datos });
+      aviso('Línea duplicada sin los registros de soldadura', 'ok'); abrirObras(); return;
+    }
+    if (acc === 'borrar') {
+      if (L.id === estado.lineaId) { aviso('No se puede borrar la línea abierta: abra otra primero', 'error', 3500); return; }
+      if (!confirm(`¿Borrar la línea ${L.linea || '(sin número)'} de ${L.obra} y sus fotos? No se puede deshacer.`)) return;
+      await bdOp('lineas', 'readwrite', s => s.delete(L.id));
+      const fotos = await fotosDeLinea(L.id); if (fotos.length) await bdOp('fotos', 'readwrite', s => { fotos.forEach(f => s.delete(f.id)); });
+      aviso('Línea borrada', 'ok'); abrirObras();
+    }
+  } catch (err) { aviso('No se pudo completar: ' + err.message, 'error', 5000); }
+}
+function prepararLineaAbierta() {
+  historial = []; rehacerPila = []; seleccion = null; terminarTrazo();
+  if (!estado.cabecera.fecha) estado.cabecera.fecha = hoyISO();
+  pintarCabecera(); sincronizarSelectores(); sincronizarTrazo(); construirCatalogo(); actualizarTodo(); fitSheetToScreen();
+}
+async function abrirLineaGuardada(L) {
+  await guardarLineaBD();
+  aplicarProyecto(L.datos); estado.lineaId = L.id; prepararLineaAbierta();
+  aviso(`Abierta: ${L.obra} · ${L.linea || '(sin número)'}`, 'ok');
+}
+/* línea vacía en la misma obra: conserva cliente, proyecto y datos de calidad */
+async function nuevaLinea() {
+  await guardarLineaBD();
+  const cab = estado.cabecera;
+  estado.cabecera = { ...cab, linea: '', consecutivo: '', fecha: hoyISO(), notas: '' };
+  estado.components = []; estado.consumibles = []; estado.ajustes = {}; estado.lineaId = nuevoId();
+  prepararLineaAbierta(); await guardarLineaBD(true);
+  aviso('Línea nueva: escriba el número de línea en el rótulo', 'ok', 3500);
+}
+const aBase64 = blob => new Promise(ok => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.readAsDataURL(blob); });
+async function exportarObra(obra, conFotos) {
+  await guardarLineaBD();
+  const lineas = (await todasLineas()).filter(L => L.obra === obra);
+  const fotos = [];
+  if (conFotos) for (const L of lineas) for (const f of await fotosDeLinea(L.id)) fotos.push({ ...f, blob: undefined, tipoMime: f.blob.type, data: await aBase64(f.blob) });
+  const datos = { formato: 'INDIMON-OBRA', version: 1, guardado: new Date().toISOString(), obra, lineas, soldadores, fotos };
+  descargarBlob(new Blob([JSON.stringify(datos)], { type: 'application/json' }), `OBRA_${nombreSeguro(obra)}_${hoyISO()}.json`);
+  aviso(`Obra exportada: ${lineas.length} líneas${conFotos ? `, ${fotos.length} fotos` : ''}`, 'ok', 3500);
+}
+/* Importa obras completas o proyectos sueltos (.json); si la línea ya existe se queda la versión más reciente */
+async function importarArchivos(files) {
+  let nuevas = 0, actualizadas = 0, iguales = 0, nFotos = 0, nSold = 0;
+  const existentes = new Map((await todasLineas()).map(L => [L.id, L]));
+  const meter = async (id, datos, fecha) => {
+    const cab = datos.cabecera || {}, prev = existentes.get(id);
+    if (prev && String(prev.actualizado || '') >= String(fecha || '')) { iguales++; return; }
+    datos.lineaId = id;
+    await ponerLinea({ id, obra: (cab.proyecto || '').trim() || 'SIN OBRA', linea: (cab.linea || '').trim(), datos });
+    prev ? actualizadas++ : nuevas++;
+  };
+  for (const f of files) {
+    const o = JSON.parse(await f.text());
+    if (o && o.formato === 'INDIMON-OBRA') {
+      for (const L of o.lineas || []) if (L && L.datos && Array.isArray(L.datos.components)) await meter(L.id, L.datos, L.actualizado);
+      for (const s of o.soldadores || []) if (s && s.estampa && !soldadores.some(x => x.estampa.toUpperCase() === String(s.estampa).toUpperCase())) { soldadores.push(s); nSold++; }
+      if (nSold) guardarSoldadores();
+      const ya = new Set((await bdOp('fotos', 'readonly', s => s.getAllKeys())) || []);
+      for (const ft of o.fotos || []) if (ft && ft.id && ft.data && !ya.has(ft.id)) {
+        const bin = atob(ft.data), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+        const { data, tipoMime, ...resto } = ft; await bdOp('fotos', 'readwrite', s => s.put({ ...resto, blob: new Blob([a], { type: tipoMime || 'image/jpeg' }) })); nFotos++;
+      }
+    } else if (o && Array.isArray(o.components)) await meter(o.lineaId || nuevoId(), o, o.guardado || new Date().toISOString());
+    else throw new Error(f.name + ' no es un proyecto ni una obra de INDIMON CAD');
+  }
+  aviso(`Importado: ${nuevas} líneas nuevas, ${actualizadas} actualizadas${iguales ? `, ${iguales} sin cambios (la del equipo es igual o más reciente)` : ''}${nFotos ? `, ${nFotos} fotos` : ''}${nSold ? `, ${nSold} soldadores` : ''}`, 'ok', 6000);
+}
+
+/* ---------- 11g. Registro de soldadores (estampa y calificación WPQ) ---------- */
+const CLAVE_SOLD = 'indimon_soldadores';
+let soldadores = [];
+try { soldadores = JSON.parse(localStorage.getItem(CLAVE_SOLD) || '[]').filter(s => s && s.estampa); } catch (_) { soldadores = []; }
+function guardarSoldadores() { try { localStorage.setItem(CLAVE_SOLD, JSON.stringify(soldadores)); } catch (_) { aviso('No se pudo guardar el registro de soldadores', 'error'); } }
+const buscarSoldador = t => { const v = String(t || '').trim().toUpperCase(); return v ? soldadores.find(s => s.estampa.toUpperCase() === v || String(s.nombre || '').toUpperCase() === v) : null; };
+const estampaDe = t => { const s = buscarSoldador(t); return s ? s.estampa : (t || ''); };
+const listaProcesos = t => String(t || '').toUpperCase().split(/[^A-Z]+/).filter(Boolean);
+/* Revisa la calificación del soldador para el diámetro, la fecha y los procesos de la WPS */
+function avisosSoldador(c, r, campo) {
+  const t = r[campo]; if (!t || !soldadores.length) return [];
+  const s = buscarSoldador(t), quien = `${campo === 'raiz' ? 'Raíz' : 'Presentación'} ${t}`;
+  if (!s) return [`${quien}: no está en el registro de soldadores`];
+  const out = [], f = r.fecha || hoyISO();
+  if (s.vence && s.vence < f) out.push(`${quien}: WPQ vencido el ${fechaDMY(s.vence)}`);
+  if (s.dMin && npsNum(c.nps) < npsNum(s.dMin)) out.push(`${quien}: calificado desde Ø ${s.dMin} (la junta es ${c.nps})`);
+  if (s.dMax && npsNum(c.nps) > npsNum(s.dMax)) out.push(`${quien}: calificado hasta Ø ${s.dMax} (la junta es ${c.nps})`);
+  const pw = listaProcesos(estado.qc && estado.qc.procesos), ps = listaProcesos(s.procesos);
+  if (pw.length && ps.length && !pw.some(p => ps.includes(p))) out.push(`${quien}: su WPQ (${s.procesos}) no cubre el proceso de la WPS (${estado.qc.procesos})`);
+  return out;
+}
+async function abrirSoldadores() {
+  toggleSidebar(false);
+  const fila = (s, i) => `<div class="sd-fila" data-sd="${i}">
+    <div style="display:grid;grid-template-columns:90px 1fr 34px;gap:6px;align-items:end">
+      <div><label>Estampa *</label><input data-f="estampa" maxlength="12" value="${esc(s.estampa || '')}" placeholder="S-01"></div>
+      <div><label>Nombre</label><input data-f="nombre" maxlength="40" value="${esc(s.nombre || '')}"></div>
+      <button type="button" class="btn" data-sdborrar="1" title="Quitar" style="color:#f87171">✕</button></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+      <div><label>Procesos</label><input data-f="procesos" maxlength="30" value="${esc(s.procesos || '')}" placeholder="GTAW/SMAW"></div>
+      <div><label>Ø mínimo</label><select data-f="dMin">${opcionesSel(NPS_LISTA.map(n => [n, n]), s.dMin, '—')}</select></div>
+      <div><label>Ø máximo</label><select data-f="dMax">${opcionesSel(NPS_LISTA.map(n => [n, n]), s.dMax, 'sin límite')}</select></div>
+      <div><label>Posición</label><input data-f="posiciones" maxlength="20" value="${esc(s.posiciones || '')}" placeholder="6G"></div>
+      <div><label>WPQ No.</label><input data-f="wpq" maxlength="20" value="${esc(s.wpq || '')}"></div>
+      <div><label>Vence</label><input data-f="vence" type="date" value="${esc(s.vence || '')}"></div></div>
+    <div class="sd-est" style="font-size:11px;color:var(--s400);margin-top:4px"></div></div>`;
+  abrirModal({
+    titulo: 'Soldadores (estampa y WPQ)',
+    html: `<p>Al asignar un soldador a una junta la app avisa si no está registrado, si su WPQ está vencido o si no cubre el diámetro o el proceso de la WPS (en «Datos de calidad»).
+      En el QC-F-004 y en el reporte de avance sale la estampa.</p>
+      <div id="sd-lista">${soldadores.map(fila).join('')}</div>
+      <button type="button" class="btn ambar" id="sd-agregar" style="margin-top:6px">+ Agregar soldador</button>`,
+    okTxt: 'Guardar',
+    alAbrir: () => {
+      let n = soldadores.length;
+      $('sd-agregar').onclick = () => { $('sd-lista').insertAdjacentHTML('beforeend', fila({}, n++)); $('sd-lista').lastElementChild.querySelector('input').focus(); };
+      $('sd-lista').onclick = e => { if (e.target.dataset.sdborrar) e.target.closest('.sd-fila').remove(); };
+      estadisticasSoldadores().then(est => document.querySelectorAll('.sd-fila').forEach(el => {
+        const k = String(el.querySelector('[data-f="estampa"]').value).toUpperCase(), x = est.get(k);
+        if (x) el.querySelector('.sd-est').innerHTML = `${x.juntas} registros de soldadura · ${x.rech} rechazados · <b style="color:${x.rech / x.juntas > 0.05 ? '#f87171' : '#4ade80'}">${(100 * x.rech / x.juntas).toFixed(1)}% de rechazo</b>`;
+      })).catch(() => {});
+    },
+    alAceptar: () => {
+      const lista = [...document.querySelectorAll('.sd-fila')].map(el => Object.fromEntries([...el.querySelectorAll('[data-f]')].map(i => [i.dataset.f, i.value.trim()])))
+        .map(s => ({ ...s, estampa: s.estampa.toUpperCase(), nombre: s.nombre.toUpperCase(), procesos: s.procesos.toUpperCase() }))
+        .filter(s => s.estampa || s.nombre);
+      if (lista.some(s => !s.estampa)) { aviso('Cada soldador necesita su estampa', 'error'); return false; }
+      const rep = lista.find((s, i) => lista.findIndex(x => x.estampa === s.estampa) !== i);
+      if (rep) { aviso('Estampa repetida: ' + rep.estampa, 'error'); return false; }
+      soldadores = lista.map(s => Object.fromEntries(Object.entries(s).filter(([, v]) => v))); guardarSoldadores(); actualizarTodo();
+      aviso(`Registro guardado: ${soldadores.length} soldadores`, 'ok');
+    }
+  });
+}
+/* % de rechazo por soldador en todas las líneas guardadas en el equipo (raíz o presentación) */
+async function estadisticasSoldadores() {
+  await guardarLineaBD();
+  const est = new Map(), lineas = await todasLineas();
+  for (const L of lineas) for (const c of L.datos.components || []) if (c.type === 'weld') for (const r of registrosJunta(c)) {
+    const e = estadoRegistro(r); if (e === 'pendiente') continue;
+    for (const k of new Set([estampaDe(r.raiz), estampaDe(r.pres)].filter(Boolean).map(x => x.toUpperCase()))) {
+      const x = est.get(k) || { juntas: 0, rech: 0 }; x.juntas++; if (e === 'rechazada') x.rech++; est.set(k, x);
+    }
+  }
+  return est;
+}
+
+/* ---------- 11h. Fotos por junta (evidencia de calidad) ---------- */
+const FOTO_TIPOS = ['Ajuste / preparación', 'Raíz', 'Terminada', 'Reparación', 'END', 'Otra'];
+const fotosDeLinea = id => id ? bdOp('fotos', 'readonly', s => s.index('linea').getAll(id)).then(l => l || []) : Promise.resolve([]);
+let urlsFotos = [];
+/* reduce la foto (lado mayor 1600 px, JPEG) para no llenar la memoria del celular */
+async function reducirImagen(file) {
+  const url = URL.createObjectURL(file), img = new Image();
+  try { await new Promise((ok, ko) => { img.onload = ok; img.onerror = () => ko(new Error('no se pudo leer la imagen')); img.src = url; }); }
+  finally { URL.revokeObjectURL(url); }
+  const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight)), cv = document.createElement('canvas');
+  cv.width = Math.round(img.naturalWidth * k); cv.height = Math.round(img.naturalHeight * k);
+  cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+  return { blob: await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.82)), w: cv.width, h: cv.height };
+}
+async function agregarFotos(files) {
+  const c = estado.components.find(x => x.id === seleccion); if (!c || c.type !== 'weld' || !files.length) return;
+  try {
+    await guardarLineaBD(true);
+    const tipo = ($('foto-tipo') && $('foto-tipo').value) || FOTO_TIPOS[2];
+    for (const f of files) {
+      const { blob, w, h } = await reducirImagen(f);
+      await bdOp('fotos', 'readwrite', s => s.put({ id: nuevoId(), linea: estado.lineaId, weld: c.id, rep: (c.reps || []).length, tipo, fecha: new Date().toISOString(), blob, w, h }));
+    }
+    aviso(files.length > 1 ? `${files.length} fotos guardadas` : 'Foto guardada', 'ok'); pintarFotos(c);
+  } catch (err) { aviso('No se pudo guardar la foto: ' + err.message, 'error', 5000); }
+}
+async function pintarFotos(c) {
+  const caja = $('fotos-junta'); if (!caja) return;
+  let fotos = [];
+  try { fotos = (await fotosDeLinea(estado.lineaId)).filter(f => f.weld === c.id).sort((a, b) => a.fecha.localeCompare(b.fecha)); } catch (_) {}
+  if (!$('fotos-junta') || seleccion !== c.id) return;
+  urlsFotos.forEach(u => URL.revokeObjectURL(u)); urlsFotos = [];
+  $('fotos-junta').innerHTML = fotos.length ? fotos.map(f => { const u = URL.createObjectURL(f.blob); urlsFotos.push(u);
+    return `<button type="button" class="foto-mini" data-foto="${f.id}" title="${esc(f.tipo)}"><img src="${u}" alt=""><span>${esc(f.tipo.split(' ')[0])}${f.rep ? ' R' + f.rep : ''}</span></button>`; }).join('')
+    : '<span style="font-size:11px;color:var(--s400)">Sin fotos</span>';
+}
+async function verFoto(id) {
+  const f = await bdOp('fotos', 'readonly', s => s.get(id)); if (!f) return;
+  const u = URL.createObjectURL(f.blob), num = numeracionSoldaduras(), c = estado.components.find(x => x.id === f.weld);
+  abrirModal({
+    titulo: `Foto ${c ? etiquetaJ(num.get(c.id) || 0, f.rep) : ''} · ${f.tipo}`,
+    html: `<img src="${u}" alt="" style="width:100%;border-radius:8px;display:block">
+      <p style="margin-top:6px">${fechaDMY(f.fecha.slice(0, 10))} ${f.fecha.slice(11, 16)} · ${f.w}×${f.h} px · ${Math.round(f.blob.size / 1024)} kB</p>
+      <button type="button" class="btn" id="foto-borrar" style="color:#f87171">Borrar foto</button>`,
+    okTxt: 'Cerrar',
+    alAbrir: () => { $('foto-borrar').onclick = async () => {
+      if (!confirm('¿Borrar esta foto?')) return;
+      await bdOp('fotos', 'readwrite', s => s.delete(id)); cerrarModal(); URL.revokeObjectURL(u);
+      const sel = estado.components.find(x => x.id === seleccion); if (sel) pintarFotos(sel); aviso('Foto borrada', 'ok');
+    }; }
+  });
+}
+/* Anexo fotográfico en Excel: dos fotos por fila con su junta, tipo y fecha */
+async function exportarAnexo() {
+  toggleSidebar(false);
+  try {
+    const num = numeracionSoldaduras(), ids = new Map(estado.components.filter(c => c.type === 'weld').map(c => [c.id, c]));
+    const fotos = (await fotosDeLinea(estado.lineaId)).filter(f => ids.has(f.weld))
+      .sort((a, b) => (num.get(a.weld) || 0) - (num.get(b.weld) || 0) || a.rep - b.rep || a.fecha.localeCompare(b.fecha));
+    if (!fotos.length) { aviso('Esta línea no tiene fotos: seleccione una junta y use «Foto»', 'error', 3500); return; }
+    aviso('Generando anexo fotográfico…', null, 6000);
+    const ExcelJS = await cargarExcelJS(), wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('Anexo fotográfico'), cab = estado.cabecera;
+    ws.columns = Array.from({ length: 8 }, () => ({ width: 11.5 }));
+    ws.mergeCells('A1:H1'); ws.getCell('A1').value = 'INDIMON S.A.S. — ANEXO FOTOGRÁFICO DE SOLDADURA'; ws.getCell('A1').font = { bold: true, size: 13 };
+    ws.mergeCells('A2:H2'); ws.getCell('A2').value = `Obra: ${cab.proyecto || ''}   ·   Cliente: ${cab.cliente || ''}   ·   Línea: ${cab.linea || ''}   ·   Fecha: ${fechaDMY(hoyISO())}`;
+    const anchoPx = 4 * (11.5 * 7 + 5), altoPt = 180, altoPx = altoPt * 96 / 72, borde = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+    for (let i = 0; i < fotos.length; i++) {
+      const f = fotos[i], fila = 4 + Math.floor(i / 2) * 2, col = (i % 2) * 4 + 1, c = ids.get(f.weld);
+      ws.mergeCells(fila, col, fila, col + 3); ws.mergeCells(fila + 1, col, fila + 1, col + 3);
+      const t = ws.getCell(fila, col); t.value = `${etiquetaJ(num.get(c.id) || 0, f.rep)} · Ø ${c.nps} · ${f.tipo} · ${fechaDMY(f.fecha.slice(0, 10))}`;
+      t.font = { bold: true, size: 9 }; t.alignment = { horizontal: 'center' }; t.border = borde; ws.getCell(fila + 1, col).border = borde;
+      ws.getRow(fila).height = 16; ws.getRow(fila + 1).height = altoPt;
+      const k = Math.min((anchoPx - 10) / f.w, (altoPx - 8) / f.h), w = f.w * k, h = f.h * k;
+      const id = wb.addImage({ buffer: await f.blob.arrayBuffer(), extension: 'jpeg' });
+      ws.addImage(id, { tl: { col: col - 1 + (anchoPx - w) / 2 / (anchoPx / 4), row: fila + (altoPx - h) / 2 / altoPx }, ext: { width: w, height: h } });
+    }
+    ws.pageSetup = { orientation: 'portrait', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, printArea: `A1:H${3 + Math.ceil(fotos.length / 2) * 2}` };
+    descargarBlob(new Blob([await wb.xlsx.writeBuffer()], { type: XLSX_MIME }), `ANEXO_FOTOS_${nombreSeguro(cab.linea) || 'ISO'}_${hoyISO()}.xlsx`);
+    aviso(`Anexo generado con ${fotos.length} fotos`, 'ok', 3000);
+  } catch (err) { aviso('No se pudo generar el anexo: ' + err.message, 'error', 5000); }
+}
+
+for (const id of ['in-foto-cam', 'in-foto-gal']) $(id).addEventListener('change', e => { const f = [...e.target.files]; e.target.value = ''; agregarFotos(f); });
+$('in-obra').addEventListener('change', async e => {
+  const f = [...e.target.files]; e.target.value = ''; if (!f.length) return;
+  try { await importarArchivos(f); if (!$('modal').hidden) abrirObras(); } catch (err) { aviso('No se pudo importar: ' + err.message, 'error', 5000); }
+});
+$('panel-sel').addEventListener('click', e => { const b = e.target.closest('[data-foto]'); if (b) verFoto(b.dataset.foto); });
 
 /* ---------- 12. Selección y panel de propiedades ---------- */
 function seleccionar(id) {
@@ -2708,6 +3136,8 @@ $('in-proyecto').addEventListener('change', async e => {
   try {
     const o = JSON.parse(await f.text());
     if (!o || !Array.isArray(o.components)) throw new Error('el archivo no es un proyecto DP-F-009');
+    if (o.formato === 'INDIMON-OBRA') { await importarArchivos([f]); toggleSidebar(false); return; }
+    await guardarLineaBD();
     terminarTrazo(); registrar(); aplicarProyecto(o); seleccion = null;
     pintarCabecera(); sincronizarSelectores(); sincronizarTrazo(); construirCatalogo(); actualizarTodo(); toggleSidebar(false);
     aviso('Proyecto abierto: ' + f.name, 'ok');
@@ -2911,6 +3341,9 @@ const ICONOS = {
   plus: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>', file: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 12v6M9 15h6"/>',
   folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>',
+  camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+  users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  layers: '<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
   code: '<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>', check: '<path d="M20 6 9 17l-5-5"/>',
   target: '<circle cx="12" cy="12" r="8"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/>'
 };
