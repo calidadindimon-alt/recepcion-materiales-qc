@@ -1,6 +1,9 @@
 /* Service worker de INDIMON CAD: guarda la app en el equipo para trabajar sin internet.
    Al publicar cambios, suba el número de VERSION para que los equipos descarguen la nueva copia. */
-const VERSION = 'indimon-cad-v16';
+/* Las cachés son compartidas por todo el origen (también las usa Recepción de Materiales):
+   al activar solo se borran las versiones viejas del CAD, identificadas por este prefijo. */
+const PREFIJO = 'indimon-cad-';
+const VERSION = PREFIJO + 'v17';
 const ARCHIVOS = [
   './', './index.html', './manifest.webmanifest', './vendor/xlsx.bundle.js',
   './vendor/exceljs.min.js', './plantillas/QC-F-004.xlsx', './plantillas/QC-F-015.xlsx', './plantillas/Maestro_Gerencia_Avance.xlsx',
@@ -13,7 +16,7 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys()
-    .then(claves => Promise.all(claves.filter(k => k !== VERSION).map(k => caches.delete(k))))
+    .then(claves => Promise.all(claves.filter(k => k.startsWith(PREFIJO) && k !== VERSION).map(k => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 
