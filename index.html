@@ -9,7 +9,8 @@
 <meta name="apple-mobile-web-app-title" content="Recepción QC">
 <title>Recepción de Materiales · QC-F-002</title>
 <script src="vendor/msal-browser.min.js"></script>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="vendor/exceljs.min.js"></script>
+<script src="catalogo.js"></script>
 <style>
 :root{--azul:#1F4E78;--gris:#f3f5f8;--borde:#cfd6df;--ok:#2e7d32;--err:#c62828}
 *{box-sizing:border-box}
@@ -80,7 +81,7 @@ button:disabled{opacity:.5}
 <section>
  <div class="acciones">
   <button class="bok" id="btnGuardar">Guardar en OneDrive</button>
-  <button class="bs" id="btnDescargar">Descargar copia .xlsx</button>
+  <button class="bs" id="btnDescargar">Descargar QC-F-002 (.xlsx)</button>
   <button class="bd" id="btnNuevo">Nuevo reporte</button>
  </div>
  <p class="small">El borrador (incluidas las firmas) se guarda solo en este equipo. Los certificados adjuntos se deben volver a adjuntar si cierra la app antes de guardar.</p>
@@ -97,10 +98,9 @@ button:disabled{opacity:.5}
 const CONFIG = {
   clientId: "6bc4222e-003e-4e2d-89fc-21d43197bd41",
   tenantId: "common",    // "common" acepta cuentas personales (Outlook/Familia) y de empresa
-  carpetaReportes: "/Recepciones/Reportes",
+  carpetaRaiz: "/Recepciones",               // una carpeta por reporte: /Recepciones/REP-0001
   archivoListas: "/Recepciones/listas.json",
-  carpetaCert: "/Recepciones/Certificados",
-  carpetaFirmas: "/Recepciones/Firmas",
+  plantilla: "plantilla/QC-F-002.xlsx",
   anchoLamina_m: 1.22,   // ancho de lámina por defecto (1220 mm)
   largoLamina_mm: 2440,  // largo de lámina por defecto
   largoTramo_mm: 6000    // largo de tramo por defecto (tubos, perfiles, barras)
@@ -193,6 +193,11 @@ function pintarListas() {
     $(dl).innerHTML = (LISTAS[t] || []).map(r => `<option value="${esc(r[0])}">`).join("");
   armarCatalogo();
 }
+/* listas fijas del catálogo + las que se van agregando (sin repetir) */
+const BASE = window.CATALOGO_QC || { tuberia: [], catalogo: [], listas: {} };
+const unir = (a = [], b = []) => { const vistos = new Set(), out = [];
+  for (const r of [...a, ...(Array.isArray(b) ? b : [])]) { const k = String(r[0]).trim().toLowerCase(); if (k && !vistos.has(k)) { vistos.add(k); out.push(r); } }
+  return out; };
 /* OneDrive personal no permite escribir en tablas de Excel desde la app: las listas viajan en un JSON */
 async function leerListasNube() {
   let it;
@@ -204,7 +209,7 @@ async function leerListasNube() {
 }
 async function cargarListas() {
   const nube = await leerListasNube();
-  for (const t of Object.keys(LISTAS_DL)) if (Array.isArray(nube[t])) LISTAS[t] = nube[t];
+  for (const t of Object.keys(LISTAS_DL)) LISTAS[t] = unir(BASE.listas[t], nube[t]);
   try { localStorage.setItem("qc_listas", JSON.stringify(LISTAS)); } catch (e) {}
   pintarListas();
   /* no redibujar mientras el usuario escribe en un material */
@@ -393,16 +398,22 @@ function validar() {
 }
 
 /* ---------- Graph: archivos en OneDrive ---------- */
-/* Número siguiente según los reportes que ya hay en la carpeta (REP-0007_… → 7) */
+/* Cada reporte vive en su carpeta: /Recepciones/REP-0007/QC-F-002_REP-0007_fecha.xlsx y /Certificados */
 async function maxReporte() {
-  let url = `${RUTA(CONFIG.carpetaReportes)}/children?$select=name&$top=999`, max = 0;
+  let url = `${RUTA(CONFIG.carpetaRaiz)}/children?$select=name&$top=999`, max = 0;
   while (url) {
     let r;
     try { r = await g(url); } catch (e) { if (/^404/.test(e.message)) return 0; throw e; }
-    (r.value || []).forEach(({ name }) => { const m = String(name).match(/^REP-(\d+)/i); if (m) max = Math.max(max, +m[1]); });
+    (r.value || []).forEach(({ name }) => { const m = String(name).match(/^REP-(\d+)$/i); if (m) max = Math.max(max, +m[1]); });
     url = r["@odata.nextLink"];
   }
   return max;
+}
+const crearCarpeta = (urlPadre, nombre, siExiste) => g(`${urlPadre}/children`, { method: "POST",
+  body: JSON.stringify({ name: nombre, folder: {}, "@microsoft.graph.conflictBehavior": siExiste }) });
+async function asegurarRaiz() {
+  try { await crearCarpeta(`${GRAPH}/me/drive/root`, CONFIG.carpetaRaiz.replace(/^\//, ""), "fail"); }
+  catch (e) { if (!/^409/.test(e.message)) throw e; }   // 409 = ya existe
 }
 async function subir(file, ruta, nombreBase, siExiste = "rename") {
   const nombre = (nombreBase || file.name).replace(/[\\/:*?"<>|#%&]/g, "_");
@@ -424,106 +435,148 @@ async function subir(file, ruta, nombreBase, siExiste = "rename") {
 }
 async function actualizarListas(h) {
   const nube = await leerListasNube(), nuevo = {}; let cambio = false;
-  for (const t of Object.keys(LISTAS_DL)) nuevo[t] = Array.isArray(nube[t]) ? nube[t] : (LISTAS[t] || []);
+  for (const t of Object.keys(LISTAS_DL)) nuevo[t] = Array.isArray(nube[t]) ? nube[t] : [];
   const agregar = (t, fila) => { const v = String(fila[0] || "").trim();
     if (!v || v === "N/A" || nuevo[t].some(r => String(r[0]).toLowerCase() === v.toLowerCase())) return;
     nuevo[t].push(fila); cambio = true; };
   agregar("tblClientes", [h.Cliente]); agregar("tblProyectos", [h.Proyecto, h.Cliente]); agregar("tblLugares", [h.LugarRecepcion]);
   mats.forEach(m => agregar("tblProveedores", [(m.Proveedor || "").trim()]));
   if (!cambio) return;
-  await subir(new Blob([JSON.stringify(nuevo, null, 1)], { type: "application/json" }), "/Recepciones", "listas.json", "replace");
+  await subir(new Blob([JSON.stringify(nuevo, null, 1)], { type: "application/json" }), CONFIG.carpetaRaiz, "listas.json", "replace");
 }
 
-/* ---------- libro Excel del reporte ---------- */
-/* Hoja "Recepcion" para leer/imprimir y hoja "Detalle" (una fila por material) que lee el Excel Maestro */
+/* ---------- formato oficial QC-F-002 (plantilla con logo, llenada con ExcelJS) ---------- */
+/* Plantilla: filas 9 a 28 para materiales; nombres en fila 31, cargos en 32 y firmas en 33 (B:D, E:F, G:J, K:M) */
+const FILA1 = 9, FILAS = 20, F_NOMBRE = 31, F_CARGO = 32, F_FIRMA = 33;
+const COL_FIRMA = { FirmaElaboro: [1, 4], FirmaAprobo: [4, 6], FirmaInterventoria: [6, 10], FirmaCliente: [10, 13] };
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const DET_ENC = ["ReporteID","Fecha","Cliente","Proyecto","LugarRecepcion","Elaboro","CargoElaboro","Aprobo","Interventoria","ClienteRecibe",
   "Item","MTR_No","FechaRecepcion","Proveedor","OrdenCompra","Colada","Categoria","Descripcion","Material","Norma","Cantidad","Unidad",
   "Dimension_mm","Diametro","Espesor_SCH","Peso_kg_m","PesoTotal_kg","Requerimiento","Resultado","Certificado","CertificadoURL","Observaciones",
   "Guardado","Usuario"];
-function libroReporte(id, h, cert = {}, usuario = "", guardado = "") {
-  const enc = ["Ítem","MTR No.","Fecha recepción","Proveedor","Orden de compra","N.º colada","Categoría","Descripción del material","Material","Norma",
-    "Cantidad","Unidad","Longitud (mm)","Diámetro / medida","Espesor / SCH / clase","Peso (kg/m)","Peso total (kg)","Requerimiento","Resultado","Certificado","Observaciones"];
-  const nomCert = m => cert[m.u]?.nombre || archivos[m.u]?.name || m.certNombre || "";
-  const aoa = [["FORMATO DE RECEPCIÓN DE MATERIALES — QC-F-002"], [],
-    ["Reporte No.", id, "Fecha", h.Fecha, "Cliente", h.Cliente, "Proyecto", h.Proyecto],
-    ["Lugar", h.LugarRecepcion, "Elaboró", h.Elaboro, "Aprobó", h.Aprobo, "Interventoría", h.Interventoria],
-    ["Firmas", ...FIRMAS.map(([k, l]) => `${l}: ${firmas[k] ? "firmado" : "sin firma"}`)], [], enc,
-    ...mats.map((m, i) => [i + 1, m.MTR_No, m.FechaRecepcion, m.Proveedor, m.OrdenCompra, m.Colada, m.Categoria, m.Descripcion, m.Material,
-      m.Norma, num(m.Cantidad), m.Unidad, num(m.Dimension_mm), m.Diametro, m.Espesor_SCH, num(m.Peso_kg_m), pesoTotal(m) ?? "",
-      m.Requerimiento, m.Resultado, nomCert(m), m.Observaciones])];
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws["!cols"] = [6,12,14,20,15,20,18,44,14,30,10,8,14,26,24,12,14,30,13,30,32].map(w => ({ wch: w }));
-  ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 20 } }];
-  const det = XLSX.utils.aoa_to_sheet([DET_ENC, ...mats.map((m, i) => [id, h.Fecha, h.Cliente, h.Proyecto, h.LugarRecepcion, h.Elaboro,
-    h.CargoElaboro, h.Aprobo, h.Interventoria, h.ClienteRecibe, i + 1, m.MTR_No, m.FechaRecepcion, m.Proveedor, m.OrdenCompra, m.Colada,
-    m.Categoria, m.Descripcion, m.Material, m.Norma, num(m.Cantidad), m.Unidad, num(m.Dimension_mm), m.Diametro, m.Espesor_SCH,
-    num(m.Peso_kg_m), pesoTotal(m) ?? "", m.Requerimiento, m.Resultado, nomCert(m), cert[m.u]?.url || "", m.Observaciones, guardado, usuario])]);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Recepcion"); XLSX.utils.book_append_sheet(wb, det, "Detalle");
-  return wb;
+let PLANTILLA = null;
+async function plantilla() {
+  if (!PLANTILLA) { const r = await fetch(CONFIG.plantilla); if (!r.ok) throw new Error("No se pudo cargar la plantilla QC-F-002"); PLANTILLA = await r.arrayBuffer(); }
+  return PLANTILLA;
 }
-const nombreReporte = (id, h) => `${id}_${h.Fecha || "sin-fecha"}.xlsx`;
+const fechaTxt = d => /^\d{4}-\d{2}-\d{2}$/.test(d || "") ? d.split("-").reverse().join("/") : (d || "");
+const na = v => String(v ?? "").trim() || "N/A";
+const tamImagen = src => new Promise(ok => { const im = new Image(); im.onload = () => ok([im.width, im.height]); im.onerror = () => ok([3, 1]); im.src = src; });
+/* insertar filas dentro de la tabla moviendo también las celdas combinadas de abajo (ExcelJS no las mueve solo) */
+function insertarFilas(ws, despuesDe, n) {
+  const bajan = Object.values(ws._merges).filter(r => r.top > despuesDe).map(r => [r.top, r.left, r.bottom, r.right, r.range]);
+  bajan.forEach(r => ws.unMergeCells(r[4]));
+  ws.duplicateRow(despuesDe, n, true);
+  bajan.forEach(([t, l, bo, ri]) => ws.mergeCells(t + n, l, bo + n, ri));
+}
+async function libroQC(id, h, cert = {}, usuario = "", guardado = "") {
+  if (typeof ExcelJS === "undefined") throw new Error("Librería Excel no disponible");
+  const wb = new ExcelJS.Workbook(); await wb.xlsx.load(await plantilla());
+  const ws = wb.worksheets[0], extra = Math.max(0, mats.length - FILAS);
+  if (extra) insertarFilas(ws, FILA1 + FILAS - 1, extra);
+  ws.getCell("A6").value = "CLIENTE: " + h.Cliente;
+  ws.getCell("D6").value = "PROYECTO: " + h.Proyecto;
+  ws.getCell("H6").value = "LUGAR DE RECEPCION: " + h.LugarRecepcion;
+  ws.getCell("M6").value = "REPORTE No: " + id + (h.Fecha ? "\nFecha: " + fechaTxt(h.Fecha) : "");
+  /* la plantilla trae filas con letras distintas: todas iguales a la primera y con ajuste de texto */
+  /* (estilo nuevo por celda: ExcelJS comparte el objeto de estilo entre filas duplicadas) */
+  for (let r = FILA1; r < FILA1 + FILAS + extra; r++)
+    for (let c = 1; c <= 13; c++) {
+      const cel = ws.getRow(r).getCell(c);
+      cel.style = { ...JSON.parse(JSON.stringify(cel.style || {})), font: { name: "Arial", size: 10, family: 2 },
+        alignment: { vertical: "middle", horizontal: "center", wrapText: true } };
+    }
+  const nomCert = m => cert[m.u]?.nombre || archivos[m.u]?.name || m.certNombre || "";
+  mats.forEach((m, i) => {
+    const r = ws.getRow(FILA1 + i), cn = nomCert(m);
+    const obs = [m.Observaciones, cn ? "Certificado: " + cn : ""].filter(x => String(x || "").trim()).join(" · ") || "NINGUNA";
+    [m.MTR_No || i + 1, fechaTxt(m.FechaRecepcion), na(m.Proveedor), na(m.OrdenCompra), na(m.Colada),
+     [m.Descripcion, m.Norma].filter(Boolean).join(" · "), `${m.Cantidad} ${m.Unidad || ""}`.trim(),
+     num(m.Dimension_mm) === "" ? "N/A" : `${m.Dimension_mm} mm`, na(m.Diametro), na(m.Espesor_SCH), na(m.Requerimiento),
+     m.Resultado === "ACEPTADO" || !m.Resultado ? "OK" : m.Resultado,
+     cert[m.u]?.url ? { text: obs, hyperlink: cert[m.u].url } : obs
+    ].forEach((v, c) => { r.getCell(c + 1).value = v; });
+  });
+  const fN = F_NOMBRE + extra, fC = F_CARGO + extra, fF = F_FIRMA + extra;
+  [["B", h.Elaboro, h.CargoElaboro], ["E", h.Aprobo, h.CargoAprobo], ["G", h.Interventoria, ""], ["K", h.ClienteRecibe, ""]]
+    .forEach(([c, nom, cargo]) => { ws.getCell(c + fN).value = nom || ""; ws.getCell(c + fC).value = cargo || ""; });
+  /* firmas dibujadas en pantalla, dentro de su casilla de la fila "Firma:" (60 pt ≈ 80 px de alto) */
+  for (const [k] of FIRMAS) {
+    if (!firmas[k]) continue;
+    const [c0, c1] = COL_FIRMA[k];
+    let anchoPx = 0; for (let c = c0 + 1; c <= c1; c++) anchoPx += (ws.getColumn(c).width || 9) * 7;
+    const [w, hh] = await tamImagen(firmas[k]), alto = 72, ancho = Math.min(anchoPx - 12, alto * w / hh);
+    const img = wb.addImage({ base64: firmas[k], extension: "png" });
+    ws.addImage(img, { tl: { col: c0 + 0.05, row: fF - 1 + 0.05 }, ext: { width: ancho, height: alto }, editAs: "oneCell" });
+  }
+  /* hoja de datos (una fila por material) para el Excel Maestro */
+  const det = wb.addWorksheet("Detalle");
+  det.addRow(DET_ENC);
+  mats.forEach((m, i) => det.addRow([id, h.Fecha, h.Cliente, h.Proyecto, h.LugarRecepcion, h.Elaboro, h.CargoElaboro, h.Aprobo,
+    h.Interventoria, h.ClienteRecibe, i + 1, m.MTR_No, m.FechaRecepcion, m.Proveedor, m.OrdenCompra, m.Colada, m.Categoria,
+    m.Descripcion, m.Material, m.Norma, num(m.Cantidad), m.Unidad, num(m.Dimension_mm), m.Diametro, m.Espesor_SCH, num(m.Peso_kg_m),
+    pesoTotal(m) ?? "", m.Requerimiento, m.Resultado, nomCert(m), cert[m.u]?.url || "", m.Observaciones, guardado, usuario]));
+  det.getRow(1).font = { bold: true };
+  det.state = "hidden";   // no sale al imprimir; el Excel Maestro la lee igual
+  return new Blob([await wb.xlsx.writeBuffer()], { type: XLSX_MIME });
+}
+const nombreReporte = (id, h) => `QC-F-002_${id}_${h.Fecha || "sin-fecha"}.xlsx`;
 
 $("btnGuardar").onclick = async () => {
   if (!cuenta()) { aviso("Primero presione Ingresar", false); return; }
-  if (typeof XLSX === "undefined") { aviso("Librería Excel no disponible (¿sin internet?)", false); return; }
   if ($("ReporteID").value && !confirm(`Este reporte ya se guardó como ${$("ReporteID").value}. ¿Guardarlo otra vez como reporte nuevo?`)) return;
   if (!validar()) return;
   const btn = $("btnGuardar"); btn.disabled = true;
   try {
+    aviso("Preparando el formato…", null, 0);
+    await plantilla();
     aviso("Asignando número de reporte…", null, 0);
+    await asegurarRaiz();
     let n = await maxReporte() + 1, id = "REP-" + pad(n);
-    const ahora = ahoraTxt(), h = leerHdr(), usuario = cuenta().username, cert = {}, cache = {};
-    const blobReporte = () => new Blob([XLSX.write(libroReporte(id, h, cert, usuario, ahora), { bookType: "xlsx", type: "array" })],
-      { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-    /* primero se reserva el número subiendo el reporte; si otro equipo ya lo tomó, OneDrive responde 409 y se usa el siguiente */
+    /* el número se reserva creando su carpeta; si otro equipo ya la creó (409) se usa el siguiente */
     for (let intento = 0; ; intento++) {
-      try { await subir(blobReporte(), CONFIG.carpetaReportes, nombreReporte(id, h), "fail"); break; }
+      try { await crearCarpeta(RUTA(CONFIG.carpetaRaiz), id, "fail"); break; }
       catch (e) { if (!/^409/.test(e.message) || intento >= 5) throw e; id = "REP-" + pad(++n); }
     }
     $("ReporteID").value = id; guardarBorrador();
+    const ahora = ahoraTxt(), h = leerHdr(), usuario = cuenta().username, cert = {}, cache = {}, carpeta = `${CONFIG.carpetaRaiz}/${id}`;
     for (const m of mats) {
       const f = archivos[m.u]; if (!f) continue;
       const key = f.name + "|" + f.size;
       if (!cache[key]) {
         aviso("Subiendo certificado " + f.name + "…", null, 0);
-        const it = await subir(f, `${CONFIG.carpetaCert}/${id}`); cache[key] = { nombre: it.name, url: it.webUrl };
+        const it = await subir(f, `${carpeta}/Certificados`); cache[key] = { nombre: it.name, url: it.webUrl };
       }
       cert[m.u] = cache[key];
     }
-    for (const [k, l] of FIRMAS) {
-      if (!firmas[k]) continue;
-      aviso("Subiendo firma " + l + "…", null, 0);
-      await subir(dataUrlABlob(firmas[k]), `${CONFIG.carpetaFirmas}/${id}`, `${k}.png`, "replace");
-    }
-    if (Object.keys(cert).length) {
-      aviso("Agregando enlaces de certificados al reporte…", null, 0);
-      await subir(blobReporte(), CONFIG.carpetaReportes, nombreReporte(id, h), "replace");
-    }
-    aviso("✔ Reporte " + id + " guardado en OneDrive (Recepciones/Reportes)", true, 6000);
+    aviso("Guardando formato QC-F-002…", null, 0);
+    await subir(await libroQC(id, h, cert, usuario, ahora), carpeta, nombreReporte(id, h), "replace");
+    aviso("✔ Reporte " + id + " guardado en OneDrive (Recepciones/" + id + ")", true, 6000);
     try { await actualizarListas(h); await cargarListas(); } catch (e) { /* el reporte ya quedó guardado */ }
   } catch (e) {
     const id = $("ReporteID").value;
-    aviso("✖ No se pudo guardar: " + e.message + (id ? ` — el reporte ${id} quedó en OneDrive incompleto; revise sus certificados.` : " — el borrador sigue en el equipo, puede reintentar."), false, 10000);
+    aviso("✖ No se pudo guardar: " + e.message + (id ? ` — la carpeta ${id} quedó en OneDrive incompleta; vuelva a guardar o revísela.` : " — el borrador sigue en el equipo, puede reintentar."), false, 10000);
   } finally { btn.disabled = false; }
 };
 
-/* ---------- copia local .xlsx ---------- */
-$("btnDescargar").onclick = () => {
-  if (typeof XLSX === "undefined") { aviso("Librería Excel no disponible (¿sin internet?)", false); return; }
-  const h = leerHdr(), id = $("ReporteID").value || "BORRADOR";
-  XLSX.writeFile(libroReporte(id, h), id === "BORRADOR" ? `Recepcion_BORRADOR.xlsx` : nombreReporte(id, h));
+/* ---------- copia local (mismo formato QC-F-002) ---------- */
+$("btnDescargar").onclick = async () => {
+  try {
+    const h = leerHdr(), id = $("ReporteID").value || "BORRADOR";
+    const a = document.createElement("a"); a.href = URL.createObjectURL(await libroQC(id, h));
+    a.download = nombreReporte(id, h); document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  } catch (e) { aviso("No se pudo generar el Excel: " + e.message, false, 6000); }
 };
 
 /* ---------- arranque ---------- */
 (async () => {
   try { if (app) { if (app.initialize) await app.initialize(); await app.handleRedirectPromise(); } } catch (e) { aviso(e.message, false); }
   mostrarUsuario();
-  try {
-    LISTAS = JSON.parse(localStorage.getItem("qc_listas") || "{}");
-    TUBERIA = JSON.parse(localStorage.getItem("qc_tuberia") || "[]");
-    CATALOGO = JSON.parse(localStorage.getItem("qc_catalogo") || "[]");
-  } catch (e) {}
+  let guardadas = {};
+  try { guardadas = JSON.parse(localStorage.getItem("qc_listas") || "{}"); } catch (e) {}
+  for (const t of Object.keys(LISTAS_DL)) LISTAS[t] = unir(BASE.listas[t], guardadas[t]);
+  TUBERIA = BASE.tuberia; CATALOGO = BASE.catalogo;
   pintarListas();
   cargarBorrador();
   if (cuenta()) cargarListas().catch(e => aviso("No se pudieron leer las listas: " + e.message, false, 6000));
