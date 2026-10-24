@@ -144,7 +144,7 @@ const CAMPOS = [
  ["OrdenCompra","Orden de compra","text"],["Colada","N.º de colada","text"],["Categoria","Categoría","text","lCategorias"],
  ["Descripcion","Descripción del material *","text"],["Material","Material","text","lMateriales"],["Norma","Norma","text","lNormas"],
  ["Cantidad","Cantidad *","number"],["Unidad","Unidad *","text","lUnidades"],["Dimension_mm","Longitud / dimensión (mm)","number"],
- ["Diametro","Diámetro / medida","text"],["Espesor_SCH","Espesor / SCH / clase","text","lSCH"],["Peso_kg_m","Peso (kg/m)","number"],
+ ["Diametro","Diámetro / medida","text"],["Espesor_SCH","Espesor / SCH / clase","text","lSCH"],["Peso_kg_m","Peso (kg/m)","number"],["Peso_und","Peso unitario (kg/und)","number"],
  ["Requerimiento","Requerimiento","text"],["Resultado","Resultado *","select"],["Observaciones","Observaciones","textarea"]
 ];
 const LISTAS_DL = {tblClientes:"lClientes",tblProyectos:"lProyectos",tblLugares:"lLugares",tblProveedores:"lProveedores",
@@ -164,8 +164,11 @@ const ahoraTxt = () => { const d = new Date(), z = n => String(n).padStart(2, "0
 function aviso(m, ok, ms = 3500) { const e = $("estado"); e.textContent = m;
   e.style.background = ok === true ? "#2e7d32" : ok === false ? "#c62828" : "#333";
   e.style.display = "block"; clearTimeout(aviso.t); if (ms) aviso.t = setTimeout(() => e.style.display = "none", ms); }
-const pesoTotal = m => { const p = num(m.Peso_kg_m), l = num(m.Dimension_mm), c = num(m.Cantidad);
-  return (p === "" || l === "" || c === "") ? null : p * l / 1000 * c; };
+/* tubos, perfiles y láminas: kg/m × largo × cantidad; accesorios, bridas y válvulas: kg por unidad × cantidad */
+const pesoTotal = m => { const p = num(m.Peso_kg_m), l = num(m.Dimension_mm), c = num(m.Cantidad), u = num(m.Peso_und);
+  if (c === "") return null;
+  if (p !== "" && l !== "") return p * l / 1000 * c;
+  return u === "" ? null : u * c; };
 /* Si hay Material se decide solo por él (la Norma puede venir de una selección anterior); si no, por la Norma */
 const RE_INOX = /inox|\bss\b|304|316|a312|a270|a240|a403|a182|a276|a554/i;
 const esInox = m => RE_INOX.test((m.Material || "").trim() ? m.Material : (m.Norma || ""));
@@ -302,7 +305,8 @@ function aplicarCatalogo(m) {
   } else {
     m.Peso_kg_m = ""; m.Unidad = "und";
   }
-  m._hint = [rating, calc === "LAM" ? `Peso lámina = ${fmt(p)} kg/m² × ancho` : ""].filter(Boolean).join(" · ");
+  m._hint = [rating, calc === "LAM" ? `Peso lámina = ${fmt(p)} kg/m² × ancho` : "",
+    calc ? "" : "El catálogo no trae el peso de este artículo: escriba el «Peso unitario (kg/und)» de la lista de empaque o el certificado"].filter(Boolean).join(" · ");
   return true;
 }
 
@@ -558,7 +562,7 @@ const COL_FIRMA = { FirmaElaboro: [1, 4], FirmaAprobo: [4, 6], FirmaInterventori
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const DET_ENC = ["ReporteID","Fecha","Cliente","Proyecto","LugarRecepcion","Elaboro","CargoElaboro","Aprobo","Interventoria","ClienteRecibe",
   "Item","MTR_No","FechaRecepcion","Proveedor","OrdenCompra","Colada","Categoria","Descripcion","Material","Norma","Cantidad","Unidad",
-  "Dimension_mm","Diametro","Espesor_SCH","Peso_kg_m","PesoTotal_kg","Requerimiento","Resultado","Certificado","CertificadoURL","Observaciones",
+  "Dimension_mm","Diametro","Espesor_SCH","Peso_kg_m","Peso_und","PesoTotal_kg","Requerimiento","Resultado","Certificado","CertificadoURL","Observaciones",
   "Guardado","Usuario"];
 /* una fila por material, con las claves de DET_ENC */
 function filasDetalle(id, { h, mats, archivos }, cert = {}, usuario = "", guardado = "") {
@@ -566,7 +570,7 @@ function filasDetalle(id, { h, mats, archivos }, cert = {}, usuario = "", guarda
     Elaboro: h.Elaboro, CargoElaboro: h.CargoElaboro, Aprobo: h.Aprobo, Interventoria: h.Interventoria, ClienteRecibe: h.ClienteRecibe,
     Item: i + 1, MTR_No: m.MTR_No, FechaRecepcion: m.FechaRecepcion, Proveedor: m.Proveedor, OrdenCompra: m.OrdenCompra, Colada: m.Colada,
     Categoria: m.Categoria, Descripcion: m.Descripcion, Material: m.Material, Norma: m.Norma, Cantidad: num(m.Cantidad), Unidad: m.Unidad,
-    Dimension_mm: num(m.Dimension_mm), Diametro: m.Diametro, Espesor_SCH: m.Espesor_SCH, Peso_kg_m: num(m.Peso_kg_m),
+    Dimension_mm: num(m.Dimension_mm), Diametro: m.Diametro, Espesor_SCH: m.Espesor_SCH, Peso_kg_m: num(m.Peso_kg_m), Peso_und: num(m.Peso_und),
     PesoTotal_kg: pesoTotal(m) ?? "", Requerimiento: m.Requerimiento, Resultado: m.Resultado,
     Certificado: cert[m.u]?.nombre || archivos[m.u]?.name || m.certNombre || "", CertificadoURL: cert[m.u]?.url || "",
     Observaciones: m.Observaciones, Guardado: guardado, Usuario: usuario }));
@@ -771,7 +775,7 @@ const COLS_M = [
   ["LugarRecepcion","Lugar",18],["Item","Ítem",6],["MTR_No","MTR No.",10],["FechaRecepcion","Fecha recepción",13,"fecha"],
   ["Proveedor","Proveedor",18],["OrdenCompra","Orden de compra",14],["Colada","N.º colada",16],["Categoria","Categoría",16],
   ["Descripcion","Descripción",42],["Material","Material",16],["Norma","Norma",28],["Cantidad","Cantidad",9],["Unidad","Unidad",8],
-  ["Dimension_mm","Longitud (mm)",12],["Diametro","Diámetro",16],["Espesor_SCH","Espesor / SCH",18],["Peso_kg_m","Peso (kg/m)",11],
+  ["Dimension_mm","Longitud (mm)",12],["Diametro","Diámetro",16],["Espesor_SCH","Espesor / SCH",18],["Peso_kg_m","Peso (kg/m)",11],["Peso_und","Peso unit. (kg)",11],
   ["PesoTotal_kg","Peso total (kg)",13],["Requerimiento","Requerimiento",20],["Resultado","Resultado",12],
   ["Certificado","Certificado",26,"link:CertificadoURL"],["Observaciones","Observaciones",30],["Elaboro","Elaboró",18],
   ["Aprobo","Aprobó",18],["Interventoria","Interventoría",16],["ClienteRecibe","Cliente recibe",16],["Guardado","Guardado",16],
