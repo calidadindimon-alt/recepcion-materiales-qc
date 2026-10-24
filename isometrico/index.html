@@ -94,6 +94,11 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
 #panel-sel label{display:block;margin:6px 0 2px;color:var(--s400);font-size:10.5px;font-weight:700;text-transform:uppercase}
 #panel-sel select,#panel-sel input{width:100%;background:var(--s800);border:1px solid var(--s700);border-radius:6px;padding:7px;font:600 13px var(--mono)}
 #panel-sel .acc{display:flex;gap:5px;margin-top:9px}
+#panel-sel .traz{margin-top:4px;font:600 11px var(--mono);color:var(--s300);line-height:1.45}
+#panel-sel .traz a{color:#93c5fd}
+.lista-col{max-height:42vh;overflow:auto;border:1px solid var(--s700);border-radius:8px;margin-top:6px}
+.lista-col div{padding:6px 8px;border-bottom:1px solid var(--s800);font-size:12px;line-height:1.4}
+.lista-col b{color:#93c5fd}
 #panel-sel .acc .btn{flex:1}
 
 /* Avisos y ventanas modales */
@@ -325,6 +330,7 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
           <button class="btn ancho verde" onclick="exportarAnexo()"><svg class="ico" data-ico="camera"></svg>Anexo fotográfico de juntas</button>
           <button class="btn ancho ambar" onclick="abrirReporteAvance()"><svg class="ico" data-ico="sheet"></svg>Reporte semanal de avance (ML)</button>
           <button class="btn ancho" onclick="descargarMaestro()"><svg class="ico" data-ico="sheet"></svg>Excel maestro de gerencia (tarifas)</button>
+          <button class="btn ancho" onclick="abrirColadas()"><svg class="ico" data-ico="folder"></svg>Coladas de Recepción (trazabilidad)</button>
         </div>
 
         <div class="sec">
@@ -697,8 +703,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v16';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-10-23T20:30';      // fecha y hora de la publicación (UTC)
+const APP_VERSION = 'v17';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-10-24T09:30';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -2088,8 +2094,9 @@ function elementosJunta(w) {
   const piezas = estado.components.filter(o => o.type !== 'pipe' && o.type !== 'weld' && !TIPOS[o.type].noBOM && TIPOS[o.type].modo !== 'equipo')
     .map(o => { const q = aPantalla(o.coords[0]); return { o, d: Math.hypot(q.x - s.x, q.y - s.y) }; }).filter(x => x.d < 16).sort((a, b) => a.d - b.d);
   const mm = v => v > 0 ? Math.round(v * 10000) / 10 : '';
-  const tubo = x => ({ desc: `TUBO ${x.c.nps} ${(SPECS[x.c.schedule]?.corto || x.c.schedule).toUpperCase()}`, mm: mm(longitudCorte(x.c)) });
-  const pieza = o => ({ desc: `${TIPOS[o.type].nombre} ${o.nps}${o.npsRed ? ' X ' + o.npsRed : ''} ${SPECS[o.schedule]?.sch || ''}`.trim(), mm: mm(largoAccesorio(o)) });
+  const col = o => o.traz && o.traz.colada ? ' · COL. ' + o.traz.colada : '';   /* trazabilidad: colada de Recepción */
+  const tubo = x => ({ desc: `TUBO ${x.c.nps} ${(SPECS[x.c.schedule]?.corto || x.c.schedule).toUpperCase()}${col(x.c)}`, mm: mm(longitudCorte(x.c)) });
+  const pieza = o => ({ desc: `${TIPOS[o.type].nombre} ${o.nps}${o.npsRed ? ' X ' + o.npsRed : ''} ${SPECS[o.schedule]?.sch || ''}`.trim() + col(o), mm: mm(largoAccesorio(o)) });
   const avance = x => { const r = idx.get(x.c); return r ? r.i + (r.inv ? 1 - x.t : x.t) : 1e9; };
   const vacio = { desc: '', mm: '' };
   if (piezas.length && tubos.length) {
@@ -2199,6 +2206,111 @@ async function exportarQC015() {
     descargarBlob(new Blob([await wb.xlsx.writeBuffer()], { type: XLSX_MIME }), `QC-F-015_${nombreSeguro(cab.linea) || 'ISO'}_${hoyISO()}.xlsx`);
     aviso('QC-F-015 generado', 'ok', 2500);
   } catch (err) { aviso('No se pudo generar el QC-F-015: ' + err.message, 'error', 5000); }
+}
+
+/* ---------- 11f. Trazabilidad: coladas recibidas en Recepción de Materiales (QC-F-002) ---------- */
+/* Recepción (raíz de este mismo sitio) deja la lista de coladas en localStorage "qc_coladas" de este equipo y en
+   OneDrive /Recepciones/coladas.json. El CAD SOLO LA LEE; cada tubo o accesorio guarda su colada en c.traz
+   (dato opcional: los planos sin colada siguen igual). El inicio de sesión usa el mismo registro de Azure que Recepción. */
+const MS = { clientId: '6bc4222e-003e-4e2d-89fc-21d43197bd41', authority: 'https://login.microsoftonline.com/common', scopes: ['User.Read', 'Files.ReadWrite'] };
+const CLAVE_COLADAS = 'qc_coladas';
+let msApp = null;
+function coladas() {
+  try { const o = JSON.parse(localStorage.getItem(CLAVE_COLADAS) || 'null'); if (o && Array.isArray(o.lista)) return o; } catch (_) { }
+  return { fecha: '', lista: [] };
+}
+const conColada = c => c.type !== 'weld' && !TIPOS[c.type].noBOM && TIPOS[c.type].modo !== 'equipo';
+/* el diámetro de Recepción viene como '2" (OD 60,3 mm)' o '2"': coincide si empieza por el NPS del componente */
+const mismoNps = (d, nps) => { d = String(d || '').trim(); return d === nps || d.startsWith(nps + ' ') || d.startsWith(nps + '·'); };
+function trazDe(valor, c) {
+  const v = String(valor || '').trim(); if (!v) return null;
+  const L = coladas().lista.filter(x => x.colada === v), x = L.find(y => mismoNps(y.diametro, c.nps)) || L[0];
+  return x ? { colada: x.colada, rep: x.rep, desc: x.desc, proveedor: x.proveedor, cert: x.cert, certUrl: x.certUrl } : { colada: v };
+}
+function panelColada(c) {
+  const L = coladas().lista, prim = L.filter(x => mismoNps(x.diametro, c.nps)), resto = L.filter(x => !mismoNps(x.diametro, c.nps));
+  const op = x => `<option value="${esc(x.colada)}" label="${esc(`${x.rep} · ${x.desc}`)}">${esc(`${x.rep} · ${x.desc}`)}</option>`;
+  const t = c.traz;
+  return `<label>Colada (trazabilidad)</label>
+    <input data-p="colada" list="dl-coladas" maxlength="40" placeholder="${L.length ? `Elija o escriba (${prim.length} de ${c.nps})` : 'N.º de colada'}" value="${esc(t?.colada || '')}">
+    <datalist id="dl-coladas">${prim.map(op).join('')}${resto.map(op).join('')}</datalist>
+    ${t?.rep ? `<div class="traz">${esc(t.rep)} · ${esc(t.desc || '')}${t.proveedor ? ' · ' + esc(t.proveedor) : ''}${t.certUrl ? ` · <a href="${esc(t.certUrl)}" target="_blank" rel="noopener">certificado</a>` : ''}</div>`
+      : t?.colada ? '<div class="traz">Colada escrita a mano (no está en Recepción)</div>' : ''}
+    ${t?.colada ? `<button class="btn" style="width:100%;margin-top:5px" data-acc="coladaIgual">Usar esta colada en los iguales de la línea</button>` : ''}`;
+}
+async function iniciarMS() {
+  if (msApp) return msApp;
+  if (!location.protocol.startsWith('http')) throw new Error('el inicio de sesión solo funciona en la app publicada, no en el archivo .html');
+  if (!window.msal) await cargarScript('vendor/msal-browser.min.js');
+  const app = new msal.PublicClientApplication({ auth: { clientId: MS.clientId, authority: MS.authority, redirectUri: location.origin + location.pathname },
+    cache: { cacheLocation: 'localStorage' } });
+  if (app.initialize) await app.initialize();
+  await app.handleRedirectPromise();
+  return (msApp = app);
+}
+const cuentaMS = () => msApp && msApp.getAllAccounts()[0];
+/* antes de ir a la página de Microsoft se guarda el plano (la página se recarga al volver) */
+function guardarYa() { try { localStorage.setItem(CLAVE_LOCAL, JSON.stringify(estado)); } catch (_) { } }
+async function tokenMS() {
+  const a = cuentaMS(); if (!a) throw new Error('primero pulse Ingresar');
+  try { return (await msApp.acquireTokenSilent({ scopes: MS.scopes, account: a })).accessToken; }
+  catch (e) {
+    if (!navigator.onLine || /network|fetch|timed_out/i.test(e.errorCode || e.message || '')) throw new Error('sin conexión');
+    guardarYa(); await msApp.acquireTokenRedirect({ scopes: MS.scopes }); throw new Error('renovando sesión');
+  }
+}
+async function actualizarColadas() {
+  await iniciarMS();
+  const t = await tokenMS(), r = await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/Recepciones/coladas.json', { headers: { Authorization: 'Bearer ' + t } });
+  if (r.status === 404) throw new Error('aún no hay coladas en OneDrive: guarde un reporte en Recepción');
+  if (!r.ok) throw new Error('OneDrive respondió ' + r.status);
+  const d = await (await fetch((await r.json())['@microsoft.graph.downloadUrl'])).json();
+  if (!d || !Array.isArray(d.lista)) throw new Error('el archivo de coladas no es válido');
+  try { localStorage.setItem(CLAVE_COLADAS, JSON.stringify(d)); } catch (_) { }
+  return d;
+}
+function abrirColadas() {
+  toggleSidebar(false);
+  const pintar = () => {
+    const d = coladas(), q = String($('col-buscar')?.value || '').toLowerCase(), a = cuentaMS();
+    $('col-estado').innerHTML = `${a ? 'Sesión: <b>' + esc(a.username) + '</b>' : 'Sin sesión de Microsoft'} · ${d.lista.length} coladas${d.fecha ? ' · actualizado ' + esc(d.fecha) : ''}`;
+    $('col-sesion').textContent = a ? 'Salir' : 'Ingresar';
+    const L = d.lista.filter(x => !q || [x.colada, x.desc, x.rep, x.proveedor, x.diametro, x.material, x.proyecto].join(' ').toLowerCase().includes(q));
+    $('col-lista').innerHTML = L.slice(0, 300).map(x => `<div><b>${esc(x.colada)}</b> · ${esc(x.desc)}<br>${esc(x.rep)} · ${esc(x.fecha)} · ${esc(x.proveedor)}${x.proyecto ? ' · ' + esc(x.proyecto) : ''}${x.certUrl ? ` · <a href="${esc(x.certUrl)}" target="_blank" rel="noopener">certificado</a>` : ''}</div>`).join('')
+      || '<div>Sin coladas. Se llenan al guardar reportes en Recepción de Materiales.</div>';
+  };
+  abrirModal({
+    titulo: 'Coladas de Recepción (trazabilidad)',
+    html: `<p>Lista de coladas recibidas en <b>Recepción de Materiales (QC-F-002)</b>. En este equipo se ve sin internet; con «Ingresar» se traen también las guardadas desde otros equipos (OneDrive). Para ligar una colada, toque un tubo o accesorio y elíjala en el campo <b>Colada</b>.</p>
+      <div id="col-estado" class="qc-resumen"></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0"><button type="button" class="btn" id="col-sesion">Ingresar</button><button type="button" class="btn verde" id="col-actualizar">Actualizar desde OneDrive</button></div>
+      <input id="col-buscar" placeholder="Buscar colada, diámetro, proveedor, REP…" style="width:100%">
+      <div id="col-lista" class="lista-col"></div>`,
+    okTxt: 'Cerrar', sinCancelar: true,
+    alAbrir: () => {
+      pintar(); $('col-buscar').addEventListener('input', pintar);
+      if (!msApp && /msal|login\.windows|6bc4222e/.test(Object.keys(localStorage).join(' '))) iniciarMS().then(pintar).catch(() => { });
+      $('col-sesion').onclick = async () => {
+        try {
+          await iniciarMS();
+          if (cuentaMS()) { guardarYa(); await msApp.logoutRedirect(); } else { guardarYa(); await msApp.loginRedirect({ scopes: MS.scopes }); }
+        } catch (e) { aviso('No se pudo iniciar sesión: ' + e.message, 'error', 5000); }
+      };
+      $('col-actualizar').onclick = async () => {
+        try { aviso('Trayendo coladas de OneDrive…', null, 4000); const d = await actualizarColadas(); pintar(); aviso(`${d.lista.length} coladas actualizadas`, 'ok'); }
+        catch (e) { aviso('No se pudieron traer las coladas: ' + e.message, 'error', 5000); }
+      };
+    }
+  });
+}
+/* al volver de la página de Microsoft, o si ya hay sesión guardada, se trae la lista en segundo plano */
+function iniciarTrazabilidad() {
+  const vuelve = /[#&](code|error)=/.test(location.hash), haySesion = Object.keys(localStorage).some(k => k.includes(MS.clientId));
+  if (!location.protocol.startsWith('http') || !(vuelve || haySesion)) return;
+  iniciarMS().then(() => {
+    if (vuelve) history.replaceState(null, '', location.pathname);
+    if (cuentaMS() && navigator.onLine) return actualizarColadas().then(d => { if (vuelve) aviso(`Sesión iniciada · ${d.lista.length} coladas de Recepción`, 'ok', 3000); });
+  }).catch(e => { if (vuelve) aviso('Inicio de sesión: ' + e.message, 'error', 5000); });
 }
 
 /* ---------- 11e. Avance de obra: metros lineales por junta y reporte semanal para gerencia ---------- */
@@ -2753,6 +2865,7 @@ function renderPanelSeleccion() {
     ${c.type === 'weld' ? `<label>Tipo de junta</label><select data-p="junta">${[['BW', 'A tope (BW)'], ['SW', 'Socket weld (filete)'], ['FILETE', 'Filete brida slip-on']].map(([v, t]) => `<option value="${v}"${(c.junta || 'BW') === v ? ' selected' : ''}>${t}</option>`).join('')}</select>` : ''}
     ${T.modo === 'equipo' ? `<label>TAG del equipo</label><input data-p="tag" maxlength="24" placeholder="Ej: P-101, TK-01" value="${esc(c.tag || '')}">` : ''}
     ${c.type !== 'pipe' && c.type !== 'weld' && !TIPOS[c.type].noBOM && T.modo !== 'equipo' ? `<div style="margin-top:6px;font:600 11px var(--mono);color:var(--s300)">Unión: ${tipoUnion(c)}${holgura(c) ? ` · holgura ${fmtLong(holgura(c))} por junta` : ''}</div>` : ''}
+    ${conColada(c) ? panelColada(c) : ''}
     ${c.type !== 'weld' && !TIPOS[c.type].noBOM ? `<label>Código / ref. fabricante</label><input data-p="ref" maxlength="60" placeholder="Ej: 032U1247" value="${esc(c.ref || '')}">` : ''}
     <div class="acc">${c.type !== 'pipe' && TIPOS[c.type].modo !== 'punto' ? `<button class="btn" data-acc="rotar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-rotate"/></svg>${c.type === 'flow' || REDUCTORES_LINEA.includes(c.type) ? 'Invertir' : T.modo === 'equipo' ? 'Girar' : 'Rotar'}</button>` : ''}
       <button class="btn peligro" data-acc="borrar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-trash"/></svg>Borrar</button></div>`;
@@ -2780,6 +2893,9 @@ $('panel-sel').addEventListener('change', e => {
   } else if (k === 'ref') {
     const v = e.target.value.trim().toUpperCase();
     commit(() => { if (v) c.ref = v; else delete c.ref; });
+  } else if (k === 'colada') {
+    const t = trazDe(e.target.value, c);
+    commit(() => { if (t) c.traz = t; else delete c.traz; });
   } else if ((k === 'nps' || k === 'npsRed') && c.npsRed && (REDUCTORES_LINEA.includes(c.type) || DERIVACIONES.includes(c.type))) {
     commit(() => { c[k] = e.target.value; aplicarReduccion(c); });
   } else if (k === 'nps' && c.type === 'pipe') {
@@ -2801,6 +2917,12 @@ $('panel-sel').addEventListener('click', e => {
     aviso(`${lista.length} componentes de la línea pasaron a ${SPECS[c.schedule]?.corto || c.schedule}`, 'ok', 2600);
   }
   if (b.dataset.acc === 'auto') commit(() => { c.lengthManual = false; c.length = longitudTubo(c); });
+  if (b.dataset.acc === 'coladaIgual' && c.traz) {
+    const iguales = componentesDeLinea(c).filter(o => o !== c && o.type === c.type && o.nps === c.nps && (o.npsRed || '') === (c.npsRed || '') && o.schedule === c.schedule);
+    if (!iguales.length) { aviso('No hay otros iguales en esta línea', 'error'); return; }
+    commit(() => iguales.forEach(o => { o.traz = { ...c.traz }; }));
+    aviso(`Colada ${c.traz.colada} aplicada a ${iguales.length} más`, 'ok', 2600);
+  }
 });
 /* Todos los componentes de la línea conectada a c (tramos unidos por sus extremos o derivaciones) */
 function componentesDeLinea(c) {
@@ -3157,14 +3279,15 @@ function exportToExcel() {
   const totML = r2(ultimoBOM.filter(f => f.uni === 'ML' && !f.consumible).reduce((s, f) => s + Number(f.cant || 0), 0));
   const nJuntas = estado.components.filter(c => c.type === 'weld').length;
   let nT = 0;
-  const detalle = [['MARCA', 'CATEGORÍA', 'TIPO', 'NPS', 'NPS MENOR', 'ESPECIFICACIÓN', `CENTRO-CENTRO (${txtUnidad()})`, `DESCUENTO / LARGO ACC. (${txtUnidad()})`, `LONG. CORTE (${txtUnidad()})`, 'LONG. MANUAL', 'ÁNGULO / PLANO', 'PENDIENTE', 'UNIÓN', 'DESCRIPCIÓN', 'COORDENADAS RED [p,q]']]
+  const detalle = [['MARCA', 'CATEGORÍA', 'TIPO', 'NPS', 'NPS MENOR', 'ESPECIFICACIÓN', `CENTRO-CENTRO (${txtUnidad()})`, `DESCUENTO / LARGO ACC. (${txtUnidad()})`, `LONG. CORTE (${txtUnidad()})`, 'LONG. MANUAL', 'ÁNGULO / PLANO', 'PENDIENTE', 'UNIÓN', 'DESCRIPCIÓN', 'COORDENADAS RED [p,q]', 'COLADA', 'REPORTE RECEPCIÓN', 'CERTIFICADO']]
     .concat([...estado.components].filter(c => !TIPOS[c.type].noBOM).sort((a, b) => (a.type === 'weld') - (b.type === 'weld') || (a.type === 'weld' ? numW.get(a.id) - numW.get(b.id) : 0)).map(c => [c.type === 'weld' ? `W${numW.get(c.id)}` : c.type === 'pipe' ? `T${++nT}` : '', c.category, TIPOS[c.type].corto, c.nps, c.npsRed || '', c.schedule,
       c.type === 'pipe' ? aUnidad(longitudTubo(c)) : '', c.type === 'pipe' ? aUnidad(descuentoTubo(c)) : (largoAccesorio(c) ? aUnidad(largoAccesorio(c)) : ''),
       c.type === 'pipe' ? aUnidad(Math.max(0, longitudCorte(c))) : '', c.type === 'pipe' ? (c.lengthManual ? 'SÍ' : 'NO') : '',
       c.libre && PLANOS[c.libre.plano] && !dirEntre(c.coords[0], c.coords[1]) ? `${anguloAgudo(c)}° · ${PLANOS[c.libre.plano].corto}` : '',
       c.pendiente ? `${c.pendiente.valor}% hacia el ${c.pendiente.haciaFin === false ? 'inicio' : 'final'}` : '',
       c.type === 'pipe' || c.type === 'weld' || TIPOS[c.type].modo === 'equipo' ? '' : tipoUnion(c),
-      descripcion(c), c.coords.map(P => `[${P[0]}, ${P[1]}]`).join(' → ')]));
+      descripcion(c), c.coords.map(P => `[${P[0]}, ${P[1]}]`).join(' → '), c.traz?.colada || '', c.traz?.rep || '', c.traz?.cert || '']));
+  const urlsCert = [null].concat([...estado.components].filter(c => !TIPOS[c.type].noBOM).sort((a, b) => (a.type === 'weld') - (b.type === 'weld') || (a.type === 'weld' ? numW.get(a.id) - numW.get(b.id) : 0)).map(c => c.traz?.certUrl || ''));
   if (typeof XLSX === 'undefined') {
     /* respaldo sin librería: CSV compatible con Excel (separador ;) */
     const filas = [['INDIMON S.A.S. — NIT 900602215-5'], ['FORMATO BOCETOS ISOMÉTRICOS — LISTADO DE MATERIALES (BOM)'], [], ...meta, [], ['ITEM', 'UNI', 'DESCRIPCIÓN TÉCNICA', 'CANTIDAD'], ...filasBOM];
@@ -3218,11 +3341,13 @@ function exportToExcel() {
   ws['!rows'] = aoa.map((_, r) => r === 0 ? { hpt: 26 } : r === 1 ? { hpt: 20 } : r === fEnc ? { hpt: 20 } : r >= fDat && r < fDat + filasBOM.length ? { hpt: 17 } : null);
   /* ----- Hoja 2: detalle de componentes (trazabilidad de juntas y tramos) ----- */
   const ws2 = XLSX.utils.aoa_to_sheet(detalle);
-  ws2['!cols'] = [8, 12, 18, 8, 10, 26, 13, 15, 13, 12, 16, 18, 9, 80, 34].map(w => ({ wch: w }));
+  ws2['!cols'] = [8, 12, 18, 8, 10, 26, 13, 15, 13, 12, 16, 18, 9, 80, 34, 18, 14, 30].map(w => ({ wch: w }));
   for (let c = 0; c < detalle[0].length; c++) {
     ws2[XLSX.utils.encode_cell({ r: 0, c })].s = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '1E293B' } }, border: borde, alignment: centro };
     for (let r = 1; r < detalle.length; r++) { const ref = XLSX.utils.encode_cell({ r, c }); if (!ws2[ref]) ws2[ref] = { t: 's', v: '' }; ws2[ref].s = { border: borde, alignment: { vertical: 'center', horizontal: c < 13 && c !== 5 ? 'center' : 'left' } }; }
   }
+  /* certificado: enlace al archivo en OneDrive */
+  urlsCert.forEach((u, r) => { if (!u) return; const ref = XLSX.utils.encode_cell({ r, c: 17 }); if (ws2[ref]) { ws2[ref].l = { Target: u }; ws2[ref].s = { ...ws2[ref].s, font: { color: { rgb: '0563C1' }, underline: true } }; } });
   ws2['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(1, detalle.length - 1), c: detalle[0].length - 1 } }) };
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'BOM DP-F-009');
@@ -3395,6 +3520,7 @@ function sincronizarSelectores() {
   setActiveTool('pipe');
   actualizarTodo();
   if (window.innerWidth <= 760) enfocarLienzo(); else fitSheetToScreen();
+  iniciarTrazabilidad();
   let anchoPrevio = window.innerWidth;
   window.addEventListener('resize', () => {
     clearTimeout(window._tr);
