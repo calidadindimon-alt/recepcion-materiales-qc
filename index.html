@@ -79,7 +79,7 @@ button:disabled{opacity:.5}
 </section>
 <section>
  <div class="acciones">
-  <button class="bok" id="btnGuardar">Guardar en Excel (OneDrive)</button>
+  <button class="bok" id="btnGuardar">Guardar en OneDrive</button>
   <button class="bs" id="btnDescargar">Descargar copia .xlsx</button>
   <button class="bd" id="btnNuevo">Nuevo reporte</button>
  </div>
@@ -95,9 +95,10 @@ button:disabled{opacity:.5}
 <script>
 /* ======== CONFIGURACIÓN (cambiar) ======== */
 const CONFIG = {
-  clientId: "PEGAR_AQUI_ID_DE_APLICACION",
-  tenantId: "PEGAR_AQUI_ID_DE_DIRECTORIO",
-  archivo: "/Recepciones/Maestro_Recepciones.xlsx",
+  clientId: "6bc4222e-003e-4e2d-89fc-21d43197bd41",
+  tenantId: "common",    // "common" acepta cuentas personales (Outlook/Familia) y de empresa
+  carpetaReportes: "/Recepciones/Reportes",
+  archivoListas: "/Recepciones/listas.json",
   carpetaCert: "/Recepciones/Certificados",
   carpetaFirmas: "/Recepciones/Firmas",
   anchoLamina_m: 1.22,   // ancho de lámina por defecto (1220 mm)
@@ -107,7 +108,7 @@ const CONFIG = {
 /* ========================================= */
 const GRAPH = "https://graph.microsoft.com/v1.0";
 const SCOPES = ["User.Read", "Files.ReadWrite"];
-const WB = () => `${GRAPH}/me/drive/root:${encodeURI(CONFIG.archivo)}:/workbook`;
+const RUTA = p => `${GRAPH}/me/drive/root:${encodeURI(p)}:`;
 const $ = id => document.getElementById(id);
 const HDR = ["Fecha","Cliente","Proyecto","LugarRecepcion","Elaboro","CargoElaboro","Aprobo","CargoAprobo","Interventoria","ClienteRecibe"];
 const FIRMAS = [["FirmaElaboro","Elaboró"],["FirmaAprobo","Aprobó"],["FirmaInterventoria","Interventoría"],["FirmaCliente","Cliente"]];
@@ -171,11 +172,11 @@ function mostrarUsuario() {
   $("btnLogin").textContent = a ? "Salir" : "Ingresar";
 }
 $("btnLogin").onclick = () => {
-  if (!app) { aviso(CONFIGURADO ? "Librería de Microsoft no disponible" : "Falta configurar clientId y tenantId en CONFIG", false, 6000); return; }
+  if (!app) { aviso(CONFIGURADO ? "Librería de Microsoft no disponible (¿sin internet?)" : "Falta configurar clientId y tenantId en CONFIG", false, 6000); return; }
   cuenta() ? app.logoutRedirect() : app.loginRedirect({ scopes: SCOPES });
 };
 
-/* ---------- listas y catálogos desde Excel ---------- */
+/* ---------- listas (OneDrive: /Recepciones/listas.json) y catálogo ---------- */
 function armarCatalogo() {
   /* tblTuberia: Tipo, NPS, OD_mm, Cedula, Espesor_mm, Peso_CS, Peso_SS, Clave */
   CAT = TUBERIA.filter(r => r[7]).map(r => ({ k: r[7], cat: /A270/.test(r[0]) ? "Tubería sanitaria" : "Tubería", src: "T", r }));
@@ -191,18 +192,19 @@ function pintarListas() {
     $(dl).innerHTML = (LISTAS[t] || []).map(r => `<option value="${esc(r[0])}">`).join("");
   armarCatalogo();
 }
+/* OneDrive personal no permite escribir en tablas de Excel desde la app: las listas viajan en un JSON */
+async function leerListasNube() {
+  let it;
+  try { it = await g(`${RUTA(CONFIG.archivoListas)}`); }
+  catch (e) { if (/^404/.test(e.message)) return {}; throw e; }
+  const r = await fetch(it["@microsoft.graph.downloadUrl"]);
+  if (!r.ok) throw new Error("No se pudo leer listas.json");
+  return r.json();
+}
 async function cargarListas() {
-  for (const t of Object.keys(LISTAS_DL)) {
-    const r = await g(`${WB()}/tables/${t}/dataBodyRange?$select=values`);
-    LISTAS[t] = (r.values || []).filter(x => String(x[0]).trim() !== "");
-  }
-  TUBERIA = ((await g(`${WB()}/tables/tblTuberia/dataBodyRange?$select=values`)).values || []);
-  CATALOGO = ((await g(`${WB()}/tables/tblCatalogo/dataBodyRange?$select=values`)).values || []);
-  try {
-    localStorage.setItem("qc_listas", JSON.stringify(LISTAS));
-    localStorage.setItem("qc_tuberia", JSON.stringify(TUBERIA));
-    localStorage.setItem("qc_catalogo", JSON.stringify(CATALOGO));
-  } catch (e) {}
+  const nube = await leerListasNube();
+  for (const t of Object.keys(LISTAS_DL)) if (Array.isArray(nube[t])) LISTAS[t] = nube[t];
+  try { localStorage.setItem("qc_listas", JSON.stringify(LISTAS)); } catch (e) {}
   pintarListas();
   /* no redibujar mientras el usuario escribe en un material */
   const a = document.activeElement;
@@ -389,21 +391,26 @@ function validar() {
   return true;
 }
 
-/* ---------- Graph: escritura en Excel y OneDrive ---------- */
-async function maxId(tabla, col) {
-  const r = await g(`${WB()}/tables/${tabla}/columns/${col}/dataBodyRange?$select=values`);
-  let max = 0; (r.values || []).forEach(([v]) => { const m = String(v).match(/(\d+)\s*$/); if (m) max = Math.max(max, +m[1]); });
+/* ---------- Graph: archivos en OneDrive ---------- */
+/* Número siguiente según los reportes que ya hay en la carpeta (REP-0007_… → 7) */
+async function maxReporte() {
+  let url = `${RUTA(CONFIG.carpetaReportes)}/children?$select=name&$top=999`, max = 0;
+  while (url) {
+    let r;
+    try { r = await g(url); } catch (e) { if (/^404/.test(e.message)) return 0; throw e; }
+    (r.value || []).forEach(({ name }) => { const m = String(name).match(/^REP-(\d+)/i); if (m) max = Math.max(max, +m[1]); });
+    url = r["@odata.nextLink"];
+  }
   return max;
 }
-const addRows = (t, values) => g(`${WB()}/tables/${t}/rows/add`, { method: "POST", body: JSON.stringify({ index: null, values }) });
-async function subir(file, ruta, nombreBase) {
+async function subir(file, ruta, nombreBase, siExiste = "rename") {
   const nombre = (nombreBase || file.name).replace(/[\\/:*?"<>|#%&]/g, "_");
-  const url = `${GRAPH}/me/drive/root:${encodeURI(`${ruta}/${nombre}`)}:`;
+  const url = RUTA(`${ruta}/${nombre}`);
   if (file.size < 4 * 1024 * 1024)
-    return g(url + "/content?@microsoft.graph.conflictBehavior=rename",
+    return g(url + "/content?@microsoft.graph.conflictBehavior=" + siExiste,
       { method: "PUT", body: file, headers: { "Content-Type": file.type || "application/octet-stream" } }, true);
   const s = await g(url + "/createUploadSession", { method: "POST",
-      body: JSON.stringify({ item: { "@microsoft.graph.conflictBehavior": "rename" } }) });
+      body: JSON.stringify({ item: { "@microsoft.graph.conflictBehavior": siExiste } }) });
   const CH = 320 * 1024 * 10; let ini = 0, item = null;
   while (ini < file.size) {
     const fin = Math.min(ini + CH, file.size);
@@ -415,55 +422,88 @@ async function subir(file, ruta, nombreBase) {
   return item;
 }
 async function actualizarListas(h) {
-  const tiene = (t, v) => (LISTAS[t] || []).some(r => String(r[0]).toLowerCase() === v.toLowerCase());
-  if (h.Cliente && !tiene("tblClientes", h.Cliente)) await addRows("tblClientes", [[txt(h.Cliente)]]);
-  if (h.Proyecto && !tiene("tblProyectos", h.Proyecto)) await addRows("tblProyectos", [[txt(h.Proyecto), txt(h.Cliente)]]);
-  if (h.LugarRecepcion && !tiene("tblLugares", h.LugarRecepcion)) await addRows("tblLugares", [[txt(h.LugarRecepcion)]]);
-  const provs = [...new Set(mats.map(m => (m.Proveedor || "").trim()).filter(p => p && p !== "N/A" && !tiene("tblProveedores", p)))];
-  if (provs.length) await addRows("tblProveedores", provs.map(p => [txt(p)]));
+  const nube = await leerListasNube(), nuevo = {}; let cambio = false;
+  for (const t of Object.keys(LISTAS_DL)) nuevo[t] = Array.isArray(nube[t]) ? nube[t] : (LISTAS[t] || []);
+  const agregar = (t, fila) => { const v = String(fila[0] || "").trim();
+    if (!v || v === "N/A" || nuevo[t].some(r => String(r[0]).toLowerCase() === v.toLowerCase())) return;
+    nuevo[t].push(fila); cambio = true; };
+  agregar("tblClientes", [h.Cliente]); agregar("tblProyectos", [h.Proyecto, h.Cliente]); agregar("tblLugares", [h.LugarRecepcion]);
+  mats.forEach(m => agregar("tblProveedores", [(m.Proveedor || "").trim()]));
+  if (!cambio) return;
+  await subir(new Blob([JSON.stringify(nuevo, null, 1)], { type: "application/json" }), "/Recepciones", "listas.json", "replace");
 }
-const F_PESO = '=IF(OR([@Peso_kg_m]="",[@Dimension_mm]=""),"",[@Peso_kg_m]*[@Dimension_mm]/1000*[@Cantidad])';
+
+/* ---------- libro Excel del reporte ---------- */
+/* Hoja "Recepcion" para leer/imprimir y hoja "Detalle" (una fila por material) que lee el Excel Maestro */
+const DET_ENC = ["ReporteID","Fecha","Cliente","Proyecto","LugarRecepcion","Elaboro","CargoElaboro","Aprobo","Interventoria","ClienteRecibe",
+  "Item","MTR_No","FechaRecepcion","Proveedor","OrdenCompra","Colada","Categoria","Descripcion","Material","Norma","Cantidad","Unidad",
+  "Dimension_mm","Diametro","Espesor_SCH","Peso_kg_m","PesoTotal_kg","Requerimiento","Resultado","Certificado","CertificadoURL","Observaciones",
+  "Guardado","Usuario"];
+function libroReporte(id, h, cert = {}, usuario = "", guardado = "") {
+  const enc = ["Ítem","MTR No.","Fecha recepción","Proveedor","Orden de compra","N.º colada","Categoría","Descripción del material","Material","Norma",
+    "Cantidad","Unidad","Longitud (mm)","Diámetro / medida","Espesor / SCH / clase","Peso (kg/m)","Peso total (kg)","Requerimiento","Resultado","Certificado","Observaciones"];
+  const nomCert = m => cert[m.u]?.nombre || archivos[m.u]?.name || m.certNombre || "";
+  const aoa = [["FORMATO DE RECEPCIÓN DE MATERIALES — QC-F-002"], [],
+    ["Reporte No.", id, "Fecha", h.Fecha, "Cliente", h.Cliente, "Proyecto", h.Proyecto],
+    ["Lugar", h.LugarRecepcion, "Elaboró", h.Elaboro, "Aprobó", h.Aprobo, "Interventoría", h.Interventoria],
+    ["Firmas", ...FIRMAS.map(([k, l]) => `${l}: ${firmas[k] ? "firmado" : "sin firma"}`)], [], enc,
+    ...mats.map((m, i) => [i + 1, m.MTR_No, m.FechaRecepcion, m.Proveedor, m.OrdenCompra, m.Colada, m.Categoria, m.Descripcion, m.Material,
+      m.Norma, num(m.Cantidad), m.Unidad, num(m.Dimension_mm), m.Diametro, m.Espesor_SCH, num(m.Peso_kg_m), pesoTotal(m) ?? "",
+      m.Requerimiento, m.Resultado, nomCert(m), m.Observaciones])];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"] = [6,12,14,20,15,20,18,44,14,30,10,8,14,26,24,12,14,30,13,30,32].map(w => ({ wch: w }));
+  ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 20 } }];
+  const det = XLSX.utils.aoa_to_sheet([DET_ENC, ...mats.map((m, i) => [id, h.Fecha, h.Cliente, h.Proyecto, h.LugarRecepcion, h.Elaboro,
+    h.CargoElaboro, h.Aprobo, h.Interventoria, h.ClienteRecibe, i + 1, m.MTR_No, m.FechaRecepcion, m.Proveedor, m.OrdenCompra, m.Colada,
+    m.Categoria, m.Descripcion, m.Material, m.Norma, num(m.Cantidad), m.Unidad, num(m.Dimension_mm), m.Diametro, m.Espesor_SCH,
+    num(m.Peso_kg_m), pesoTotal(m) ?? "", m.Requerimiento, m.Resultado, nomCert(m), cert[m.u]?.url || "", m.Observaciones, guardado, usuario])]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Recepcion"); XLSX.utils.book_append_sheet(wb, det, "Detalle");
+  return wb;
+}
+const nombreReporte = (id, h) => `${id}_${h.Fecha || "sin-fecha"}.xlsx`;
+
 $("btnGuardar").onclick = async () => {
   if (!cuenta()) { aviso("Primero presione Ingresar", false); return; }
+  if (typeof XLSX === "undefined") { aviso("Librería Excel no disponible (¿sin internet?)", false); return; }
   if ($("ReporteID").value && !confirm(`Este reporte ya se guardó como ${$("ReporteID").value}. ¿Guardarlo otra vez como reporte nuevo?`)) return;
   if (!validar()) return;
   const btn = $("btnGuardar"); btn.disabled = true;
   try {
     aviso("Asignando número de reporte…", null, 0);
-    const id = "REP-" + pad(await maxId("tblReportes", "ReporteID") + 1);
-    let nc = await maxId("tblCertificados", "CertificadoID");
-    const ahora = ahoraTxt(), h = leerHdr(), certRows = [], cache = {};
+    let n = await maxReporte() + 1, id = "REP-" + pad(n);
+    const ahora = ahoraTxt(), h = leerHdr(), usuario = cuenta().username, cert = {}, cache = {};
+    const blobReporte = () => new Blob([XLSX.write(libroReporte(id, h, cert, usuario, ahora), { bookType: "xlsx", type: "array" })],
+      { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    /* primero se reserva el número subiendo el reporte; si otro equipo ya lo tomó, OneDrive responde 409 y se usa el siguiente */
+    for (let intento = 0; ; intento++) {
+      try { await subir(blobReporte(), CONFIG.carpetaReportes, nombreReporte(id, h), "fail"); break; }
+      catch (e) { if (!/^409/.test(e.message) || intento >= 5) throw e; id = "REP-" + pad(++n); }
+    }
+    $("ReporteID").value = id; guardarBorrador();
     for (const m of mats) {
-      m._cert = ""; const f = archivos[m.u]; if (!f) continue;
+      const f = archivos[m.u]; if (!f) continue;
       const key = f.name + "|" + f.size;
       if (!cache[key]) {
         aviso("Subiendo certificado " + f.name + "…", null, 0);
-        const it = await subir(f, `${CONFIG.carpetaCert}/${id}`); cache[key] = "CERT-" + pad(++nc);
-        certRows.push([cache[key], id, txt(m.Proveedor), txt(m.Colada), txt(m.Norma), it.name, it.webUrl, ahora]);
+        const it = await subir(f, `${CONFIG.carpetaCert}/${id}`); cache[key] = { nombre: it.name, url: it.webUrl };
       }
-      m._cert = cache[key];
+      cert[m.u] = cache[key];
     }
-    const urlFirma = {};
     for (const [k, l] of FIRMAS) {
-      if (!firmas[k]) { urlFirma[k] = ""; continue; }
+      if (!firmas[k]) continue;
       aviso("Subiendo firma " + l + "…", null, 0);
-      const it = await subir(dataUrlABlob(firmas[k]), `${CONFIG.carpetaFirmas}/${id}`, `${k}.png`);
-      urlFirma[k] = it.webUrl;
+      await subir(dataUrlABlob(firmas[k]), `${CONFIG.carpetaFirmas}/${id}`, `${k}.png`, "replace");
     }
-    aviso("Guardando en Excel…", null, 0);
-    if (certRows.length) await addRows("tblCertificados", certRows);
-    await addRows("tblDetalle", mats.map((m, i) => [id, i + 1, txt(m.MTR_No), m.FechaRecepcion || "", txt(m.Proveedor), txt(m.OrdenCompra),
-      txt(m.Colada), txt(m.Categoria), txt(m.Descripcion), txt(m.Material), txt(m.Norma), num(m.Cantidad), txt(m.Unidad),
-      num(m.Dimension_mm), txt(m.Diametro), txt(m.Espesor_SCH), txt(m.Requerimiento), m.Resultado || "ACEPTADO", m._cert,
-      txt(m.Observaciones), num(m.Peso_kg_m), F_PESO]));
-    await addRows("tblReportes", [[id, h.Fecha, txt(h.Cliente), txt(h.Proyecto), txt(h.LugarRecepcion), txt(h.Elaboro), txt(h.CargoElaboro),
-      txt(h.Aprobo), txt(h.CargoAprobo), txt(h.Interventoria), txt(h.ClienteRecibe), "REGISTRADO", cuenta().username, ahora,
-      urlFirma.FirmaElaboro, urlFirma.FirmaAprobo, urlFirma.FirmaInterventoria, urlFirma.FirmaCliente]]);
-    $("ReporteID").value = id; guardarBorrador();
-    aviso("✔ Reporte " + id + " guardado en Excel", true, 6000);
+    if (Object.keys(cert).length) {
+      aviso("Agregando enlaces de certificados al reporte…", null, 0);
+      await subir(blobReporte(), CONFIG.carpetaReportes, nombreReporte(id, h), "replace");
+    }
+    aviso("✔ Reporte " + id + " guardado en OneDrive (Recepciones/Reportes)", true, 6000);
     try { await actualizarListas(h); await cargarListas(); } catch (e) { /* el reporte ya quedó guardado */ }
   } catch (e) {
-    aviso("✖ No se pudo guardar: " + e.message + " — el borrador sigue en el equipo. Revise el Excel antes de reintentar.", false, 10000);
+    const id = $("ReporteID").value;
+    aviso("✖ No se pudo guardar: " + e.message + (id ? ` — el reporte ${id} quedó en OneDrive incompleto; revise sus certificados.` : " — el borrador sigue en el equipo, puede reintentar."), false, 10000);
   } finally { btn.disabled = false; }
 };
 
@@ -471,20 +511,7 @@ $("btnGuardar").onclick = async () => {
 $("btnDescargar").onclick = () => {
   if (typeof XLSX === "undefined") { aviso("Librería Excel no disponible (¿sin internet?)", false); return; }
   const h = leerHdr(), id = $("ReporteID").value || "BORRADOR";
-  const enc = ["Ítem","MTR No.","Fecha recepción","Proveedor","Orden de compra","N.º colada","Categoría","Descripción del material","Material","Norma",
-    "Cantidad","Unidad","Longitud (mm)","Diámetro / medida","Espesor / SCH / clase","Peso (kg/m)","Peso total (kg)","Requerimiento","Resultado","Certificado","Observaciones"];
-  const aoa = [["FORMATO DE RECEPCIÓN DE MATERIALES — QC-F-002"], [],
-    ["Reporte No.", id, "Fecha", h.Fecha, "Cliente", h.Cliente, "Proyecto", h.Proyecto],
-    ["Lugar", h.LugarRecepcion, "Elaboró", h.Elaboro, "Aprobó", h.Aprobo, "Interventoría", h.Interventoria],
-    ["Firmas", ...FIRMAS.map(([k, l]) => `${l}: ${firmas[k] ? "firmado" : "sin firma"}`)], [], enc,
-    ...mats.map((m, i) => [i + 1, m.MTR_No, m.FechaRecepcion, m.Proveedor, m.OrdenCompra, m.Colada, m.Categoria, m.Descripcion, m.Material,
-      m.Norma, num(m.Cantidad), m.Unidad, num(m.Dimension_mm), m.Diametro, m.Espesor_SCH, num(m.Peso_kg_m), pesoTotal(m) ?? "",
-      m.Requerimiento, m.Resultado, archivos[m.u]?.name || m.certNombre || "", m.Observaciones])];
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws["!cols"] = [6,12,14,20,15,20,18,44,14,30,10,8,14,26,24,12,14,30,13,30,32].map(w => ({ wch: w }));
-  ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 20 } }];
-  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Recepcion");
-  XLSX.writeFile(wb, `Recepcion_${id}.xlsx`);
+  XLSX.writeFile(libroReporte(id, h), id === "BORRADOR" ? `Recepcion_BORRADOR.xlsx` : nombreReporte(id, h));
 };
 
 /* ---------- arranque ---------- */
