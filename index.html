@@ -8,7 +8,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Recepción QC">
 <title>Recepción de Materiales · QC-F-002</title>
-<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<script src="vendor/msal-browser.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
 :root{--azul:#1F4E78;--gris:#f3f5f8;--borde:#cfd6df;--ok:#2e7d32;--err:#c62828}
@@ -145,7 +145,7 @@ const esInox = m => RE_INOX.test((m.Material || "").trim() ? m.Material : (m.Nor
 
 /* ---------- inicio de sesión Microsoft ---------- */
 const CONFIGURADO = !/PEGAR_AQUI/.test(CONFIG.clientId + CONFIG.tenantId);
-let app = null;
+let app = null, errorMsal = "";
 try {
   if (typeof msal === "undefined") throw new Error("No cargó la librería de Microsoft (¿sin internet?)");
   if (CONFIGURADO) app = new msal.PublicClientApplication({
@@ -153,7 +153,7 @@ try {
             redirectUri: location.origin + location.pathname },
     cache: { cacheLocation: "localStorage" }
   });
-} catch (e) { setTimeout(() => aviso(e.message, false, 6000), 300); }
+} catch (e) { errorMsal = e.message; setTimeout(() => aviso(e.message, false, 6000), 300); }
 const cuenta = () => app ? app.getAllAccounts()[0] : null;
 async function token() {
   const acc = cuenta(); if (!acc) throw new Error("Primero presione Ingresar");
@@ -172,8 +172,9 @@ function mostrarUsuario() {
   $("btnLogin").textContent = a ? "Salir" : "Ingresar";
 }
 $("btnLogin").onclick = () => {
-  if (!app) { aviso(CONFIGURADO ? "Librería de Microsoft no disponible (¿sin internet?)" : "Falta configurar clientId y tenantId en CONFIG", false, 6000); return; }
-  cuenta() ? app.logoutRedirect() : app.loginRedirect({ scopes: SCOPES });
+  if (!app) { aviso(CONFIGURADO ? "No se pudo preparar el inicio de sesión: " + (errorMsal || "librería no disponible") : "Falta configurar clientId y tenantId en CONFIG", false, 6000); return; }
+  (cuenta() ? app.logoutRedirect() : app.loginRedirect({ scopes: SCOPES }))
+    .catch(e => aviso("No se pudo abrir el inicio de sesión: " + e.message, false, 10000));
 };
 
 /* ---------- listas (OneDrive: /Recepciones/listas.json) y catálogo ---------- */
