@@ -30,7 +30,8 @@ input[readonly]{background:#eef2f7;font-weight:700}
 textarea{min-height:56px;resize:vertical}
 button{border:0;border-radius:8px;padding:12px 16px;font-size:15px;font-weight:600;cursor:pointer;min-height:46px}
 button:disabled{opacity:.5}
-.bp{background:var(--azul);color:#fff}.bs{background:#e3e8ef;color:#222}.bd{background:#fde8e8;color:var(--err)}.bok{background:var(--ok);color:#fff}
+.bp{background:var(--azul);color:#fff}
+a.boton{border-radius:8px;padding:12px 16px;font-size:15px;font-weight:600;min-height:46px;align-items:center;text-decoration:none;color:#222}.bs{background:#e3e8ef;color:#222}.bd{background:#fde8e8;color:var(--err)}.bok{background:var(--ok);color:#fff}
 .acciones{display:flex;flex-wrap:wrap;gap:10px}
 .mat{border:1px solid var(--borde);border-left:5px solid var(--azul);border-radius:8px;padding:12px;margin-bottom:12px;background:#fafbfd}
 .mat-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-weight:700;color:var(--azul)}
@@ -102,6 +103,10 @@ button:disabled{opacity:.5}
   <button class="bok" id="btnGuardar">Guardar en OneDrive</button>
   <button class="bs" id="btnDescargar">Descargar QC-F-002 (.xlsx)</button>
   <button class="bd" id="btnNuevo">Nuevo reporte</button>
+ </div>
+ <div class="acciones" style="margin-top:10px">
+  <a id="lnkMaestro" class="bs boton" target="_blank" rel="noopener" style="display:none">📊 Abrir Excel Maestro</a>
+  <button class="bs" id="btnMaestro">Reconstruir Excel Maestro</button>
  </div>
  <div id="pendientes" class="pend" style="display:none"><span></span><button class="bp" id="btnPendientes">Subir ahora</button></div>
  <p class="small">El borrador (incluidas las firmas) se guarda solo en este equipo. Los certificados adjuntos se deben volver a adjuntar si cierra la app antes de guardar.
@@ -555,6 +560,17 @@ const DET_ENC = ["ReporteID","Fecha","Cliente","Proyecto","LugarRecepcion","Elab
   "Item","MTR_No","FechaRecepcion","Proveedor","OrdenCompra","Colada","Categoria","Descripcion","Material","Norma","Cantidad","Unidad",
   "Dimension_mm","Diametro","Espesor_SCH","Peso_kg_m","PesoTotal_kg","Requerimiento","Resultado","Certificado","CertificadoURL","Observaciones",
   "Guardado","Usuario"];
+/* una fila por material, con las claves de DET_ENC */
+function filasDetalle(id, { h, mats, archivos }, cert = {}, usuario = "", guardado = "") {
+  return mats.map((m, i) => ({ ReporteID: id, Fecha: h.Fecha, Cliente: h.Cliente, Proyecto: h.Proyecto, LugarRecepcion: h.LugarRecepcion,
+    Elaboro: h.Elaboro, CargoElaboro: h.CargoElaboro, Aprobo: h.Aprobo, Interventoria: h.Interventoria, ClienteRecibe: h.ClienteRecibe,
+    Item: i + 1, MTR_No: m.MTR_No, FechaRecepcion: m.FechaRecepcion, Proveedor: m.Proveedor, OrdenCompra: m.OrdenCompra, Colada: m.Colada,
+    Categoria: m.Categoria, Descripcion: m.Descripcion, Material: m.Material, Norma: m.Norma, Cantidad: num(m.Cantidad), Unidad: m.Unidad,
+    Dimension_mm: num(m.Dimension_mm), Diametro: m.Diametro, Espesor_SCH: m.Espesor_SCH, Peso_kg_m: num(m.Peso_kg_m),
+    PesoTotal_kg: pesoTotal(m) ?? "", Requerimiento: m.Requerimiento, Resultado: m.Resultado,
+    Certificado: cert[m.u]?.nombre || archivos[m.u]?.name || m.certNombre || "", CertificadoURL: cert[m.u]?.url || "",
+    Observaciones: m.Observaciones, Guardado: guardado, Usuario: usuario }));
+}
 let PLANTILLA = null;
 async function plantilla() {
   if (!PLANTILLA) { const r = await fetch(CONFIG.plantilla); if (!r.ok) throw new Error("No se pudo cargar la plantilla QC-F-002"); PLANTILLA = await r.arrayBuffer(); }
@@ -623,13 +639,10 @@ async function libroQC(id, d, cert = {}, usuario = "", guardado = "") {
       br: { nativeCol: col, nativeColOff: Math.min(off, colPx(col)) * EMU, nativeRow: fF - 1, nativeRowOff: (4 + alto) * EMU },
       editAs: "oneCell" });
   }
-  /* hoja de datos (una fila por material) para el Excel Maestro */
+  /* hoja de datos (una fila por material): de aquí se reconstruye el Excel Maestro */
   const det = wb.addWorksheet("Detalle");
   det.addRow(DET_ENC);
-  mats.forEach((m, i) => det.addRow([id, h.Fecha, h.Cliente, h.Proyecto, h.LugarRecepcion, h.Elaboro, h.CargoElaboro, h.Aprobo,
-    h.Interventoria, h.ClienteRecibe, i + 1, m.MTR_No, m.FechaRecepcion, m.Proveedor, m.OrdenCompra, m.Colada, m.Categoria,
-    m.Descripcion, m.Material, m.Norma, num(m.Cantidad), m.Unidad, num(m.Dimension_mm), m.Diametro, m.Espesor_SCH, num(m.Peso_kg_m),
-    pesoTotal(m) ?? "", m.Requerimiento, m.Resultado, nomCert(m), cert[m.u]?.url || "", m.Observaciones, guardado, usuario]));
+  filasDetalle(id, d, cert, usuario, guardado).forEach(f => det.addRow(DET_ENC.map(k => f[k])));
   det.getRow(1).font = { bold: true };
   det.state = "hidden";   // no sale al imprimir; el Excel Maestro la lee igual
   return new Blob([await wb.xlsx.writeBuffer()], { type: XLSX_MIME });
@@ -670,8 +683,12 @@ async function subirReporte(d, guardado, idPrevio, alReservar = () => {}) {
     cert[m.u] = cache[key];
   }
   aviso("Guardando formato QC-F-002…", null, 0);
-  await subir(await libroQC(id, d, cert, usuario, guardado), carpeta, nombreReporte(id, d.h), "replace");
+  const itQC = await subir(await libroQC(id, d, cert, usuario, guardado), carpeta, nombreReporte(id, d.h), "replace");
   try { await actualizarListas(d); await cargarListas(); } catch (e) { /* el reporte ya quedó guardado */ }
+  try {
+    aviso("Actualizando Excel Maestro…", null, 0);
+    await actualizarMaestro(filasDetalle(id, d, cert, usuario, guardado).map(f => ({ ...f, ReporteURL: itQC.webUrl })));
+  } catch (e) { errorMaestro = e.message; }
   return id;
 }
 
@@ -713,7 +730,7 @@ async function subirPendientes(manual) {
         async nuevo => { p.idReservado = nuevo; await bd("readwrite", st => st.put(p)); });
       await bd("readwrite", st => st.delete(p.clave));
       if (pendForm === p.clave) { $("ReporteID").value = id; pendForm = null; guardarBorrador(); }
-      aviso("✔ Reporte pendiente subido como " + id, true, 5000);
+      aviso("✔ Reporte pendiente subido como " + id + notaMaestro(), true, 6000);
     }
   } catch (e) {
     aviso("✖ No se pudo subir un reporte pendiente: " + e.message + " — sigue guardado en el equipo.", false, 9000);
@@ -736,13 +753,174 @@ $("btnGuardar").onclick = async () => {
   try {
     pendForm = null;
     const id = await subirReporte(d, ahora, "", nuevo => { reservado = nuevo; $("ReporteID").value = nuevo; guardarBorrador(); });
-    aviso("✔ Reporte " + id + " guardado en OneDrive (Recepciones/" + id + ")", true, 6000);
+    aviso("✔ Reporte " + id + " guardado en OneDrive (Recepciones/" + id + ")" + notaMaestro(), true, 7000);
   } catch (e) {
     /* se cayó la señal a mitad: queda en el equipo y se termina después en la misma carpeta */
     if (esErrorDeRed(e)) await encolar(d, ahora, reservado);
     else aviso("✖ No se pudo guardar: " + e.message + (reservado ? ` — la carpeta ${reservado} quedó en OneDrive incompleta; vuelva a guardar o revísela.` : " — el borrador sigue en el equipo, puede reintentar."), false, 10000);
   } finally { btn.disabled = false; }
 };
+
+/* ---------- Excel Maestro: /Recepciones/Maestro_Recepciones.xlsx ---------- */
+/* Lo genera la app: se actualiza solo al guardar cada reporte y se puede reconstruir leyendo la hoja
+   "Detalle" de todos los formatos (OneDrive personal no permite escribir filas en tablas de Excel). */
+const MAESTRO = () => `${CONFIG.carpetaRaiz}/Maestro_Recepciones.xlsx`;
+/* [clave, título, ancho, tipo]; "link:X" = el texto es la clave y el enlace sale de X */
+const COLS_M = [
+  ["ReporteID","Reporte",11],["Fecha","Fecha reporte",12,"fecha"],["Cliente","Cliente",22],["Proyecto","Proyecto",24],
+  ["LugarRecepcion","Lugar",18],["Item","Ítem",6],["MTR_No","MTR No.",10],["FechaRecepcion","Fecha recepción",13,"fecha"],
+  ["Proveedor","Proveedor",18],["OrdenCompra","Orden de compra",14],["Colada","N.º colada",16],["Categoria","Categoría",16],
+  ["Descripcion","Descripción",42],["Material","Material",16],["Norma","Norma",28],["Cantidad","Cantidad",9],["Unidad","Unidad",8],
+  ["Dimension_mm","Longitud (mm)",12],["Diametro","Diámetro",16],["Espesor_SCH","Espesor / SCH",18],["Peso_kg_m","Peso (kg/m)",11],
+  ["PesoTotal_kg","Peso total (kg)",13],["Requerimiento","Requerimiento",20],["Resultado","Resultado",12],
+  ["Certificado","Certificado",26,"link:CertificadoURL"],["Observaciones","Observaciones",30],["Elaboro","Elaboró",18],
+  ["Aprobo","Aprobó",18],["Interventoria","Interventoría",16],["ClienteRecibe","Cliente recibe",16],["Guardado","Guardado",16],
+  ["Usuario","Usuario",26],["ReporteURL","Formato",10,"link:ReporteURL"]
+];
+let errorMaestro = "";
+const notaMaestro = () => { const e = errorMaestro; errorMaestro = "";
+  return e ? ` — ⚠ el Excel Maestro no se actualizó (${e}); use «Reconstruir Excel Maestro»` : " y en el Excel Maestro"; };
+const aFecha = iso => /^\d{4}-\d{2}-\d{2}$/.test(iso || "") ? new Date(Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10))) : (iso || "");
+const deFecha = v => v instanceof Date ? v.toISOString().slice(0, 10) : (v ?? "");
+const ordenRep = (a, b) => String(a.ReporteID).localeCompare(String(b.ReporteID), "es", { numeric: true }) || (a.Item || 0) - (b.Item || 0);
+function encabezado(ws) {
+  const r = ws.getRow(1); r.height = 30;
+  r.eachCell(c => { c.font = { bold: true, color: { argb: "FFFFFFFF" } }; c.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F4E78" } }; });
+}
+const enlace = (texto, url) => url ? { text: texto || "Abrir", hyperlink: url } : (texto || "");
+async function libroMaestro(filas, usuario) {
+  const wb = new ExcelJS.Workbook(); wb.creator = "INDIMON";
+  filas = [...filas].sort(ordenRep);
+  /* Materiales: una fila por material, con filtros */
+  const imprimir = { orientation: "landscape", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: "1:1" };
+  const ws = wb.addWorksheet("Materiales", { views: [{ state: "frozen", ySplit: 1 }], pageSetup: imprimir });
+  ws.columns = COLS_M.map(([k, t, w]) => ({ header: t, key: k, width: w }));
+  filas.forEach(f => {
+    const row = ws.addRow(COLS_M.map(([k, , , tipo]) => tipo === "fecha" ? aFecha(f[k])
+      : tipo && tipo.startsWith("link:") ? enlace(k === "ReporteURL" ? "Abrir" : f[k], f[tipo.slice(5)]) : (f[k] ?? "")));
+    COLS_M.forEach(([, , , tipo], i) => {
+      const c = row.getCell(i + 1);
+      if (tipo === "fecha") c.numFmt = "dd/mm/yyyy";
+      if (tipo && tipo.startsWith("link:") && c.value && c.value.hyperlink) c.font = { color: { argb: "FF0563C1" }, underline: true };
+    });
+    if (f.Resultado && f.Resultado !== "ACEPTADO") row.getCell(COLS_M.findIndex(c => c[0] === "Resultado") + 1).font = { bold: true, color: { argb: "FFC62828" } };
+  });
+  encabezado(ws);
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: COLS_M.length } };
+  /* Reportes: una fila por reporte */
+  const wr = wb.addWorksheet("Reportes", { views: [{ state: "frozen", ySplit: 1 }], pageSetup: imprimir });
+  wr.columns = [["Reporte",11],["Fecha",12],["Cliente",22],["Proyecto",24],["Lugar",18],["Elaboró",18],["Aprobó",18],["Materiales",11],
+    ["Peso total (kg)",14],["Rechazados / condicionales",14],["Certificados",12],["Formato",10]].map(([header, width]) => ({ header, width }));
+  const porRep = new Map(); filas.forEach(f => { if (!porRep.has(f.ReporteID)) porRep.set(f.ReporteID, []); porRep.get(f.ReporteID).push(f); });
+  for (const [id, fs] of porRep) {
+    const f = fs[0], peso = fs.reduce((s, x) => s + (Number(x.PesoTotal_kg) || 0), 0);
+    const row = wr.addRow([id, aFecha(f.Fecha), f.Cliente, f.Proyecto, f.LugarRecepcion, f.Elaboro, f.Aprobo, fs.length,
+      peso ? Math.round(peso * 100) / 100 : "", fs.filter(x => x.Resultado && x.Resultado !== "ACEPTADO").length,
+      new Set(fs.map(x => x.Certificado).filter(Boolean)).size, enlace("Abrir", f.ReporteURL)]);
+    row.getCell(2).numFmt = "dd/mm/yyyy";
+    if (f.ReporteURL) row.getCell(12).font = { color: { argb: "FF0563C1" }, underline: true };
+  }
+  encabezado(wr);
+  wr.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 12 } };
+  /* Info */
+  const wi = wb.addWorksheet("Info"); wi.getColumn(1).width = 110;
+  [["EXCEL MAESTRO — RECEPCIÓN DE MATERIALES (QC-F-002)"], [`Actualizado: ${ahoraTxt()} · por ${usuario || ""}`],
+   [`${porRep.size} reportes · ${filas.length} materiales`], [""],
+   ["Este archivo lo genera la app de Recepción cada vez que se guarda un reporte. No lo edite: los cambios se pierden en la próxima actualización."],
+   ["Use los filtros de la fila 1 (por proyecto, proveedor, colada, resultado…). Los enlaces abren el certificado y el formato QC-F-002 en OneDrive."],
+   ["Si falta algún reporte, en la app pulse «Reconstruir Excel Maestro»: lo arma de nuevo leyendo todas las carpetas REP-####."]]
+    .forEach(r => wi.addRow(r));
+  wi.getCell("A1").font = { bold: true, size: 14, color: { argb: "FF1F4E78" } };
+  wb.views = [{ x: 0, y: 0, width: 21840, height: 13140, firstSheet: 0, activeTab: 0, visibility: "visible" }];
+  return new Blob([await wb.xlsx.writeBuffer()], { type: XLSX_MIME });
+}
+/* lee las filas de la hoja Materiales (o Detalle de un formato) por el título de cada columna */
+function leerFilas(ws, porTitulo) {
+  const titulos = [], filas = [];
+  ws.getRow(1).eachCell((c, n) => { titulos[n] = String(c.value ?? "").trim(); });
+  const clave = {}; titulos.forEach((t, n) => { const col = porTitulo ? COLS_M.find(c => c[1] === t) : null; clave[n] = porTitulo ? col && col[0] : t; });
+  ws.eachRow((row, r) => {
+    if (r === 1) return;
+    const f = {};
+    row.eachCell((c, n) => {
+      const k = clave[n]; if (!k) return;
+      let v = c.value;
+      if (v && typeof v === "object" && !(v instanceof Date)) {
+        if (v.hyperlink) { const tipo = (COLS_M.find(x => x[0] === k) || [])[3]; if (tipo && tipo.startsWith("link:")) f[tipo.slice(5)] = v.hyperlink; v = v.text; }
+        else if (v.richText) v = v.richText.map(x => x.text).join("");
+        else if ("result" in v) v = v.result;
+      }
+      f[k] = k === "ReporteURL" ? (f[k] || "") : deFecha(v);
+    });
+    if (f.ReporteID) { if (f.Item !== "" && f.Item != null) f.Item = Number(f.Item); filas.push(f); }
+  });
+  return filas;
+}
+async function bajarXlsx(item) {
+  const r = await fetch(item["@microsoft.graph.downloadUrl"]); if (!r.ok) throw new Error("No se pudo descargar " + item.name);
+  const wb = new ExcelJS.Workbook(); await wb.xlsx.load(await r.arrayBuffer()); return wb;
+}
+async function leerMaestro() {
+  let it;
+  try { it = await g(RUTA(MAESTRO())); } catch (e) { if (/^404/.test(e.message)) return { filas: [], eTag: null }; throw e; }
+  const ws = (await bajarXlsx(it)).getWorksheet("Materiales");
+  return { filas: ws ? leerFilas(ws, true) : [], eTag: it.eTag };
+}
+/* sube el Maestro sin pisar el de otro equipo: If-Match con la versión leída (412/409 = alguien lo cambió, se reintenta) */
+async function guardarMaestro(filas, eTag) {
+  const blob = await libroMaestro(filas, cuenta().username);
+  const it = blob.size < 4 * 1024 * 1024
+    ? await g(RUTA(MAESTRO()) + "/content" + (eTag ? "" : "?@microsoft.graph.conflictBehavior=fail"),
+        { method: "PUT", body: blob, headers: Object.assign({ "Content-Type": XLSX_MIME }, eTag ? { "If-Match": eTag } : {}) }, true)
+    : await subir(blob, CONFIG.carpetaRaiz, "Maestro_Recepciones.xlsx", "replace");
+  mostrarEnlaceMaestro(it.webUrl);
+  return it;
+}
+async function actualizarMaestro(nuevas) {
+  for (let intento = 0; ; intento++) {
+    const { filas, eTag } = await leerMaestro(), ids = new Set(nuevas.map(f => f.ReporteID));
+    try { return await guardarMaestro(filas.filter(f => !ids.has(f.ReporteID)).concat(nuevas), eTag); }
+    catch (e) { if (!/^(409|412)/.test(e.message) || intento >= 3) throw e; }
+  }
+}
+async function hijos(ruta) {
+  let url = `${RUTA(ruta)}/children?$top=999`, out = [];
+  while (url) { const r = await g(url); out = out.concat(r.value || []); url = r["@odata.nextLink"]; }
+  return out;
+}
+async function reconstruirMaestro() {
+  if (!navigator.onLine) { aviso("Se necesita internet para reconstruir el Maestro", false); return; }
+  if (!cuenta()) { aviso("Primero presione Ingresar", false); return; }
+  const btn = $("btnMaestro"); btn.disabled = true;
+  try {
+    aviso("Buscando reportes en OneDrive…", null, 0);
+    let carpetas = [];
+    try { carpetas = (await hijos(CONFIG.carpetaRaiz)).filter(x => x.folder && /^REP-\d+$/i.test(x.name)); }
+    catch (e) { if (!/^404/.test(e.message)) throw e; }
+    carpetas.sort((a, b) => a.name.localeCompare(b.name, "es", { numeric: true }));
+    const filas = [], sinFormato = [];
+    for (let i = 0; i < carpetas.length; i++) {
+      aviso(`Leyendo ${carpetas[i].name} (${i + 1} de ${carpetas.length})…`, null, 0);
+      const qc = (await hijos(`${CONFIG.carpetaRaiz}/${carpetas[i].name}`)).find(x => x.file && /^QC-F-002_.*\.xlsx$/i.test(x.name));
+      const det = qc && (await bajarXlsx(qc)).getWorksheet("Detalle");
+      if (!det) { sinFormato.push(carpetas[i].name); continue; }
+      leerFilas(det, false).forEach(f => filas.push({ ...f, ReporteURL: qc.webUrl }));
+    }
+    aviso("Guardando Excel Maestro…", null, 0);
+    let eTag = null; try { eTag = (await g(RUTA(MAESTRO()))).eTag; } catch (e) { if (!/^404/.test(e.message)) throw e; }
+    await guardarMaestro(filas, eTag);
+    aviso(`✔ Excel Maestro reconstruido: ${carpetas.length - sinFormato.length} reportes, ${filas.length} materiales` +
+      (sinFormato.length ? ` (sin formato: ${sinFormato.join(", ")})` : ""), true, 8000);
+  } catch (e) { aviso("✖ No se pudo reconstruir el Maestro: " + e.message, false, 9000); }
+  finally { btn.disabled = false; }
+}
+function mostrarEnlaceMaestro(url) {
+  if (!url) return;
+  try { localStorage.setItem("qc_maestro", url); } catch (e) {}
+  const a = $("lnkMaestro"); a.href = url; a.style.display = "inline-flex";
+}
+$("btnMaestro").onclick = reconstruirMaestro;
 
 /* ---------- copia local (mismo formato QC-F-002) ---------- */
 $("btnDescargar").onclick = async () => {
@@ -779,6 +957,7 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   pintarListas();
   cargarBorrador();
   marcarRed(); pintarPendientes();
+  try { mostrarEnlaceMaestro(localStorage.getItem("qc_maestro")); } catch (e) {}
   if (cuenta() && navigator.onLine) cargarListas().catch(e => aviso("No se pudieron leer las listas: " + e.message, false, 6000)).then(() => subirPendientes());
 })();
 </script>
