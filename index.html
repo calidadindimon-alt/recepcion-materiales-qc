@@ -246,6 +246,8 @@ function pintarListas() {
 }
 /* listas fijas del catálogo + las que se van agregando (sin repetir) */
 const BASE = window.CATALOGO_QC || { tuberia: [], catalogo: [], listas: {} };
+/* proveedores habituales (los nuevos se agregan solos al guardar) */
+BASE.listas.tblProveedores = [["FERREORIENTE"], ["CASAVAL"], ["IMPORINOX"], ...(BASE.listas.tblProveedores || [])];
 const unir = (a = [], b = []) => { const vistos = new Set(), out = [];
   for (const r of [...a, ...(Array.isArray(b) ? b : [])]) { const k = String(r[0]).trim().toLowerCase(); if (k && !vistos.has(k)) { vistos.add(k); out.push(r); } }
   return out; };
@@ -261,6 +263,7 @@ async function leerListasNube() {
 async function cargarListas() {
   const nube = await leerListasNube();
   for (const t of Object.keys(LISTAS_DL)) LISTAS[t] = unir(BASE.listas[t], nube[t]);
+  bajarColadas().catch(() => {});
   try { localStorage.setItem("qc_listas", JSON.stringify(LISTAS)); } catch (e) {}
   pintarListas();
   /* no redibujar mientras el usuario escribe en un material */
@@ -884,9 +887,37 @@ async function guardarMaestro(filas, eTag) {
 async function actualizarMaestro(nuevas) {
   for (let intento = 0; ; intento++) {
     const { filas, eTag } = await leerMaestro(), ids = new Set(nuevas.map(f => f.ReporteID));
-    try { return await guardarMaestro(filas.filter(f => !ids.has(f.ReporteID)).concat(nuevas), eTag); }
+    const todas = filas.filter(f => !ids.has(f.ReporteID)).concat(nuevas);
+    try { const it = await guardarMaestro(todas, eTag); await publicarColadas(todas); return it; }
     catch (e) { if (!/^(409|412)/.test(e.message) || intento >= 3) throw e; }
   }
+}
+/* ---------- trazabilidad: lista de coladas para INDIMON CAD ---------- */
+/* El CAD (isometrico/) la lee de este mismo equipo (localStorage "qc_coladas", mismo sitio web) o de
+   OneDrive /Recepciones/coladas.json. Recepción nunca escribe en los datos del CAD. */
+const CLAVE_COLADAS = "qc_coladas", ARCH_COLADAS = () => `${CONFIG.carpetaRaiz}/coladas.json`;
+function listaColadas(filas) {
+  const vistos = new Set(), lista = [];
+  [...filas].sort(ordenRep).forEach(f => {
+    const colada = String(f.Colada || "").trim();
+    if (!colada || /^n\/?a$/i.test(colada) || vistos.has(colada + "|" + f.ReporteID)) return;
+    vistos.add(colada + "|" + f.ReporteID);
+    lista.push({ colada, rep: f.ReporteID, fecha: f.FechaRecepcion || f.Fecha || "", proveedor: f.Proveedor || "", desc: f.Descripcion || "",
+      material: f.Material || "", norma: f.Norma || "", diametro: f.Diametro || "", espesor: f.Espesor_SCH || "",
+      cantidad: f.Cantidad ?? "", unidad: f.Unidad || "", resultado: f.Resultado || "", cert: f.Certificado || "", certUrl: f.CertificadoURL || "",
+      proyecto: f.Proyecto || "" });
+  });
+  return { fecha: ahoraTxt(), lista };
+}
+function guardarColadasLocal(d) { try { localStorage.setItem(CLAVE_COLADAS, JSON.stringify(d)); } catch (e) {} }
+async function publicarColadas(filas) {
+  const d = listaColadas(filas); guardarColadasLocal(d);
+  await subir(new Blob([JSON.stringify(d)], { type: "application/json" }), CONFIG.carpetaRaiz, "coladas.json", "replace");
+}
+/* al abrir con sesión: trae la lista de OneDrive (puede tener coladas guardadas desde otros equipos) */
+async function bajarColadas() {
+  let it; try { it = await g(RUTA(ARCH_COLADAS())); } catch (e) { if (/^404/.test(e.message)) return; throw e; }
+  const r = await fetch(it["@microsoft.graph.downloadUrl"]); if (r.ok) guardarColadasLocal(await r.json());
 }
 async function hijos(ruta) {
   let url = `${RUTA(ruta)}/children?$top=999`, out = [];
@@ -914,6 +945,7 @@ async function reconstruirMaestro() {
     aviso("Guardando Excel Maestro…", null, 0);
     let eTag = null; try { eTag = (await g(RUTA(MAESTRO()))).eTag; } catch (e) { if (!/^404/.test(e.message)) throw e; }
     await guardarMaestro(filas, eTag);
+    await publicarColadas(filas);
     aviso(`✔ Excel Maestro reconstruido: ${carpetas.length - sinFormato.length} reportes, ${filas.length} materiales` +
       (sinFormato.length ? ` (sin formato: ${sinFormato.join(", ")})` : ""), true, 8000);
   } catch (e) { aviso("✖ No se pudo reconstruir el Maestro: " + e.message, false, 9000); }

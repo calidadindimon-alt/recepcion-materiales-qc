@@ -34,6 +34,7 @@ Funciona con dedo, lápiz o ratón, en Android, iPhone/iPad y PC, también sin i
 - **Zoom**: pellizco con dos dedos, Ctrl+rueda o botones. *Lienzo* acerca al área de dibujo.
 - **BOM**: se recalcula solo. La cantidad se puede ajustar a mano (deje vacío para volver al cálculo). *Añadir consumible* agrega soldadura, tintas, discos, etc.
 - **Exportar**: *Excel* (.xlsx con formato: rótulo, BOM, totales de ML y juntas, y hoja de componentes con marcas W#/T#) y *PDF A3* (imprimir → Guardar como PDF, A3 horizontal).
+- **Trazabilidad (coladas de Recepción)**: *4. Calidad y avance → Coladas de Recepción* muestra las coladas guardadas en la app de Recepción de Materiales (QC-F-002, raíz de este sitio). En el mismo equipo se ven sin internet; con *Ingresar* (misma cuenta y registro de Azure que Recepción) se traen de OneDrive `/Recepciones/coladas.json`. Toque un tubo o accesorio y elija la **Colada** (salen primero las de su diámetro); *Usar esta colada en los iguales de la línea* la copia. La colada sale en el QC-F-004 (*Elementos para soldar*: «· COL. …») y en la hoja *Componentes* (colada, reporte de recepción y enlace al certificado). Es un dato opcional: los planos sin colada no cambian. En Azure debe estar registrada la URI de redirección `…/recepcion-materiales-qc/isometrico/` (SPA).
 - **Guardar**: el borrador se guarda solo en el equipo; *Guardar proyecto (.json)* para compartir o archivar.
 
 Atajos PC: Ctrl+Z / Ctrl+Y, Supr, Esc, R (rotar), T (tubería), V (tocar), H (mover), +/−, 0 (ajustar).
@@ -41,5 +42,6 @@ Atajos PC: Ctrl+Z / Ctrl+Y, Supr, Esc, R (rotar), T (tubería), V (tocar), H (mo
 ## Archivos
 
 - `index.html` – aplicación completa (HTML + CSS + JS, sin dependencias de CDN).
+- `vendor/msal-browser.min.js` – inicio de sesión de Microsoft (MSAL 2.38.3), solo se carga al usar *Coladas de Recepción*.
 - `vendor/xlsx.bundle.js` – xlsx-js-style 1.2.0 (SheetJS 0.18.5 con estilos, Apache-2.0) para exportar .xlsx con formato sin internet.
 - `manifest.webmanifest`, `sw.js`, `icons/` – instalación y funcionamiento sin conexión. Al publicar cambios suba `VERSION` en `sw.js`.
