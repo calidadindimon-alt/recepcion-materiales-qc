@@ -34,6 +34,12 @@ button:disabled{opacity:.5}
 .mat-h button{min-height:36px;padding:6px 12px}
 .cat{grid-column:1/-1;background:#eaf2fb;border-radius:8px;padding:10px;display:grid;gap:8px;grid-template-columns:minmax(150px,220px) 1fr}
 .cat .small{grid-column:1/-1}
+.res{max-height:280px;overflow:auto;border:1px solid var(--borde);border-radius:8px;background:#fff;margin-top:4px}
+.res:empty{display:none}
+.opc{display:block;width:100%;text-align:left;min-height:40px;padding:8px 10px;background:#fff;border:0;border-bottom:1px solid #e6ebf1;border-radius:0;font-weight:400;font-size:15px}
+.opc:hover,.opc:focus{background:#eaf2fb}
+.opc small{color:#666}
+.mini{min-height:30px;padding:3px 10px;font-size:13px;margin-left:6px}
 @media(max-width:600px){.cat{grid-template-columns:1fr}}
 .peso{font-weight:700;color:var(--azul)}
 .firmas{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
@@ -90,7 +96,6 @@ button:disabled{opacity:.5}
 <datalist id="lClientes"></datalist><datalist id="lProyectos"></datalist><datalist id="lLugares"></datalist>
 <datalist id="lProveedores"></datalist><datalist id="lCategorias"></datalist><datalist id="lMateriales"></datalist>
 <datalist id="lNormas"></datalist><datalist id="lSCH"></datalist><datalist id="lUnidades"></datalist>
-<div id="dlCatalogo"></div>
 <div id="estado"></div>
 
 <script>
@@ -180,13 +185,30 @@ $("btnLogin").onclick = () => {
 /* ---------- listas (OneDrive: /Recepciones/listas.json) y catálogo ---------- */
 function armarCatalogo() {
   /* tblTuberia: Tipo, NPS, OD_mm, Cedula, Espesor_mm, Peso_CS, Peso_SS, Clave */
-  CAT = TUBERIA.filter(r => r[7]).map(r => ({ k: r[7], cat: /A270/.test(r[0]) ? "Tubería sanitaria" : "Tubería", src: "T", r }));
+  CAT = TUBERIA.filter(r => r[7]).map(r => ({ k: r[7], cat: /A270/.test(r[0]) ? "Tubería sanitaria" : "Tubería", src: "T", r,
+    t: palabras(`${r[0]} tubo tuberia ${r[1]} sch ${r[3]} ${r[2]} x ${r[4]} mm ${r[7]}`) }));
   /* tblCatalogo: Categoria, Tipo, Designacion, A, B, e, Calc, NormaCS, NormaSS, Rating, PesoTabla, Area, PesoCS, PesoSS, Unidad, Clave */
-  CATALOGO.filter(r => r[15]).forEach(r => CAT.push({ k: r[15], cat: r[0], src: "C", r }));
+  CATALOGO.filter(r => r[15]).forEach(r => CAT.push({ k: r[15], cat: r[0], src: "C", r,
+    t: palabras(`${r[0]} ${r[1]} ${r[2]} ${r[5]} ${r[9]} ${r[15]}`) }));
   CATS = [...new Set(CAT.map(x => x.cat))];
-  const opt = arr => arr.map(x => `<option value="${esc(x.k)}"></option>`).join("");
-  $("dlCatalogo").innerHTML = `<datalist id="dlc_all">${opt(CAT)}</datalist>` +
-    CATS.map((c, i) => `<datalist id="dlc_${i}">${opt(CAT.filter(x => x.cat === c))}</datalist>`).join("");
+}
+/* búsqueda por palabras en cualquier orden: 'tubo sch 40 6"' encuentra '6" · 40 / STD / 40S · 168,3 x 7,11 mm' */
+function normalizar(s) {
+  return String(s ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[“”″]/g, '"').replace(/''/g, '"').replace(/(\d),(\d)/g, "$1.$2").replace(/\b(sch|ced|cal)\.?(?=\d)/g, "$1 ");
+}
+const IGNORAR = new Set(["/", "-", "x", "sch", "cedula", "ced", "de", "del", "en", "y", "a", "mm", "·"]);
+const palabras = s => normalizar(s).split(/[\s·;()]+/).filter(w => w && !IGNORAR.has(w));
+function buscarCatalogo(q, cat) {
+  const qs = palabras(q); if (!qs.length) return [];
+  const out = [];
+  CAT.forEach((x, i) => {
+    if (cat && x.cat !== cat) return;
+    let sc = 0;
+    for (const t of qs) { const exacta = x.t.includes(t); if (!exacta && !x.t.some(w => w.startsWith(t))) return; sc += exacta ? 2 : 1; }
+    out.push([sc, i]);
+  });
+  return out.sort((a, b) => b[0] - a[0] || a[1] - b[1]).map(([, i]) => i);
 }
 function pintarListas() {
   for (const [t, dl] of Object.entries(LISTAS_DL))
@@ -230,7 +252,8 @@ function aplicarCatalogo(m) {
     m.Diametro = `${r[1]} (OD ${fmt(r[2], 1)} mm)`;
     m.Espesor_SCH = `${r[3]} · ${fmt(r[4])} mm`;
     m.Peso_kg_m = fix3(inox ? r[6] : r[5]);
-    m.Unidad = "tramo"; if (!m.Dimension_mm) m.Dimension_mm = CONFIG.largoTramo_mm;
+    m.Unidad = "tramo"; if (!m.Dimension_mm) m.Dimension_mm = m._dimCat = CONFIG.largoTramo_mm;
+    m.Norma = m._normaCat = /A270/.test(r[0]) ? "ASTM A270" : inox ? "ASTM A312 / ASME B36.19M" : "ASTM A106 / A53 / ASME B36.10M";
     if (!m.Descripcion || m._auto) { m.Descripcion = `Tubo ${r[1]} ${r[3]} ${m.Material || ""}`.trim(); m._auto = true; }
     m._hint = r[0];
     return true;
@@ -238,7 +261,7 @@ function aplicarCatalogo(m) {
   const [cat, tipo, desig, , , esp, calc, nCS, nSS, rating, , , pCS, pSS] = r;
   m.Categoria = cat;
   let norma = inox ? nSS : nCS; if (!norma || norma === "-" || norma === "N/A") norma = inox ? nCS : nSS;
-  if (norma && norma !== "-" && norma !== "N/A") m.Norma = norma;
+  if (norma && norma !== "-" && norma !== "N/A") m.Norma = m._normaCat = norma;
   if (!m.Descripcion || m._auto) { m.Descripcion = `${tipo} ${desig} ${m.Material || ""}`.trim(); m._auto = true; }
   m.Diametro = desig;
   m.Espesor_SCH = esp !== "" && esp != null ? `${fmt(esp)} mm` : "";
@@ -246,15 +269,33 @@ function aplicarCatalogo(m) {
   if (calc === "LAM") {
     m.Peso_kg_m = p === "" ? "" : fix3(Number(p) * CONFIG.anchoLamina_m);
     m.Diametro = `${desig} · ancho ${Math.round(CONFIG.anchoLamina_m * 1000)} mm`;
-    m.Unidad = "lámina"; m.Dimension_mm = m.Dimension_mm || CONFIG.largoLamina_mm;
+    m.Unidad = "lámina"; if (!m.Dimension_mm) m.Dimension_mm = m._dimCat = CONFIG.largoLamina_mm;
   } else if (calc) {
     m.Peso_kg_m = fix3(p);
-    m.Unidad = "tramo"; m.Dimension_mm = m.Dimension_mm || CONFIG.largoTramo_mm;
+    m.Unidad = "tramo"; if (!m.Dimension_mm) m.Dimension_mm = m._dimCat = CONFIG.largoTramo_mm;
   } else {
     m.Peso_kg_m = ""; m.Unidad = "und";
   }
   m._hint = [rating, calc === "LAM" ? `Peso lámina = ${fmt(p)} kg/m² × ancho` : ""].filter(Boolean).join(" · ");
   return true;
+}
+
+/* quitar lo que puso el catálogo (si se eligió un artículo equivocado o se borra la búsqueda) */
+function quitarCatalogo(m) {
+  ["Categoria", "Diametro", "Espesor_SCH", "Peso_kg_m"].forEach(k => m[k] = "");
+  if (m._normaCat && m.Norma === m._normaCat) m.Norma = "";
+  if (m._auto) { m.Descripcion = ""; m._auto = false; }
+  if (m._dimCat && String(m.Dimension_mm) === String(m._dimCat)) m.Dimension_mm = "";
+  m.Unidad = "und"; m._ref = m._hint = m._normaCat = m._dimCat = "";
+}
+function pintarResultados(box, m) {
+  const res = box.querySelector(".res"); if (!res) return;
+  if (!String(m._q || "").trim()) { res.innerHTML = ""; return; }
+  const idx = buscarCatalogo(m._q, m._catf), MAX = 40;
+  res.innerHTML = idx.length
+    ? idx.slice(0, MAX).map(i => `<button type="button" class="opc" data-pick="${i}">${esc(CAT[i].k)} <small>· ${esc(CAT[i].cat)}${CAT[i].src === "C" ? " · " + esc(CAT[i].r[1]) : ""}</small></button>`).join("")
+      + (idx.length > MAX ? `<div class="small" style="padding:6px 10px">… y ${idx.length - MAX} más: escriba más palabras para afinar</div>` : "")
+    : '<div class="small" style="padding:8px 10px">Sin resultados. Pruebe con menos palabras (ej. «6" 40») o cambie el filtro.</div>';
 }
 
 /* ---------- materiales ---------- */
@@ -279,7 +320,6 @@ function totalReporte() {
 }
 function render() {
   $("materiales").innerHTML = mats.map((m, i) => {
-    const ci = CATS.indexOf(m._catf), lista = ci >= 0 ? "dlc_" + ci : "dlc_all";
     return `
    <div class="mat" data-u="${m.u}">
     <div class="mat-h"><span>Material ${i + 1}</span><button class="bd" data-del="${m.u}">Quitar</button></div>
@@ -288,8 +328,11 @@ function render() {
       <div><label>🔎 Filtrar catálogo</label>
        <select data-catf="1"><option value="">Todas las categorías</option>${CATS.map(c => `<option${c === m._catf ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></div>
       <div><label>Buscar en catálogo (tubería, accesorios, bridas, vigas, perfiles, láminas…)</label>
-       <input data-ref="1" list="${lista}" value="${esc(m._ref)}" placeholder='Ej: 2" · 40   ·   IPE 200   ·   Codo 90°   ·   Cal. 18' autocomplete="off"></div>
-      <div class="small">${m._hint ? "ℹ️ " + esc(m._hint) : "Elija primero el Material (inox o carbono) para que tome la norma y el peso correctos."}</div>
+       <input data-buscar="1" value="${esc(m._q || "")}" placeholder='Ej: tubo 6" 40  ·  IPE 200  ·  codo 90 2"  ·  lámina 1/4' autocomplete="off" enterkeyhint="search">
+       <div class="res"></div></div>
+      <div class="small">${m._ref
+        ? `✔ Del catálogo: <b>${esc(m._ref)}</b><button type="button" class="bs mini" data-quitarcat="1">Quitar del catálogo</button>${m._hint ? "<br>ℹ️ " + esc(m._hint) : ""}`
+        : "Elija primero el Material (inox o carbono), luego escriba en el buscador y toque el artículo de la lista."}</div>
      </div>
      ${CAMPOS.map(c => campo(m, ...c)).join("")}
      <div><label>Certificado de calidad (PDF o foto)</label>
@@ -304,11 +347,7 @@ function render() {
 $("materiales").addEventListener("input", e => {
   const box = e.target.closest(".mat"); if (!box) return;
   const m = mats.find(x => x.u === box.dataset.u);
-  if (e.target.dataset.ref) {
-    m._ref = e.target.value;
-    if (aplicarCatalogo(m)) { render(); aviso("Datos del catálogo aplicados", true, 1500); }
-    guardarBorrador(); return;
-  }
+  if (e.target.dataset.buscar) { m._q = e.target.value; pintarResultados(box, m); return; }
   const k = e.target.dataset.k; if (!k) return;
   m[k] = e.target.value; e.target.classList.remove("err");
   if (k === "Descripcion") m._auto = false;
@@ -317,13 +356,22 @@ $("materiales").addEventListener("input", e => {
 $("materiales").addEventListener("change", e => {
   const box = e.target.closest(".mat"); if (!box) return;
   const m = mats.find(x => x.u === box.dataset.u);
-  if (e.target.dataset.catf) { m._catf = e.target.value; render(); guardarBorrador(); return; }
+  if (e.target.dataset.catf) { m._catf = e.target.value; render(); guardarBorrador();
+    const b = document.querySelector(`.mat[data-u="${m.u}"]`); b && pintarResultados(b, m); return; }
   if (e.target.dataset.k === "Material" && m._ref && aplicarCatalogo(m)) { render(); guardarBorrador(); return; }
   const u = e.target.dataset.file; if (!u) return;
   const f = e.target.files[0]; if (!f) return;
   archivos[u] = f; m.certNombre = f.name; render(); guardarBorrador();
 });
 $("materiales").addEventListener("click", e => {
+  const box = e.target.closest(".mat"), m = box && mats.find(x => x.u === box.dataset.u);
+  const pick = e.target.closest("[data-pick]");
+  if (pick && m) {
+    if (m._ref) quitarCatalogo(m);          // cambiar de artículo: no dejar datos del anterior
+    m._ref = CAT[+pick.dataset.pick].k; m._q = "";
+    aplicarCatalogo(m); render(); guardarBorrador(); aviso("Datos del catálogo aplicados", true, 1500); return;
+  }
+  if (e.target.dataset.quitarcat && m) { quitarCatalogo(m); render(); guardarBorrador(); return; }
   const u = e.target.dataset.del; if (!u) return;
   if (confirm("¿Quitar este material?")) { mats = mats.filter(x => x.u !== u); delete archivos[u]; render(); guardarBorrador(); }
 });
