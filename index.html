@@ -473,6 +473,9 @@ async function libroQC(id, h, cert = {}, usuario = "", guardado = "") {
   if (typeof ExcelJS === "undefined") throw new Error("Librería Excel no disponible");
   const wb = new ExcelJS.Workbook(); await wb.xlsx.load(await plantilla());
   const ws = wb.worksheets[0], extra = Math.max(0, mats.length - FILAS);
+  /* ExcelJS escribe <outlinePr> después de <pageSetUpPr> y Excel rechaza la hoja: la hoja no usa esquemas */
+  delete ws.properties.outlineProperties;
+  wb.views = [{ x: 0, y: 0, width: 21840, height: 13140, firstSheet: 0, activeTab: 0, visibility: "visible" }];
   if (extra) insertarFilas(ws, FILA1 + FILAS - 1, extra);
   ws.getCell("A6").value = "CLIENTE: " + h.Cliente;
   ws.getCell("D6").value = "PROYECTO: " + h.Proyecto;
@@ -504,10 +507,19 @@ async function libroQC(id, h, cert = {}, usuario = "", guardado = "") {
   for (const [k] of FIRMAS) {
     if (!firmas[k]) continue;
     const [c0, c1] = COL_FIRMA[k];
-    let anchoPx = 0; for (let c = c0 + 1; c <= c1; c++) anchoPx += (ws.getColumn(c).width || 9) * 7;
-    const [w, hh] = await tamImagen(firmas[k]), alto = 72, ancho = Math.min(anchoPx - 12, alto * w / hh);
+    /* ancla entre dos esquinas (twoCellAnchor) en medidas exactas (EMU): con tamaño fijo ExcelJS escribe un atributo
+       que el esquema de Excel no admite, y con fracciones de celda calcula mal el desplazamiento */
+    const EMU = 9525, colPx = c => Math.trunc((ws.getColumn(c + 1).width || 9) * 7 + 5);
+    let anchoPx = 0; for (let c = c0; c < c1; c++) anchoPx += colPx(c);
+    const [w, hh] = await tamImagen(firmas[k]), filaPx = Math.round((ws.getRow(fF).height || 60) * 4 / 3);
+    const alto = filaPx - 8, ancho = Math.round(Math.min(anchoPx - 16, alto * w / hh));
+    let col = c0, off = 8 + ancho;              // borde derecho: avanzar columnas hasta donde termina la firma
+    while (off > colPx(col) && col < c1 - 1) { off -= colPx(col); col++; }
     const img = wb.addImage({ base64: firmas[k], extension: "png" });
-    ws.addImage(img, { tl: { col: c0 + 0.05, row: fF - 1 + 0.05 }, ext: { width: ancho, height: alto }, editAs: "oneCell" });
+    ws.addImage(img, {
+      tl: { nativeCol: c0, nativeColOff: 8 * EMU, nativeRow: fF - 1, nativeRowOff: 4 * EMU },
+      br: { nativeCol: col, nativeColOff: Math.min(off, colPx(col)) * EMU, nativeRow: fF - 1, nativeRowOff: (4 + alto) * EMU },
+      editAs: "oneCell" });
   }
   /* hoja de datos (una fila por material) para el Excel Maestro */
   const det = wb.addWorksheet("Detalle");
