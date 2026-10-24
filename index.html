@@ -8,6 +8,9 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Recepción QC">
 <title>Recepción de Materiales · QC-F-002</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <script src="vendor/msal-browser.min.js"></script>
 <script src="vendor/exceljs.min.js"></script>
 <script src="catalogo.js"></script>
@@ -32,6 +35,13 @@ button:disabled{opacity:.5}
 .mat{border:1px solid var(--borde);border-left:5px solid var(--azul);border-radius:8px;padding:12px;margin-bottom:12px;background:#fafbfd}
 .mat-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-weight:700;color:var(--azul)}
 .mat-h button{min-height:36px;padding:6px 12px}
+.mat-h .acc{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.mat.cerrado{padding:6px 10px;margin-bottom:8px;cursor:pointer}
+.mat.cerrado .mat-h{margin:0;gap:8px}
+.mat.falta{border-left-color:#e0a800}
+.resumen{flex:1;text-align:left;background:none;min-height:40px;padding:6px 2px;font-weight:400;color:#222;font-size:15px}
+.resumen b{color:var(--azul)}
+.aviso-f{color:#a15c00;font-size:.85rem;white-space:nowrap}
 .cat{grid-column:1/-1;background:#eaf2fb;border-radius:8px;padding:10px;display:grid;gap:8px;grid-template-columns:minmax(150px,220px) 1fr}
 .cat .small{grid-column:1/-1}
 .res{max-height:280px;overflow:auto;border:1px solid var(--borde);border-radius:8px;background:#fff;margin-top:4px}
@@ -50,13 +60,16 @@ button:disabled{opacity:.5}
 .pill{font-size:.8rem;background:#ffffff26;padding:5px 10px;border-radius:12px}
 .small{font-size:.8rem;color:#666;margin-top:4px}
 .err{border-color:var(--err)!important;background:#fff6f6}
+.pend{margin-top:12px;padding:10px 12px;background:#fff8e1;border:1px solid #f0c36d;border-radius:8px;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.tarjeta{position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:11;background:#fff;border:1px solid var(--borde);border-left:5px solid var(--azul);
+ border-radius:10px;box-shadow:0 6px 24px #0003;padding:12px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;max-width:92%}
 @media(max-width:600px){.acciones button{flex:1 1 100%}}
 </style>
 </head>
 <body>
 <header>
  <h1>Recepción de Materiales · QC-F-002</h1>
- <div><span id="usuario" class="pill">Sin sesión</span> <button id="btnLogin" class="bs">Ingresar</button></div>
+ <div><span id="red" class="pill" style="display:none;background:#c62828">Sin internet</span> <span id="usuario" class="pill">Sin sesión</span> <button id="btnLogin" class="bs">Ingresar</button></div>
 </header>
 <main>
 <section>
@@ -90,13 +103,17 @@ button:disabled{opacity:.5}
   <button class="bs" id="btnDescargar">Descargar QC-F-002 (.xlsx)</button>
   <button class="bd" id="btnNuevo">Nuevo reporte</button>
  </div>
- <p class="small">El borrador (incluidas las firmas) se guarda solo en este equipo. Los certificados adjuntos se deben volver a adjuntar si cierra la app antes de guardar.</p>
+ <div id="pendientes" class="pend" style="display:none"><span></span><button class="bp" id="btnPendientes">Subir ahora</button></div>
+ <p class="small">El borrador (incluidas las firmas) se guarda solo en este equipo. Los certificados adjuntos se deben volver a adjuntar si cierra la app antes de guardar.
+  Sin internet, «Guardar» deja el reporte completo (con certificados) en este equipo y lo sube solo cuando vuelva la señal.</p>
 </section>
 </main>
 <datalist id="lClientes"></datalist><datalist id="lProyectos"></datalist><datalist id="lLugares"></datalist>
 <datalist id="lProveedores"></datalist><datalist id="lCategorias"></datalist><datalist id="lMateriales"></datalist>
 <datalist id="lNormas"></datalist><datalist id="lSCH"></datalist><datalist id="lUnidades"></datalist>
 <div id="estado"></div>
+<div id="version" class="tarjeta" style="display:none"><span>Hay una versión nueva de la app.</span>
+ <button class="bp" onclick="location.reload()">Actualizar</button><button class="bs" onclick="this.parentNode.style.display='none'">Después</button></div>
 
 <script>
 /* ======== CONFIGURACIÓN (cambiar) ======== */
@@ -163,7 +180,11 @@ const cuenta = () => app ? app.getAllAccounts()[0] : null;
 async function token() {
   const acc = cuenta(); if (!acc) throw new Error("Primero presione Ingresar");
   try { return (await app.acquireTokenSilent({ scopes: SCOPES, account: acc })).accessToken; }
-  catch (e) { await app.acquireTokenRedirect({ scopes: SCOPES }); throw new Error("Renovando sesión, vuelva a intentar"); }
+  catch (e) {
+    /* sin señal el error es de red: no mandar a la página de Microsoft (no cargaría) */
+    if (!navigator.onLine || /network|fetch|timed_out|endpoints_resolution/i.test(e.errorCode || e.message || "")) throw new TypeError("network: sin conexión");
+    guardarBorrador(); await app.acquireTokenRedirect({ scopes: SCOPES }); throw new Error("Renovando sesión, vuelva a intentar");
+  }
 }
 async function g(url, opt = {}, binario) {
   const t = await token();
@@ -299,12 +320,29 @@ function pintarResultados(box, m) {
 }
 
 /* ---------- materiales ---------- */
+/* Solo se despliega el material que se está editando; los demás quedan en una línea de resumen */
+let abierto = null;
+const incompleto = m => !String(m.Descripcion || "").trim() || !(num(m.Cantidad) > 0) || !String(m.Unidad || "").trim();
+const resumenMat = m => [m.Descripcion || "(sin descripción)", m.Cantidad ? `${m.Cantidad} ${m.Unidad || ""}`.trim() : "",
+  m.Colada ? "colada " + m.Colada : "", m.Resultado && m.Resultado !== "ACEPTADO" ? m.Resultado : ""].filter(Boolean).join(" · ");
+function verMaterial(u) {
+  const b = document.querySelector(`.mat[data-u="${u}"]`);
+  b && b.scrollIntoView({ behavior: "smooth", block: "start" });
+}
 function nuevoMat() {
   const ant = mats[mats.length - 1] || {};
-  mats.push({ u: uid(), FechaRecepcion: ant.FechaRecepcion || $("Fecha").value || "", Proveedor: ant.Proveedor || "",
+  const m = { u: uid(), FechaRecepcion: ant.FechaRecepcion || $("Fecha").value || "", Proveedor: ant.Proveedor || "",
     Requerimiento: ant.Requerimiento || $("Proyecto").value || "", Material: ant.Material || "", Unidad: "und",
-    Resultado: "ACEPTADO", _catf: ant._catf || "" });
-  render(); guardarBorrador();
+    Resultado: "ACEPTADO", _catf: ant._catf || "" };
+  mats.push(m); abierto = m.u;
+  render(); guardarBorrador(); verMaterial(m.u);
+}
+/* copia del material con otra colada / certificado (para recibir varios artículos parecidos) */
+function duplicarMat(m) {
+  const c = JSON.parse(JSON.stringify(m));
+  Object.assign(c, { u: uid(), Colada: "", MTR_No: "", certNombre: "", _q: "" });
+  mats.splice(mats.indexOf(m) + 1, 0, c); abierto = c.u;
+  render(); guardarBorrador(); verMaterial(c.u); aviso("Material duplicado: cambie la colada y lo que sea distinto", true, 2500);
 }
 function campo(m, k, l, t, dl) {
   const v = esc(m[k]);
@@ -320,9 +358,16 @@ function totalReporte() {
 }
 function render() {
   $("materiales").innerHTML = mats.map((m, i) => {
+    if (m.u !== abierto) return `
+   <div class="mat cerrado${incompleto(m) ? " falta" : ""}" data-u="${m.u}">
+    <div class="mat-h"><button type="button" class="resumen" data-abrir="1"><b>${i + 1}.</b> ${esc(resumenMat(m))}${archivos[m.u] ? " 📎" : ""}
+      ${incompleto(m) ? '<span class="aviso-f">⚠ faltan datos</span>' : ""}</button>
+     <span class="acc"><button type="button" class="bs mini" data-dup="1">Duplicar</button><button type="button" class="bd mini" data-del="${m.u}">Quitar</button></span></div>
+   </div>`;
     return `
    <div class="mat" data-u="${m.u}">
-    <div class="mat-h"><span>Material ${i + 1}</span><button class="bd" data-del="${m.u}">Quitar</button></div>
+    <div class="mat-h"><span>Material ${i + 1}</span>
+     <span class="acc"><button type="button" class="bok" data-cerrar="1">Listo ✔</button><button type="button" class="bs" data-dup="1">Duplicar</button><button type="button" class="bd" data-del="${m.u}">Quitar</button></span></div>
     <div class="grid">
      <div class="cat">
       <div><label>🔎 Filtrar catálogo</label>
@@ -372,6 +417,9 @@ $("materiales").addEventListener("click", e => {
     aplicarCatalogo(m); render(); guardarBorrador(); aviso("Datos del catálogo aplicados", true, 1500); return;
   }
   if (e.target.dataset.quitarcat && m) { quitarCatalogo(m); render(); guardarBorrador(); return; }
+  if (e.target.closest("[data-dup]") && m) { duplicarMat(m); return; }
+  if (e.target.closest("[data-cerrar]") && m) { abierto = null; render(); verMaterial(m.u); return; }
+  if (m && !e.target.dataset.del && box.classList.contains("cerrado")) { abierto = m.u; render(); verMaterial(m.u); return; }
   const u = e.target.dataset.del; if (!u) return;
   if (confirm("¿Quitar este material?")) { mats = mats.filter(x => x.u !== u); delete archivos[u]; render(); guardarBorrador(); }
 });
@@ -412,14 +460,15 @@ const dataUrlABlob = d => { const [h, b] = d.split(","), bin = atob(b), a = new 
 /* ---------- borrador local ---------- */
 const leerHdr = () => Object.fromEntries(HDR.map(k => [k, $(k).value.trim()]));
 function guardarBorrador() {
-  try { localStorage.setItem("qc_borrador", JSON.stringify({ h: leerHdr(), id: $("ReporteID").value, mats, firmas })); }
+  try { localStorage.setItem("qc_borrador", JSON.stringify({ h: leerHdr(), id: $("ReporteID").value, mats, firmas, pend: pendForm })); }
   catch (e) { aviso("Memoria del equipo llena: guarde el reporte pronto", false); }
 }
 function cargarBorrador() {
   let b = null;
   try { b = JSON.parse(localStorage.getItem("qc_borrador") || "null"); } catch (e) {}
-  if (b) { HDR.forEach(k => $(k).value = (b.h || {})[k] || ""); $("ReporteID").value = b.id || ""; mats = b.mats || []; firmas = b.firmas || {}; }
+  if (b) { HDR.forEach(k => $(k).value = (b.h || {})[k] || ""); $("ReporteID").value = b.id || ""; mats = b.mats || []; firmas = b.firmas || {}; pendForm = b.pend ?? null; }
   if (!$("Fecha").value) $("Fecha").value = new Date().toISOString().slice(0, 10);
+  abierto = mats.length ? mats[mats.length - 1].u : null;
   if (!mats.length) nuevoMat(); else render();
   crearFirmas();
 }
@@ -427,7 +476,7 @@ HDR.forEach(k => $(k).addEventListener("input", guardarBorrador));
 $("btnNuevo").onclick = () => {
   if (!confirm("¿Empezar un reporte nuevo? Se borrará el borrador actual.")) return;
   localStorage.removeItem("qc_borrador"); const keep = { Elaboro: $("Elaboro").value, CargoElaboro: $("CargoElaboro").value };
-  HDR.forEach(k => $(k).value = keep[k] || ""); $("ReporteID").value = ""; mats = []; archivos = {}; firmas = {}; cargarBorrador();
+  HDR.forEach(k => $(k).value = keep[k] || ""); $("ReporteID").value = ""; mats = []; archivos = {}; firmas = {}; pendForm = null; cargarBorrador();
 };
 
 /* ---------- validación ---------- */
@@ -435,12 +484,16 @@ function validar() {
   let ok = true; document.querySelectorAll(".err").forEach(x => x.classList.remove("err"));
   ["Fecha","Cliente","Proyecto","LugarRecepcion","Elaboro"].forEach(k => { if (!$(k).value.trim()) { $(k).classList.add("err"); ok = false; } });
   if (!mats.length) { aviso("Agregue al menos un material", false); return false; }
-  mats.forEach(m => ["Descripcion","Cantidad","Unidad"].forEach(k => {
-    const v = String(m[k] ?? "").trim();
-    if (v === "" || (k === "Cantidad" && !(num(v) > 0))) { ok = false;
-      const el = document.querySelector(`.mat[data-u="${m.u}"] [data-k="${k}"]`); el && el.classList.add("err"); }
-  }));
-  if (!ok) { aviso("Complete los campos marcados en rojo", false); return false; }
+  /* abrir el primer material incompleto para marcarle los campos */
+  const malo = mats.find(incompleto);
+  if (malo) {
+    ok = false; abierto = malo.u; render(); verMaterial(malo.u);
+    ["Descripcion","Cantidad","Unidad"].forEach(k => {
+      const v = String(malo[k] ?? "").trim();
+      if (v === "" || (k === "Cantidad" && !(num(v) > 0))) { const el = document.querySelector(`.mat[data-u="${malo.u}"] [data-k="${k}"]`); el && el.classList.add("err"); }
+    });
+  }
+  if (!ok) { aviso(malo ? `Complete los campos en rojo (material ${mats.indexOf(malo) + 1})` : "Complete los campos marcados en rojo", false); return false; }
   if (!firmas.FirmaElaboro && !confirm("El reporte no tiene la firma de quien elaboró. ¿Guardar de todas formas?")) return false;
   return true;
 }
@@ -481,7 +534,7 @@ async function subir(file, ruta, nombreBase, siExiste = "rename") {
   }
   return item;
 }
-async function actualizarListas(h) {
+async function actualizarListas({ h, mats }) {
   const nube = await leerListasNube(), nuevo = {}; let cambio = false;
   for (const t of Object.keys(LISTAS_DL)) nuevo[t] = Array.isArray(nube[t]) ? nube[t] : [];
   const agregar = (t, fila) => { const v = String(fila[0] || "").trim();
@@ -517,7 +570,8 @@ function insertarFilas(ws, despuesDe, n) {
   ws.duplicateRow(despuesDe, n, true);
   bajan.forEach(([t, l, bo, ri]) => ws.mergeCells(t + n, l, bo + n, ri));
 }
-async function libroQC(id, h, cert = {}, usuario = "", guardado = "") {
+async function libroQC(id, d, cert = {}, usuario = "", guardado = "") {
+  const { h, mats, firmas, archivos } = d;
   if (typeof ExcelJS === "undefined") throw new Error("Librería Excel no disponible");
   const wb = new ExcelJS.Workbook(); await wb.xlsx.load(await plantilla());
   const ws = wb.worksheets[0], extra = Math.max(0, mats.length - FILAS);
@@ -582,52 +636,137 @@ async function libroQC(id, h, cert = {}, usuario = "", guardado = "") {
 }
 const nombreReporte = (id, h) => `QC-F-002_${id}_${h.Fecha || "sin-fecha"}.xlsx`;
 
-$("btnGuardar").onclick = async () => {
-  if (!cuenta()) { aviso("Primero presione Ingresar", false); return; }
-  if ($("ReporteID").value && !confirm(`Este reporte ya se guardó como ${$("ReporteID").value}. ¿Guardarlo otra vez como reporte nuevo?`)) return;
-  if (!validar()) return;
-  const btn = $("btnGuardar"); btn.disabled = true;
-  try {
-    aviso("Preparando el formato…", null, 0);
-    await plantilla();
+/* datos del formulario en un solo objeto (los certificados son File, se pueden guardar en IndexedDB) */
+const datosActuales = () => ({ h: leerHdr(), mats: JSON.parse(JSON.stringify(mats)), firmas: { ...firmas }, archivos: { ...archivos } });
+const esErrorDeRed = e => e instanceof TypeError || /Failed to fetch|NetworkError|Load failed|network/i.test(e.message || "");
+
+/* sube un reporte completo; idPrevio = número ya reservado (reintento de uno que se cortó a mitad) */
+async function subirReporte(d, guardado, idPrevio, alReservar = () => {}) {
+  aviso("Preparando el formato…", null, 0);
+  await plantilla();
+  let id = idPrevio;
+  if (!id) {
     aviso("Asignando número de reporte…", null, 0);
     await asegurarRaiz();
-    let n = await maxReporte() + 1, id = "REP-" + pad(n);
+    let n = await maxReporte() + 1; id = "REP-" + pad(n);
     /* el número se reserva creando su carpeta; si otro equipo ya la creó (409) se usa el siguiente */
     for (let intento = 0; ; intento++) {
       try { await crearCarpeta(RUTA(CONFIG.carpetaRaiz), id, "fail"); break; }
       catch (e) { if (!/^409/.test(e.message) || intento >= 5) throw e; id = "REP-" + pad(++n); }
     }
-    $("ReporteID").value = id; guardarBorrador();
-    const ahora = ahoraTxt(), h = leerHdr(), usuario = cuenta().username, cert = {}, cache = {}, carpeta = `${CONFIG.carpetaRaiz}/${id}`;
-    for (const m of mats) {
-      const f = archivos[m.u]; if (!f) continue;
-      const key = f.name + "|" + f.size;
-      if (!cache[key]) {
-        aviso("Subiendo certificado " + f.name + "…", null, 0);
-        const it = await subir(f, `${carpeta}/Certificados`); cache[key] = { nombre: it.name, url: it.webUrl };
-      }
-      cert[m.u] = cache[key];
+    await alReservar(id);
+  }
+  const usuario = cuenta().username, cert = {}, cache = {}, nombres = new Set(), carpeta = `${CONFIG.carpetaRaiz}/${id}`;
+  for (const m of d.mats) {
+    const f = d.archivos[m.u]; if (!f) continue;
+    const key = f.name + "|" + f.size;
+    if (!cache[key]) {
+      /* "replace" para que un reintento no duplique; dos archivos distintos con el mismo nombre se numeran */
+      let nombre = f.name; for (let i = 2; nombres.has(nombre.toLowerCase()); i++) nombre = `${i}_${f.name}`;
+      nombres.add(nombre.toLowerCase());
+      aviso("Subiendo certificado " + f.name + "…", null, 0);
+      const it = await subir(f, `${carpeta}/Certificados`, nombre, "replace"); cache[key] = { nombre: it.name, url: it.webUrl };
     }
-    aviso("Guardando formato QC-F-002…", null, 0);
-    await subir(await libroQC(id, h, cert, usuario, ahora), carpeta, nombreReporte(id, h), "replace");
-    aviso("✔ Reporte " + id + " guardado en OneDrive (Recepciones/" + id + ")", true, 6000);
-    try { await actualizarListas(h); await cargarListas(); } catch (e) { /* el reporte ya quedó guardado */ }
+    cert[m.u] = cache[key];
+  }
+  aviso("Guardando formato QC-F-002…", null, 0);
+  await subir(await libroQC(id, d, cert, usuario, guardado), carpeta, nombreReporte(id, d.h), "replace");
+  try { await actualizarListas(d); await cargarListas(); } catch (e) { /* el reporte ya quedó guardado */ }
+  return id;
+}
+
+/* ---------- reportes pendientes (sin internet): IndexedDB del equipo ---------- */
+function bd(modo, fn) {
+  return new Promise((ok, mal) => {
+    const r = indexedDB.open("recepcion-qc", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("pendientes", { keyPath: "clave", autoIncrement: true });
+    r.onerror = () => mal(r.error);
+    r.onsuccess = () => {
+      const t = r.result.transaction("pendientes", modo), q = fn(t.objectStore("pendientes"));
+      t.oncomplete = () => ok(q && q.result); t.onerror = () => mal(t.error);
+    };
+  });
+}
+const pendientes = () => bd("readonly", st => st.getAll()).catch(() => []);
+let pendForm = null;   // clave del pendiente que corresponde al formulario actual
+async function encolar(d, guardado, idReservado) {
+  const clave = await bd("readwrite", st => st.add({ datos: d, guardado, idReservado: idReservado || "" }));
+  pendForm = clave;
+  $("ReporteID").value = idReservado ? idReservado + " (pendiente de subir)" : "PENDIENTE (sin internet)";
+  guardarBorrador(); pintarPendientes();
+  aviso("📥 Sin internet: el reporte quedó guardado en este equipo y se subirá solo cuando vuelva la señal", true, 8000);
+}
+async function pintarPendientes() {
+  const n = (await pendientes()).length, el = $("pendientes");
+  el.style.display = n ? "flex" : "none";
+  el.querySelector("span").textContent = `📤 ${n} reporte${n === 1 ? "" : "s"} guardado${n === 1 ? "" : "s"} en este equipo, pendiente${n === 1 ? "" : "s"} de subir a OneDrive.`;
+}
+let subiendo = false;
+async function subirPendientes(manual) {
+  if (subiendo) return;
+  if (!navigator.onLine) { if (manual) aviso("Todavía no hay internet", false); return; }
+  if (!cuenta()) { if (manual) aviso("Primero presione Ingresar", false); return; }
+  subiendo = true;
+  try {
+    for (const p of await pendientes()) {
+      const id = await subirReporte(p.datos, p.guardado, p.idReservado,
+        async nuevo => { p.idReservado = nuevo; await bd("readwrite", st => st.put(p)); });
+      await bd("readwrite", st => st.delete(p.clave));
+      if (pendForm === p.clave) { $("ReporteID").value = id; pendForm = null; guardarBorrador(); }
+      aviso("✔ Reporte pendiente subido como " + id, true, 5000);
+    }
   } catch (e) {
-    const id = $("ReporteID").value;
-    aviso("✖ No se pudo guardar: " + e.message + (id ? ` — la carpeta ${id} quedó en OneDrive incompleta; vuelva a guardar o revísela.` : " — el borrador sigue en el equipo, puede reintentar."), false, 10000);
+    aviso("✖ No se pudo subir un reporte pendiente: " + e.message + " — sigue guardado en el equipo.", false, 9000);
+  } finally { subiendo = false; pintarPendientes(); }
+}
+$("btnPendientes").onclick = () => subirPendientes(true);
+window.addEventListener("online", () => { marcarRed(); subirPendientes(); });
+window.addEventListener("offline", marcarRed);
+function marcarRed() { $("red").style.display = navigator.onLine ? "none" : "inline-block"; }
+
+$("btnGuardar").onclick = async () => {
+  const yaId = $("ReporteID").value;
+  if (yaId && !confirm(`Este reporte ya se guardó como ${yaId}. ¿Guardarlo otra vez como reporte nuevo?`)) return;
+  if (!validar()) return;
+  const d = datosActuales(), ahora = ahoraTxt();
+  if (!navigator.onLine) { await encolar(d, ahora); return; }
+  if (!cuenta()) { aviso("Primero presione Ingresar (o guarde sin internet: se sube después)", false, 6000); return; }
+  const btn = $("btnGuardar"); btn.disabled = true;
+  let reservado = "";
+  try {
+    pendForm = null;
+    const id = await subirReporte(d, ahora, "", nuevo => { reservado = nuevo; $("ReporteID").value = nuevo; guardarBorrador(); });
+    aviso("✔ Reporte " + id + " guardado en OneDrive (Recepciones/" + id + ")", true, 6000);
+  } catch (e) {
+    /* se cayó la señal a mitad: queda en el equipo y se termina después en la misma carpeta */
+    if (esErrorDeRed(e)) await encolar(d, ahora, reservado);
+    else aviso("✖ No se pudo guardar: " + e.message + (reservado ? ` — la carpeta ${reservado} quedó en OneDrive incompleta; vuelva a guardar o revísela.` : " — el borrador sigue en el equipo, puede reintentar."), false, 10000);
   } finally { btn.disabled = false; }
 };
 
 /* ---------- copia local (mismo formato QC-F-002) ---------- */
 $("btnDescargar").onclick = async () => {
   try {
-    const h = leerHdr(), id = $("ReporteID").value || "BORRADOR";
-    const a = document.createElement("a"); a.href = URL.createObjectURL(await libroQC(id, h));
-    a.download = nombreReporte(id, h); document.body.appendChild(a); a.click(); a.remove();
+    const d = datosActuales(), id = /^REP-\d+$/.test($("ReporteID").value) ? $("ReporteID").value : "BORRADOR";
+    const a = document.createElement("a"); a.href = URL.createObjectURL(await libroQC(id, d));
+    a.download = nombreReporte(id, d.h); document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   } catch (e) { aviso("No se pudo generar el Excel: " + e.message, false, 6000); }
 };
+
+/* ---------- app instalable: service worker y aviso de versión nueva ---------- */
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  window.addEventListener("load", async () => {
+    try {
+      const habia = !!navigator.serviceWorker.controller;
+      await navigator.serviceWorker.register("sw.js");
+      navigator.serviceWorker.addEventListener("controllerchange", () => { if (habia) $("version").style.display = "flex"; });
+      /* si otra app del mismo sitio borró la copia guardada, el service worker la vuelve a bajar */
+      const reg = await navigator.serviceWorker.ready;
+      if (navigator.onLine && reg.active) reg.active.postMessage("asegurar");
+    } catch (e) { /* sin service worker la app funciona igual, solo que necesita internet */ }
+  });
+}
 
 /* ---------- arranque ---------- */
 (async () => {
@@ -639,7 +778,8 @@ $("btnDescargar").onclick = async () => {
   TUBERIA = BASE.tuberia; CATALOGO = BASE.catalogo;
   pintarListas();
   cargarBorrador();
-  if (cuenta()) cargarListas().catch(e => aviso("No se pudieron leer las listas: " + e.message, false, 6000));
+  marcarRed(); pintarPendientes();
+  if (cuenta() && navigator.onLine) cargarListas().catch(e => aviso("No se pudieron leer las listas: " + e.message, false, 6000)).then(() => subirPendientes());
 })();
 </script>
 </body>

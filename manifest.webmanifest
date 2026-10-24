@@ -1,0 +1,17 @@
+{
+  "name": "Recepción de Materiales QC-F-002 · INDIMON",
+  "short_name": "Recepción QC",
+  "description": "Formato de recepción de materiales QC-F-002 con catálogo, firmas y guardado en OneDrive.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f3f5f8",
+  "theme_color": "#1F4E78",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
