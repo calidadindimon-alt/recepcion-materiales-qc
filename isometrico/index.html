@@ -447,6 +447,7 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
       <button class="btn rapida solo-movil" data-rapida="pan" onclick="setActiveTool('pan')" aria-label="Mover hoja"><svg class="ico" data-ico="move"></svg></button>
       <button class="btn rapida solo-movil" data-rapida="select" onclick="setActiveTool('select')" aria-label="Seleccionar"><svg class="ico" data-ico="pointer"></svg></button>
       <button class="btn rapida solo-movil" data-rapida="pipe" onclick="setActiveTool('pipe')" aria-label="Tubería"><svg class="ico" data-ico="pipe"></svg></button>
+      <button class="btn rapida solo-movil" data-rapida="cota" onclick="setActiveTool('cota')" aria-label="Cota"><svg class="ico" data-ico="ruler"></svg></button>
       <button class="btn" id="btn-modo-trazo" onclick="ciclarModoTrazo()" title="Ángulo de trazado: ISO o libre (A)" style="font-family:var(--mono)">ISO</button>
       <button class="btn" id="btn-plano" onclick="ciclarPlano()" title="Plano del ángulo libre (P)" hidden>Plano H</button>
       <span class="pista" id="pista">Tubería: toque y arrastre</span>
@@ -627,7 +628,8 @@ const TIPOS = {
   eq_filter:     { grupo: 'equipo', cat: 'EQUIPO', mat: 'equipo', modo: 'equipo', orden: 77.3, off: 26, nombre: 'FILTRO DE CARTUCHO / BOLSA', corto: 'Filtro cartucho' },
   /* anotaciones del plano (no van al BOM) */
   flow:          { grupo: 'anot', cat: 'ANOTACIÓN', mat: 'anot', modo: 'linea', orden: 90, nombre: 'FLECHA DE DIRECCIÓN DE FLUJO', corto: 'Flecha de flujo', noBOM: true },
-  slope:         { grupo: 'anot', cat: 'ANOTACIÓN', mat: 'anot', modo: 'linea', orden: 91, nombre: 'PENDIENTE DEL TRAMO', corto: 'Pendiente', noBOM: true, propiedad: true }
+  slope:         { grupo: 'anot', cat: 'ANOTACIÓN', mat: 'anot', modo: 'linea', orden: 91, nombre: 'PENDIENTE DEL TRAMO', corto: 'Pendiente', noBOM: true, propiedad: true },
+  cota:          { grupo: 'anot', cat: 'ANOTACIÓN', mat: 'anot', modo: 'cota', orden: 92, nombre: 'COTA ENTRE DOS PUNTOS', corto: 'Cota', noBOM: true }
 };
 /* Catálogo de fabricante: series Danfoss (válvulas, reguladores, filtros e instrumentos).
    Cada serie usa un símbolo base del catálogo; el código de pedido exacto según diámetro y
@@ -703,8 +705,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v18';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-10-24T08:45';      // fecha y hora de la publicación (UTC)
+const APP_VERSION = 'v19';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-10-26T14:26';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -968,6 +970,7 @@ const SIM = {
   eq_comp: '<circle r="14" class="sb"/><path d="M-9 -9L11 -5V5L-9 9Z" class="s"/>',
   eq_filter: '<rect x="-10" y="-18" width="20" height="36" rx="5" class="sb"/><path d="M-5 -12V12M0 -12V12M5 -12V12" class="s" style="stroke-width:.8"/>',
   flow: '<path d="M-13 0H2" class="s" style="stroke-width:2"/><polygon points="12,0 0,-6 0,6" class="sn"/>',
+  cota: '<path d="M-13 -9V5M13 -9V5M-13 0H13" class="s" style="stroke-width:1.2"/><polygon points="-13,0 -7,-2.5 -7,2.5" class="sn"/><polygon points="13,0 7,-2.5 7,2.5" class="sn"/>',
   slope: '<polygon points="-12,4 12,4 12,-6" class="sb"/><text x="3" y="2.5" font-size="7" font-weight="800" text-anchor="middle">%</text>',
   sup_spring: '<path d="M-5 -4H5M0 -4V-7L-4 -9L4 -11L-4 -13L4 -15L0 -17V-20M-6 -20H6" class="s" style="stroke-width:1.2"/>'
 };
@@ -982,8 +985,16 @@ const ICONO_NODO = {
   cross: '<path d="M-14 8 14 -8M0 -15V15" class="s"/><circle cx="-14" cy="8" r="2.4" class="sn"/><circle cx="14" cy="-8" r="2.4" class="sn"/><circle cy="-15" r="2.4" class="sn"/><circle cy="15" r="2.4" class="sn"/>'
 };
 /* Matriz local→pantalla: eje x sobre el tubo; eje y vertical (o N-S si el tubo es vertical) → símbolo en 2.5D */
-function matrizSimbolo(ang, s) {
-  const e = unitAng(ang), n = esVertical(ang) ? { x: C30, y: 0.5 } : { x: 0, y: 1 };
+/* giro: hacia dónde queda el ramal / volante / lado plano: 0 arriba, 1 abajo, 2 y 3 hacia los lados (el otro eje horizontal);
+   en tubos verticales los cuatro son horizontales */
+function normalSimbolo(ang, giro) {
+  const e = unitAng(ang), h1 = { x: C30, y: 0.5 }, h2 = { x: -C30, y: 0.5 }, g = (Number(giro) || 0) % 4;
+  const lado = Math.abs(e.x * h1.x + e.y * h1.y) <= Math.abs(e.x * h2.x + e.y * h2.y) ? h1 : h2;
+  const ops = esVertical(ang) ? [h1, { x: -h1.x, y: -h1.y }, h2, { x: -h2.x, y: -h2.y }] : [{ x: 0, y: 1 }, { x: 0, y: -1 }, lado, { x: -lado.x, y: -lado.y }];
+  return ops[g];
+}
+function matrizSimbolo(ang, s, giro) {
+  const e = unitAng(ang), n = normalSimbolo(ang, giro);
   return `matrix(${e.x.toFixed(4)},${e.y.toFixed(4)},${n.x.toFixed(4)},${n.y.toFixed(4)},${s.x.toFixed(2)},${s.y.toFixed(2)})`;
 }
 
@@ -1244,6 +1255,11 @@ function renderLienzo() {
     if (c.type === 'pipe') {
       const A = aPantalla(c.coords[0]), B = aPantalla(c.coords[1]), n = Math.max(1, Math.ceil(Math.hypot(B.x - A.x, B.y - A.y) / 5));
       for (let i = 0; i <= n; i++) obst.push({ x: A.x + (B.x - A.x) * i / n, y: A.y + (B.y - A.y) * i / n });
+    } else if (c.type === 'cota') {
+      /* la línea de cota y su texto (a 24 y 32 px del eje, del lado elegido) */
+      const a = aPantalla(c.coords[0]), b = aPantalla(c.coords[1]), L = Math.hypot(b.x - a.x, b.y - a.y) || 1, s = c.lado === -1 ? -1 : 1;
+      const nx = -(b.y - a.y) / L * s, ny = (b.x - a.x) / L * s, n = Math.max(1, Math.ceil(L / 5));
+      for (const d of [24, 32]) for (let i = 0; i <= n; i++) obst.push({ x: a.x + (b.x - a.x) * i / n + nx * d, y: a.y + (b.y - a.y) * i / n + ny * d });
     } else if (TIPOS[c.type].modo === 'equipo') {
       const P = aPantalla(c.coords[0]), u = unitAng(c.rotation), d = TIPOS[c.type].off || 30;
       const C = { x: P.x + u.x * d, y: P.y + u.y * d }; obst.push(C); anillo(C, 14, 10); anillo(C, 26, 16);
@@ -1299,6 +1315,7 @@ function renderLienzo() {
       }
       continue;
     }
+    if (c.type === 'cota') { simbolos += dibujoCota(c, sel); continue; }
     const P = aPantalla(c.coords[0]), T = TIPOS[c.type], dib = T.base || c.type;
     if (T.modo === 'nodo') {
       simbolos += simboloNodo(c, P, sel);
@@ -1333,7 +1350,7 @@ function renderLienzo() {
       etiquetas.push({ texto, clase: 'wl wl-' + ej, w, h, rot: 0, cand, prio: 1, ancla: P, sel: c.id });
       continue;
     }
-    simbolos += `<g class="cmp${sel}" data-id="${c.id}" transform="${matrizSimbolo(c.rotation, P)}">
+    simbolos += `<g class="cmp${sel}" data-id="${c.id}" transform="${matrizSimbolo(c.rotation, P, c.giro)}">
       <rect class="hit" x="-14" y="-16" width="28" height="28"/>${SIM[dib] || SIM.coupling}</g>`;
   }
   etiquetas.sort((a, b) => a.prio - b.prio);
@@ -1626,7 +1643,55 @@ function pedirPendiente(c) {
     }
   });
 }
+let cotaInicio = null;
+/* punto para acotar: pieza o extremo de tubo cercano, punto sobre un tubo o nodo de la grilla */
+function puntoCota(pt, R) {
+  let mejor = null, dmin = R;
+  for (const o of estado.components) {
+    if (o.type === 'cota') continue;
+    for (const P of o.type === 'pipe' ? o.coords : [o.coords[0]]) { const s = aPantalla(P), d = Math.hypot(s.x - pt.x, s.y - pt.y); if (d <= dmin) { dmin = d; mejor = P; } }
+  }
+  if (mejor) return mejor;
+  const tb = tuberiaCercana(pt, R); if (tb) return tb.P;
+  return nodoMasCercano(pt.x, pt.y);
+}
+function colocarCota(pt, R) {
+  const P = puntoCota(pt, R);
+  if (!cotaInicio) { cotaInicio = P; $('capa-guia').innerHTML = indicadorSnap(P, true); $('pista').textContent = 'Cota: toque el segundo punto'; return; }
+  const A = cotaInicio; cotaInicio = null; limpiarGuia(); actualizarBarraEstado();
+  if (igual(A, P)) { aviso('Los dos puntos son el mismo', 'error'); return; }
+  const c = { id: nuevoId(), category: TIPOS.cota.cat, type: 'cota', nps: '', schedule: '', length: 0, lengthManual: false, coords: [A, P], rotation: 0 };
+  commit(() => estado.components.push(c));
+  aviso(`Cota de ${fmtLong(valorCota(c))}: tóquela con «Tocar» para escribir la medida o cambiar de lado`, 'ok', 3000);
+}
+/* medida de la cota: lo que cubre de tubos en la misma dirección se mide con su largo real; el resto, por la grilla */
+function valorCota(c) {
+  if (c.valor != null && c.valor !== '') return Number(c.valor) || 0;
+  const a = aPantalla(c.coords[0]), b = aPantalla(c.coords[1]), L = Math.hypot(b.x - a.x, b.y - a.y); if (!L) return 0;
+  const u = { x: (b.x - a.x) / L, y: (b.y - a.y) / L }, fuera = s => Math.abs((s.x - a.x) * u.y - (s.y - a.y) * u.x), sobre = s => (s.x - a.x) * u.x + (s.y - a.y) * u.y;
+  let real = 0, cubierto = 0;
+  for (const t of tuberias()) {
+    const p = aPantalla(t.coords[0]), q = aPantalla(t.coords[1]); if (fuera(p) > 1 || fuera(q) > 1) continue;
+    const tp = sobre(p), tq = sobre(q), lo = Math.max(0, Math.min(tp, tq)), hi = Math.min(L, Math.max(tp, tq)), Lt = Math.abs(tq - tp);
+    if (hi - lo < 0.5 || !Lt) continue;
+    real += (hi - lo) / Lt * longitudTubo(t); cubierto += hi - lo;
+  }
+  return r3(real + Math.max(0, L - cubierto) / PASO_PX * estado.escala);
+}
+function dibujoCota(c, sel) {
+  const a = aPantalla(c.coords[0]), b = aPantalla(c.coords[1]), L = Math.hypot(b.x - a.x, b.y - a.y) || 1, u = { x: (b.x - a.x) / L, y: (b.y - a.y) / L };
+  const s = c.lado === -1 ? -1 : 1, n = { x: -u.y * s, y: u.x * s }, d = 24, f = v => v.toFixed(1);
+  const A = { x: a.x + n.x * d, y: a.y + n.y * d }, B = { x: b.x + n.x * d, y: b.y + n.y * d };
+  const flecha = (P, k) => `<polygon points="${f(P.x)},${f(P.y)} ${f(P.x - k * u.x * 7 + n.x * 2.4)},${f(P.y - k * u.y * 7 + n.y * 2.4)} ${f(P.x - k * u.x * 7 - n.x * 2.4)},${f(P.y - k * u.y * 7 - n.y * 2.4)}" fill="#0f172a"/>`;
+  let ang = Math.atan2(u.y, u.x) * 180 / Math.PI; if (ang > 90) ang -= 180; if (ang < -90) ang += 180;
+  const M = { x: (A.x + B.x) / 2 + n.x * 8, y: (A.y + B.y) / 2 + n.y * 8 }, txt = fmtLong(valorCota(c)) + (c.valor != null && c.valor !== '' ? '*' : '');
+  return `<g class="cmp${sel}" data-id="${c.id}"><line class="hit" x1="${f(A.x)}" y1="${f(A.y)}" x2="${f(B.x)}" y2="${f(B.y)}" stroke-width="16"/>
+    <g stroke="#0f172a" stroke-width="0.9"><line x1="${f(a.x + n.x * 4)}" y1="${f(a.y + n.y * 4)}" x2="${f(A.x + n.x * 4)}" y2="${f(A.y + n.y * 4)}"/>
+    <line x1="${f(b.x + n.x * 4)}" y1="${f(b.y + n.y * 4)}" x2="${f(B.x + n.x * 4)}" y2="${f(B.y + n.y * 4)}"/><line x1="${f(A.x)}" y1="${f(A.y)}" x2="${f(B.x)}" y2="${f(B.y)}"/></g>
+    ${flecha(A, -1)}${flecha(B, 1)}<text class="cota" text-anchor="middle" dominant-baseline="middle" transform="translate(${f(M.x)} ${f(M.y)}) rotate(${ang.toFixed(1)})">${esc(txt)}</text></g>`;
+}
 function colocarSimbolo(tipo, pt, R) {
+  if (TIPOS[tipo].modo === 'cota') { colocarCota(pt, R); return; }
   if (TIPOS[tipo].propiedad) {
     const tb = tuberiaCercana(pt, R * 1.5);
     if (!tb) { aviso('Toque sobre un tramo de tubería', 'error'); return; }
@@ -1686,7 +1751,11 @@ function descripcionBase(c) {
   switch (T.mat) {
     case 'tubo':  return `TUBERÍA ${med} ${sp.sch} ${sp.tubo}`;
     case 'acc':   return `${T.nombre} ${med} ${sp.sch} ${sp.acc}`;
-    case 'forj':  return `${T.nombre} ${med} ${sp.forj || sp.acc}`;
+    case 'forj': {
+      if (!OLET_A[c.type]) return `${T.nombre} ${med} ${sp.forj || sp.acc}`;
+      const m = String(sp.forj || sp.acc).replace(/\s*\d+#.*$/, '').replace(/,\s*(SW|NPT|BW).*$/, '');
+      return c.type === 'weldolet' ? `${T.nombre} ${med} ${sp.sch} ${m}, MSS SP-97, BW` : `${T.nombre} ${med} ${m} 3000#, MSS SP-97, ${c.type === 'sockolet' ? 'SW' : 'NPT'}`;
+    }
     case 'brida': return `${T.nombre} ${med} ${T.conSch ? sp.sch + ' ' : ''}${sp.brida}`;
     case 'val':
     case 'esp':   return `${T.nombre} ${med} ${sp.val}`;
@@ -1814,7 +1883,7 @@ function generarJuntas() {
       continue;
     }
     const locales = JUNTAS_LOCALES[tipo]; if (!locales) continue;
-    const e = unitAng(c.rotation), n = esVertical(c.rotation) ? { x: C30, y: 0.5 } : { x: 0, y: 1 };
+    const e = unitAng(c.rotation), n = normalSimbolo(c.rotation, c.giro);
     /* en reducciones, la junta del lado chico (+x local) lleva el diámetro menor */
     for (const [lx, ly] of locales) agregar({ x: P.x + e.x * lx + n.x * ly, y: P.y + e.y * lx + n.y * ly }, c, lx > 0 && c.npsRed && REDUCTORES_LINEA.includes(c.type) ? c.npsRed : c.nps);
   }
@@ -1824,7 +1893,7 @@ function generarJuntas() {
   for (const { P, tubos } of extremos.values()) {
     if (tubos.length < 2 || nodosConAccesorio.has(P.join(','))) continue;
     const s = aPantalla(P);
-    if (estado.components.some(o => o.type !== 'pipe' && o.type !== 'weld' && (() => { const q = aPantalla(o.coords[0]); return Math.hypot(q.x - s.x, q.y - s.y) < 3; })())) continue;
+    if (estado.components.some(o => o.type !== 'pipe' && o.type !== 'weld' && !TIPOS[o.type].noBOM && (() => { const q = aPantalla(o.coords[0]); return Math.hypot(q.x - s.x, q.y - s.y) < 3; })())) continue;
     agregar(s, tubos[0]);
   }
   if (!nuevas.length) { aviso(omitidas.size ? `Sin juntas nuevas (uniones no soldadas: ${[...omitidas].join(', ')})` : 'No hay juntas nuevas para agregar', null, 3500); return; }
@@ -2850,6 +2919,17 @@ function renderPanelSeleccion() {
   const p = $('panel-sel'), c = estado.components.find(x => x.id === seleccion);
   if (!c) { seleccion = null; p.hidden = true; return; }
   const T = TIPOS[c.type], opNps = v => NPS_LISTA.map(n => `<option${n === v ? ' selected' : ''}>${esc(n)}</option>`).join('');
+  if (c.type === 'cota') {
+    const manual = c.valor != null && c.valor !== '';
+    p.innerHTML = `<h4><span>Cota</span><button class="btn" onclick="seleccionar(null)" aria-label="Cerrar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-x"/></svg></button></h4>
+      <label>Medida (${txtUnidad()})${manual ? ' · manual' : ' · calculada'}</label>
+      <input data-p="valorCota" type="number" step="any" min="0" inputmode="decimal" value="${aUnidad(valorCota(c))}">
+      ${manual ? `<button class="btn" style="width:100%;margin-top:5px" data-acc="cotaAuto">Volver a la medida calculada</button>` : ''}
+      <div style="font-size:11px;color:var(--s400);margin-top:4px">Se calcula con el largo real de los tubos que cubre; escriba la medida si es otra (queda con *).</div>
+      <div class="acc"><button class="btn" data-acc="ladoCota"><svg class="ico" viewBox="0 0 24 24"><use href="#i-rotate"/></svg>Cambiar de lado</button>
+        <button class="btn peligro" data-acc="borrar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-trash"/></svg>Borrar</button></div>`;
+    p.hidden = false; return;
+  }
   p.innerHTML = `<h4><span>${esc(T.corto)}</span><button class="btn" onclick="seleccionar(null)" aria-label="Cerrar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-x"/></svg></button></h4>
     <label>Diámetro (NPS)</label><select data-p="nps">${opNps(c.nps)}</select>
     ${T.reduce ? `<label>Diámetro menor</label><select data-p="npsRed">${opNps(c.npsRed)}</select>` : ''}
@@ -2871,7 +2951,9 @@ function renderPanelSeleccion() {
     ${c.type !== 'pipe' && c.type !== 'weld' && !TIPOS[c.type].noBOM && T.modo !== 'equipo' ? `<div style="margin-top:6px;font:600 11px var(--mono);color:var(--s300)">Unión: ${tipoUnion(c)}${holgura(c) ? ` · holgura ${fmtLong(holgura(c))} por junta` : ''}</div>` : ''}
     ${conColada(c) ? panelColada(c) : ''}
     ${c.type !== 'weld' && !TIPOS[c.type].noBOM ? `<label>Código / ref. fabricante</label><input data-p="ref" maxlength="60" placeholder="Ej: 032U1247" value="${esc(c.ref || '')}">` : ''}
-    <div class="acc">${c.type !== 'pipe' && TIPOS[c.type].modo !== 'punto' ? `<button class="btn" data-acc="rotar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-rotate"/></svg>${c.type === 'flow' || REDUCTORES_LINEA.includes(c.type) ? 'Invertir' : T.modo === 'equipo' ? 'Girar' : 'Rotar'}</button>` : ''}
+    <div class="acc">${sobreLinea(c) ? `<button class="btn" data-acc="invertir" title="Voltear 180° sobre el tubo"><svg class="ico" viewBox="0 0 24 24"><use href="#i-rotate"/></svg>Invertir</button>
+        ${c.type !== 'flow' ? `<button class="btn" data-acc="girar" title="Girar 90° alrededor del tubo: ${GIROS_TXT[(Number(c.giro) || 0) % 4]}"><svg class="ico" viewBox="0 0 24 24"><use href="#i-rotate"/></svg>Girar 90°</button>` : ''}`
+      : c.type !== 'pipe' && TIPOS[c.type].modo !== 'punto' ? `<button class="btn" data-acc="rotar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-rotate"/></svg>${T.modo === 'equipo' ? 'Girar' : 'Rotar'}</button>` : ''}
       <button class="btn peligro" data-acc="borrar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-trash"/></svg>Borrar</button></div>`;
   p.hidden = false;
 }
@@ -2889,6 +2971,10 @@ $('panel-sel').addEventListener('change', e => {
     const t = String(e.target.value).trim().replace(',', '.'), v = deUnidad(parseFloat(t));
     if (t !== '' && !(v >= 0)) { aviso('Largo no válido', 'error'); renderPanelSeleccion(); return; }
     commit(() => { if (t === '') delete c.largo; else c.largo = r3(v); });
+  } else if (k === 'valorCota') {
+    const t = String(e.target.value).trim().replace(',', '.'), v = deUnidad(parseFloat(t));
+    if (t !== '' && !(v > 0)) { aviso('Medida no válida', 'error'); renderPanelSeleccion(); return; }
+    commit(() => { if (t === '') delete c.valor; else c.valor = r3(v); });
   } else if (k === 'sinCota') {
     commit(() => { if (e.target.checked) c.sinCota = true; else delete c.sinCota; });
   } else if (k === 'tag') {
@@ -2909,6 +2995,13 @@ $('panel-sel').addEventListener('change', e => {
 $('panel-sel').addEventListener('click', e => {
   const b = e.target.closest('[data-acc]'), c = estado.components.find(x => x.id === seleccion); if (!b || !c) return;
   if (b.dataset.acc === 'borrar') deleteSelected();
+  if (b.dataset.acc === 'invertir') commit(() => {
+    c.rotation = normAng(c.rotation + 180);
+    if (REDUCTORES_LINEA.includes(c.type)) aplicarReduccion(c);
+  });
+  if (b.dataset.acc === 'girar') { commit(() => { c.giro = ((Number(c.giro) || 0) + 1) % 4; if (!c.giro) delete c.giro; }); aviso('Orientación: ' + GIROS_TXT[(Number(c.giro) || 0) % 4], null, 1500); }
+  if (b.dataset.acc === 'ladoCota') commit(() => { c.lado = c.lado === -1 ? 1 : -1; });
+  if (b.dataset.acc === 'cotaAuto') commit(() => { delete c.valor; });
   if (b.dataset.acc === 'rotar') commit(() => {
     const invertir = c.type === 'flow' || REDUCTORES_LINEA.includes(c.type);
     c.rotation = normAng(c.rotation + (invertir ? 180 : 60));
@@ -2952,8 +3045,13 @@ function deleteSelected() {
   commit(() => { estado.components = estado.components.filter(c => c.id !== id); seleccion = null; });
 }
 
+/* símbolos que van sobre el tubo (en línea o en un extremo): se invierten 180° o se giran 90° alrededor del tubo */
+const sobreLinea = c => ['linea', 'extremo'].includes(TIPOS[c.type].modo) && !TIPOS[c.type].propiedad;
+const GIROS_TXT = ['hacia arriba', 'hacia abajo', 'hacia un lado', 'hacia el otro lado'];
+
 /* ---------- 13. Herramientas y eventos de puntero (ratón, dedo, lápiz) ---------- */
 const PISTAS = {
+  cota: 'Cota: toque el primer punto (pieza, extremo de tubo o punto del tubo)',
   pan: 'Mover: arrastre la hoja · pellizque para zoom',
   select: 'Tocar: seleccione un componente para editarlo',
   pipe: 'Tubería: arrastre, o toque inicio y toque cada punto'
@@ -2961,6 +3059,7 @@ const PISTAS = {
 const pistaTuberia = () => estado.trazo.modo === 'iso' ? PISTAS.pipe : `Tubería libre (${PLANOS[estado.trazo.plano].corto}, cada ${estado.trazo.modo}°)`;
 function setActiveTool(t) {
   if (trazo) terminarTrazo();
+  cotaInicio = null;
   herramienta = t;
   document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('activa', b.dataset.tool === t));
   document.querySelectorAll('[data-rapida]').forEach(b => b.classList.toggle('activa', b.dataset.rapida === t));
@@ -3021,7 +3120,7 @@ svg.addEventListener('pointerdown', e => {
     const ids = [...new Set(document.elementsFromPoint(e.clientX, e.clientY).map(el => el.closest && el.closest('#iso-svg [data-id]')).filter(Boolean).map(g => g.dataset.id))];
     /* la más cercana al punto tocado primero (un tramo corto gana al codo vecino si se toca sobre él) */
     const dist = id => { const c = estado.components.find(x => x.id === id); if (!c) return 1e9;
-      if (c.type !== 'pipe') { const s = aPantalla(c.coords[0]); return Math.hypot(s.x - pt.x, s.y - pt.y); }
+      if (c.type !== 'pipe' && c.type !== 'cota') { const s = aPantalla(c.coords[0]); return Math.hypot(s.x - pt.x, s.y - pt.y); }
       const a = aPantalla(c.coords[0]), b = aPantalla(c.coords[1]), dx = b.x - a.x, dy = b.y - a.y, t = Math.max(0, Math.min(1, ((pt.x - a.x) * dx + (pt.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
       return Math.hypot(a.x + t * dx - pt.x, a.y + t * dy - pt.y); };
     const esTubo = id => estado.components.find(x => x.id === id)?.type === 'pipe' ? 1 : 0;
@@ -3473,6 +3572,7 @@ const ICONOS = {
   camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
   users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
   layers: '<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
+  ruler: '<path d="M3 7v10M21 7v10M3 12h18"/><path d="m6 9-3 3 3 3M18 9l3 3-3 3"/>',
   code: '<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>', check: '<path d="M20 6 9 17l-5-5"/>',
   target: '<circle cx="12" cy="12" r="8"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/>'
 };
@@ -3500,7 +3600,7 @@ function construirInterfaz() {
   sprite.innerHTML = Object.entries(ICONOS).map(([k, v]) => `<symbol id="i-${k}" viewBox="0 0 24 24">${v}</symbol>`).join('');
   document.body.prepend(sprite);
   document.querySelectorAll('svg[data-ico]').forEach(s => { s.setAttribute('viewBox', '0 0 24 24'); s.innerHTML = `<use href="#i-${s.dataset.ico}"/>`; });
-  $('herr-control').innerHTML = botonHerr('pan', 'Mover', 'move', true) + botonHerr('select', 'Tocar', 'pointer', true) + botonHerr('pipe', 'Tubería', 'pipe', true);
+  $('herr-control').innerHTML = botonHerr('pan', 'Mover', 'move', true) + botonHerr('select', 'Tocar', 'pointer', true) + botonHerr('pipe', 'Tubería', 'pipe', true) + botonHerr('cota', 'Cota', 'ruler', true);
   $('buscar-sim').addEventListener('input', construirCatalogo);
   $('catalogo').addEventListener('toggle', e => { const g = e.target.dataset && e.target.dataset.grupo; if (!g || $('buscar-sim').value) return; e.target.open ? gruposAbiertos.add(g) : gruposAbiertos.delete(g); }, true);
   $('spec-nps').innerHTML = NPS_LISTA.map(n => `<option value="${esc(n)}">Ø ${esc(n)}</option>`).join('');
