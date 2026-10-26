@@ -705,8 +705,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v19';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-10-26T14:26';      // fecha y hora de la publicación (UTC)
+const APP_VERSION = 'v20';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-10-26T14:53';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -1181,7 +1181,12 @@ function descuentoTubo(c) {
     if (!(L > 0) && !(g > 0)) continue;
     if (TIPOS[o.type].modo === 'nodo') total += interior ? 2 * (L + g) : L + g;
     else if (interior) total += L + 2 * g;
-    else total += L / Math.max(1, tuberias().filter(p => igual(p.coords[0], P) || igual(p.coords[1], P)).length) + g;
+    else {
+      /* pieza en una unión: su largo se reparte entre los tubos reales; un tramo «accesorio con accesorio» solo lo toma si no hay tubo real */
+      const ahi = tuberias().filter(p => igual(p.coords[0], P) || igual(p.coords[1], P)), reales = ahi.filter(p => !p.directo);
+      if (c.directo && reales.length) continue;
+      total += L / Math.max(1, (reales.length ? reales : ahi).length) + g;
+    }
   }
   /* unión directa tubo con tubo (sin accesorio): la apertura de raíz se reparte entre los dos tramos */
   if ((SPECS[c.schedule]?.junta || 'BW') === 'BW')
@@ -1190,7 +1195,8 @@ function descuentoTubo(c) {
   return total;
 }
 const longitudCorte = c => r3(longitudTubo(c) - descuentoTubo(c));
-const longitudTubo = c => c.lengthManual ? Number(c.length) || 0 : r3(pasosReales(c) * estado.escala);
+/* tramo «accesorio con accesorio»: no lleva tubo; su largo centro a centro es el de las piezas que une */
+const longitudTubo = c => c.directo ? r3(descuentoTubo(c)) : c.lengthManual ? Number(c.length) || 0 : r3(pasosReales(c) * estado.escala);
 
 /* ---------- 7b. Acomodo de textos: cotas, marcas de soldadura y ángulos no se montan ----------
    Cada texto tiene varias posiciones candidatas; se elige la primera que no tape tuberías,
@@ -1294,9 +1300,9 @@ function renderLienzo() {
       let nrm = { x: -Math.sin(r), y: -Math.cos(r) };
       if (nrm.y > 0.05 || (Math.abs(nrm.y) <= 0.05 && nrm.x > 0)) nrm = { x: -nrm.x, y: -nrm.y };
       let rot = -ang; while (rot < -90) rot += 180; while (rot >= 90) rot -= 180;
-      const cc = longitudTubo(c), corte = longitudCorte(c), descuenta = corte < cc - 5e-4, negativo = corte <= 0;
+      const cc = longitudTubo(c), corte = longitudCorte(c), descuenta = corte < cc - 5e-4, negativo = !c.directo && corte <= 0;
       const ccTxt = `${fmtLong(cc)}${c.lengthManual ? '*' : ''}`, corteTxt = negativo ? '⚠ corte ≤ 0' : `corte ${enMM() ? Math.round(corte * 1000) : f2(corte)}`;
-      const texto = estado.cotas === 'cc' || (!descuenta && !negativo) ? ccTxt : estado.cotas === 'corte' ? (negativo ? '⚠ corte ≤ 0' : fmtLong(corte)) : `${ccTxt} (${corteTxt})`;
+      const texto = c.directo ? `${fmtLong(cc)} (acc-acc)` : estado.cotas === 'cc' || (!descuenta && !negativo) ? ccTxt : estado.cotas === 'corte' ? (negativo ? '⚠ corte ≤ 0' : fmtLong(corte)) : `${ccTxt} (${corteTxt})`;
       const w = texto.length * 6.1 + 4, h = 13;
       const m = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
       const candidatos = (ancho, lados) => { const lista = [];
@@ -1664,6 +1670,30 @@ function colocarCota(pt, R) {
   commit(() => estado.components.push(c));
   aviso(`Cota de ${fmtLong(valorCota(c))}: tóquela con «Tocar» para escribir la medida o cambiar de lado`, 'ok', 3000);
 }
+/* Pieza en medio de un tramo (weldolet, sockolet, instrumento…): el dibujo no va a escala, así que se puede
+   escribir su distancia real a un extremo del tramo; las cotas la usan */
+const tuboDe = c => c.type === 'pipe' || c.type === 'cota' || !c.coords ? null
+  : tuberias().find(t => !igual(c.coords[0], t.coords[0]) && !igual(c.coords[0], t.coords[1]) && sobreTubo(c.coords[0], t));
+function realEnTubo(t, P) {
+  const Lr = longitudTubo(t);
+  if (igual(P, t.coords[0])) return 0;
+  if (igual(P, t.coords[1])) return Lr;
+  const o = estado.components.find(x => x.posReal && x.type !== 'pipe' && x.type !== 'cota' && igual(x.coords[0], P));
+  if (o) { if (igual(o.posReal.ref, t.coords[0])) return Math.min(Lr, o.posReal.d); if (igual(o.posReal.ref, t.coords[1])) return Math.max(0, Lr - o.posReal.d); }
+  const a = aPantalla(t.coords[0]), b = aPantalla(t.coords[1]), s = aPantalla(P), L2 = (b.x - a.x) ** 2 + (b.y - a.y) ** 2 || 1;
+  return Lr * Math.max(0, Math.min(1, ((s.x - a.x) * (b.x - a.x) + (s.y - a.y) * (b.y - a.y)) / L2));
+}
+function panelUbicacion(c) {
+  if (!['linea'].includes(TIPOS[c.type].modo) || TIPOS[c.type].propiedad) return '';
+  const t = tuboDe(c); if (!t) return '';
+  const a = aPantalla(t.coords[0]), b = aPantalla(t.coords[1]), vert = Math.abs(a.x - b.x) < 2;
+  const nombre = i => { const p = i ? b : a, q = i ? a : b; return vert ? (p.y > q.y ? 'inferior' : 'superior') : (p.x < q.x ? 'izquierdo' : 'derecho'); };
+  const i = c.posReal ? (igual(c.posReal.ref, t.coords[1]) ? 1 : 0) : (Number(c.posRef) || 0), d = i ? longitudTubo(t) - realEnTubo(t, c.coords[0]) : realEnTubo(t, c.coords[0]);
+  return `<label>Ubicación real en el tramo (${txtUnidad()})${c.posReal ? ' · escrita' : ' · según el dibujo'}</label>
+    <div style="display:grid;grid-template-columns:1fr 1.3fr;gap:6px"><input data-p="posReal" type="number" step="any" min="0" inputmode="decimal" value="${aUnidad(d)}">
+    <select data-p="posRef"><option value="0"${i === 0 ? ' selected' : ''}>desde el extremo ${nombre(0)}</option><option value="1"${i === 1 ? ' selected' : ''}>desde el extremo ${nombre(1)}</option></select></div>
+    <div style="font-size:11px;color:var(--s400);margin-top:3px">El isométrico no va a escala: escriba la distancia del plano y las cotas la usan. Tramo de ${fmtLong(longitudTubo(t))}.</div>`;
+}
 /* medida de la cota: lo que cubre de tubos en la misma dirección se mide con su largo real; el resto, por la grilla */
 function valorCota(c) {
   if (c.valor != null && c.valor !== '') return Number(c.valor) || 0;
@@ -1674,7 +1704,9 @@ function valorCota(c) {
     const p = aPantalla(t.coords[0]), q = aPantalla(t.coords[1]); if (fuera(p) > 1 || fuera(q) > 1) continue;
     const tp = sobre(p), tq = sobre(q), lo = Math.max(0, Math.min(tp, tq)), hi = Math.min(L, Math.max(tp, tq)), Lt = Math.abs(tq - tp);
     if (hi - lo < 0.5 || !Lt) continue;
-    real += (hi - lo) / Lt * longitudTubo(t); cubierto += hi - lo;
+    /* punto de la red en cada borde del tramo cubierto: un extremo de la cota o un extremo del tubo */
+    const punto = s => Math.abs(s) < 0.5 ? c.coords[0] : Math.abs(s - L) < 0.5 ? c.coords[1] : Math.abs(s - tp) < 0.5 ? t.coords[0] : t.coords[1];
+    real += Math.abs(realEnTubo(t, punto(hi)) - realEnTubo(t, punto(lo))); cubierto += hi - lo;
   }
   return r3(real + Math.max(0, L - cubierto) / PASO_PX * estado.escala);
 }
@@ -1775,7 +1807,7 @@ function descripcionBase(c) {
 function recalculateBOM() {
   const grupos = new Map();
   for (const c of estado.components) {
-    if (TIPOS[c.type].noBOM) continue;
+    if (TIPOS[c.type].noBOM || c.directo) continue;
     const T = TIPOS[c.type], key = [c.type, c.nps, c.npsRed || '', c.schedule, c.ref || '', c.tag || '', c.junta || ''].join('|');
     const g = grupos.get(key) || { key, orden: T.orden, nps: npsNum(c.nps), uni: c.type === 'pipe' ? 'ML' : (T.uni || 'UND'), desc: descripcion(c), cant: 0 };
     g.cant += c.type === 'pipe' ? (estado.descontar ? Math.max(0, longitudCorte(c)) : longitudTubo(c)) : 1;
@@ -2159,7 +2191,7 @@ function elementosJunta(w) {
   const s = aPantalla(w.coords[0]), idx = new Map(rutaTuberias().map((r, i) => [r.c, { i, inv: r.inv }]));
   const proy = c => { const a = aPantalla(c.coords[0]), b = aPantalla(c.coords[1]), dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy || 1;
     const t = Math.max(0, Math.min(1, ((s.x - a.x) * dx + (s.y - a.y) * dy) / L2)); return { t, d: Math.hypot(a.x + t * dx - s.x, a.y + t * dy - s.y) }; };
-  const tubos = tuberias().map(c => ({ c, ...proy(c) })).filter(x => x.d < 4).sort((a, b) => a.d - b.d);
+  const tubos = tuberias().filter(c => !c.directo).map(c => ({ c, ...proy(c) })).filter(x => x.d < 4).sort((a, b) => a.d - b.d);
   const piezas = estado.components.filter(o => o.type !== 'pipe' && o.type !== 'weld' && !TIPOS[o.type].noBOM && TIPOS[o.type].modo !== 'equipo')
     .map(o => { const q = aPantalla(o.coords[0]); return { o, d: Math.hypot(q.x - s.x, q.y - s.y) }; }).filter(x => x.d < 16).sort((a, b) => a.d - b.d);
   const mm = v => v > 0 ? Math.round(v * 10000) / 10 : '';
@@ -2399,6 +2431,7 @@ function mlPorJunta() {
   const ml = new Map(), welds = estado.components.filter(c => c.type === 'weld'), sinJunta = [];
   welds.forEach(w => ml.set(w.id, 0));
   for (const t of tuberias()) {
+    if (t.directo) continue;   // sin tubo: no suma metros
     const a = aPantalla(t.coords[0]), b = aPantalla(t.coords[1]), dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy || 1;
     const suyas = welds.filter(w => { const s = aPantalla(w.coords[0]); const u = ((s.x - a.x) * dx + (s.y - a.y) * dy) / L2;
       return u > -0.01 && u < 1.01 && Math.hypot(a.x + u * dx - s.x, a.y + u * dy - s.y) < 4; });
@@ -2943,7 +2976,10 @@ function renderPanelSeleccion() {
     ${c.type === 'pipe' ? `<div style="margin-top:6px;font:600 12px var(--mono);color:${longitudCorte(c) <= 0 ? '#f87171' : 'var(--verde)'}">Corte: ${fmtLong(Math.max(0, longitudCorte(c)))} · descuento acc.: ${fmtLong(descuentoTubo(c))}</div>` : ''}
     ${c.type !== 'pipe' && c.type !== 'weld' && !TIPOS[c.type].noBOM && T.modo !== 'equipo' ? `<label>Largo / descuento al tubo (${txtUnidad()})${c.largo != null ? ' · manual' : fuenteLargo(c) ? ' · ' + fuenteLargo(c) : ' · sin dato'}</label>
       <input data-p="largo" type="number" step="any" min="0" inputmode="decimal" placeholder="vacío = tabla" value="${c.largo != null || largoAccesorio(c) ? aUnidad(largoAccesorio(c)) : ''}">` : ''}
+    ${c.type === 'pipe' ? `<label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:12px;color:var(--s200)"><input type="checkbox" data-p="directo" style="width:18px;height:18px"${c.directo ? ' checked' : ''}> Accesorio con accesorio (sin tubo)</label>
+      ${c.directo ? `<div style="font-size:11px;color:var(--s400)">Las piezas de los extremos van soldadas o unidas entre sí: no sale tubo en el listado y el largo es el de las piezas (${fmtLong(longitudTubo(c))}).</div>` : ''}` : ''}
     ${c.type === 'pipe' ? `<label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:12px;color:var(--s200)"><input type="checkbox" data-p="sinCota" style="width:18px;height:18px"${c.sinCota ? ' checked' : ''}> Ocultar cota de este tramo</label>` : ''}
+    ${panelUbicacion(c)}
     ${c.type === 'pipe' ? `<label>Pendiente</label><button class="btn" style="width:100%" data-acc="pend">${c.pendiente ? `PEND. ${c.pendiente.valor}% · baja hacia el ${c.pendiente.haciaFin === false ? 'inicio' : 'final'}` : 'Agregar pendiente'}</button>` : ''}
     ${c.type === 'weld' ? panelJunta(c) : ''}
     ${c.type === 'weld' ? `<label>Tipo de junta</label><select data-p="junta">${[['BW', 'A tope (BW)'], ['SW', 'Socket weld (filete)'], ['FILETE', 'Filete brida slip-on']].map(([v, t]) => `<option value="${v}"${(c.junta || 'BW') === v ? ' selected' : ''}>${t}</option>`).join('')}</select>` : ''}
@@ -2971,6 +3007,15 @@ $('panel-sel').addEventListener('change', e => {
     const t = String(e.target.value).trim().replace(',', '.'), v = deUnidad(parseFloat(t));
     if (t !== '' && !(v >= 0)) { aviso('Largo no válido', 'error'); renderPanelSeleccion(); return; }
     commit(() => { if (t === '') delete c.largo; else c.largo = r3(v); });
+  } else if (k === 'directo') {
+    commit(() => { if (e.target.checked) { c.directo = true; c.lengthManual = false; } else delete c.directo; });
+  } else if (k === 'posReal' || k === 'posRef') {
+    const t = tuboDe(c); if (!t) return;
+    const i = Number($('panel-sel').querySelector('[data-p="posRef"]').value) || 0, txt = String($('panel-sel').querySelector('[data-p="posReal"]').value).trim().replace(',', '.');
+    if (k === 'posRef') { commit(() => { c.posRef = i; }); return; }
+    const v = deUnidad(parseFloat(txt)), Lr = longitudTubo(t);
+    if (txt !== '' && !(v > 0 && v < Lr)) { aviso(`La distancia debe estar entre 0 y ${fmtLong(Lr)} (largo del tramo)`, 'error', 3500); renderPanelSeleccion(); return; }
+    commit(() => { c.posRef = i; if (txt === '') delete c.posReal; else c.posReal = { ref: [...t.coords[i]], d: r3(v) }; });
   } else if (k === 'valorCota') {
     const t = String(e.target.value).trim().replace(',', '.'), v = deUnidad(parseFloat(t));
     if (t !== '' && !(v > 0)) { aviso('Medida no válida', 'error'); renderPanelSeleccion(); return; }
