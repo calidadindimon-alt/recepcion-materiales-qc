@@ -705,8 +705,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v22';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-10-26T16:08';      // fecha y hora de la publicación (UTC)
+const APP_VERSION = 'v23';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-10-26T16:26';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -1043,7 +1043,7 @@ const TAKEOFF = {
   /* brida WN clase 150: largo Y (1"–14" ficha FEINSA; 1/2", 3/4" y 16"–24" ASME B16.5) */
   flange_wn:   tablaMM([48, 52, 54, 56, 60, 62, 68, 68, 75, 87, 100, 100, 113, 125, 125, 138, 143, 151]),
   /* stub end MSS SP-43 tipo B: largo F (ficha FEINSA) */
-  stub_end:    tablaMM([50.8, 50.8, 50.8, 50.8, 50.8, 63.5, 63.5, 63.5, 76.2]),
+  stub_end:    tablaMM([50.8, 50.8, 50.8, 50.8, 50.8, 63.5, 63.5, 63.5, 76.2, 88.9, 101.6, 127, 152.4, 152.4, 152.4, 152.4, 152.4, 152.4]),   // MSS SP-43 patrón corto
   v_gate:      tablaMM([108, 117, 127, 140, 165, 178, 190, 203, 229, 267, 292, 330, 356, 381, 406, 432, 457, 508]),
   v_globe:     tablaMM([108, 117, 127, 140, 165, 203, 216, 241, 292, 406, 495, 622, 698]),
   v_check:     tablaMM([108, 117, 127, 140, 165, 203, 216, 241, 292, 356, 495, 622, 698, 787, 864, 978, 978, 1295]),
@@ -1579,13 +1579,14 @@ function pedirLongitud(id) {
   const pasos = pasosReales(c), pl = c.libre && PLANOS[c.libre.plano];
   abrirModal({
     titulo: `Longitud real del tramo (${f2(pasos).replace(/\.00$/, '')} paso${pasos === 1 ? '' : 's'} de grilla)`,
-    html: `<label>Longitud en ${enMM() ? 'milímetros (mm)' : 'metros (m)'}</label><input id="m-long" type="number" step="any" min="0" inputmode="decimal" value="${aUnidad(longitudTubo(c))}">
+    html: `<label>Longitud en ${enMM() ? 'milímetros (mm)' : 'metros (m)'} · 0 = piezas pegadas</label><input id="m-long" type="number" step="any" min="0" inputmode="decimal" value="${aUnidad(longitudTubo(c))}">
            ${pl ? `<label>Ángulo en plano ${pl.nombre} (grados desde ${pl.ref})</label><input id="m-ang" type="number" step="0.1" inputmode="decimal" value="${c.libre.ang}">` : ''}
            <p>Deje el valor sugerido para usar la escala de la grilla (${fmtLong(estado.escala)} por paso). Escriba la cota medida en campo para fijarla.</p>`,
     alAbrir: () => { const i = $('m-long'); i.focus(); i.select(); },
     alAceptar: () => {
       const v = deUnidad(parseFloat(String($('m-long').value).replace(',', '.')));
-      if (!(v > 0)) { aviso('Escriba una longitud mayor que cero', 'error'); return false; }
+      if (v === 0) { c.directo = true; c.lengthManual = false; actualizarTodo(); aviso('Largo 0: tramo accesorio con accesorio (sin tubo)', 'ok', 2500); return; }
+      if (!(v > 0)) { aviso('Escriba una longitud (0 si las piezas van pegadas)', 'error'); return false; }
       if (pl) { const a = parseFloat(String($('m-ang').value).replace(',', '.')); if (isFinite(a)) cambiarAnguloLibre(c, a); }
       const auto = r3(pasos * estado.escala);
       c.lengthManual = Math.abs(v - auto) > 5e-4; c.length = c.lengthManual ? r3(v) : auto;
@@ -1722,6 +1723,18 @@ function dibujoCota(c, sel) {
     <line x1="${f(b.x + n.x * 4)}" y1="${f(b.y + n.y * 4)}" x2="${f(B.x + n.x * 4)}" y2="${f(B.y + n.y * 4)}"/><line x1="${f(A.x)}" y1="${f(A.y)}" x2="${f(B.x)}" y2="${f(B.y)}"/></g>
     ${flecha(A, -1)}${flecha(B, 1)}<text class="cota" text-anchor="middle" dominant-baseline="middle" transform="translate(${f(M.x)} ${f(M.y)}) rotate(${ang.toFixed(1)})">${esc(txt)}</text></g>`;
 }
+/* Tubos de corte ≤ 0 (las piezas de sus extremos se tocan): se ofrece dejarlos como «accesorio con accesorio» */
+function sugerirPegado(lista) {
+  const malos = lista.filter(t => t.type === 'pipe' && !t.directo && longitudCorte(t) <= 0);
+  if (!malos.length || !$('modal').hidden) return;
+  abrirModal({
+    titulo: 'Piezas pegadas',
+    html: `<p>${malos.length === 1 ? `El tramo de ${fmtLong(longitudTubo(malos[0]))} queda` : `${malos.length} tramos quedan`} con corte ≤ 0: las piezas de los extremos se tocan.</p>
+      <p>¿Van soldadas o apernadas directamente entre sí (accesorio con accesorio, sin tubo)?</p>`,
+    okTxt: 'Sí, sin tubo',
+    alAceptar: () => { commit(() => malos.forEach(t => { t.directo = true; t.lengthManual = false; })); aviso('Listo: tramo accesorio con accesorio', 'ok', 2000); }
+  });
+}
 /* Toque un poco más allá del final libre de una línea: la pieza va pegada a lo que hay en ese extremo
    (brida → válvula → brida → reducción…) con un tramo «accesorio con accesorio» de 1 a 3 pasos en la misma dirección */
 function extensionExtremo(pt, R) {
@@ -1788,7 +1801,7 @@ function colocarSimbolo(tipo, pt, R) {
     if (pieza) c.junta = pieza.type === 'flange_so' ? 'FILETE' : tipoUnion(pieza) === 'SW' ? 'SW' : 'BW';
   }
   if (contraBrida) c.rotation = normAng(c.rotation + 180);
-  if (!T.reduce) { commit(() => estado.components.push(c)); aviso(`${T.corto} colocado`, 'ok', 900); return; }
+  if (!T.reduce) { commit(() => estado.components.push(c)); aviso(`${T.corto} colocado`, 'ok', 900); sugerirPegado(tuberias().filter(t => tocaTubo(c.coords[0], t))); return; }
   /* reducción en la unión de dos tramos de distinto diámetro: toma mayor y menor de los tramos, sin preguntar */
   if (REDUCTORES_LINEA.includes(tipo)) {
     const unidos = tuberias().filter(p => igual(p.coords[0], pos.P) || igual(p.coords[1], pos.P));
@@ -1819,6 +1832,7 @@ function colocarSimbolo(tipo, pt, R) {
         else { c.npsRed = c.nps; c.nps = o; c.rotation = normAng(c.rotation + 180); }   // amplía: el lado chico mira hacia la línea
         commit(() => { estado.components.push(c); aplicarReduccion(c); });
         aviso(`${T.corto} ${c.nps} x ${c.npsRed} colocada`, 'ok', 2600);
+        setTimeout(() => sugerirPegado(tuberias().filter(t => tocaTubo(c.coords[0], t))), 60);
       }
     });
     return;
@@ -3044,6 +3058,9 @@ function renderPanelSeleccion() {
     ${c.type === 'pipe' ? `<div style="margin-top:6px;font:600 12px var(--mono);color:${longitudCorte(c) <= 0 ? '#f87171' : 'var(--verde)'}">Corte: ${fmtLong(Math.max(0, longitudCorte(c)))} · descuento acc.: ${fmtLong(descuentoTubo(c))}</div>` : ''}
     ${c.type !== 'pipe' && c.type !== 'weld' && !TIPOS[c.type].noBOM && T.modo !== 'equipo' ? `<label>Largo / descuento al tubo (${txtUnidad()})${c.largo != null ? ' · manual' : fuenteLargo(c) ? ' · ' + fuenteLargo(c) : ' · sin dato'}</label>
       <input data-p="largo" type="number" step="any" min="0" inputmode="decimal" placeholder="vacío = tabla" value="${c.largo != null || largoAccesorio(c) ? aUnidad(largoAccesorio(c)) : ''}">` : ''}
+    ${c.type === 'pipe' && !c.directo && longitudCorte(c) <= 0 ? `<div style="margin-top:8px;padding:8px;border:1px solid #f59e0b;border-radius:8px;font-size:12px;color:#fcd34d">
+      El corte da ≤ 0: las piezas de los extremos se tocan. Si van soldadas o apernadas entre sí, no hay tubo.
+      <button class="btn ancho ambar" style="margin-top:6px" data-acc="hacerDirecto">Son piezas pegadas (sin tubo)</button></div>` : ''}
     ${c.type === 'pipe' ? `<label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:12px;color:var(--s200)"><input type="checkbox" data-p="directo" style="width:18px;height:18px"${c.directo ? ' checked' : ''}> Accesorio con accesorio (sin tubo)</label>
       ${c.directo ? `<div style="font-size:11px;color:var(--s400)">Las piezas de los extremos van soldadas o unidas entre sí: no sale tubo en el listado y el largo es el de las piezas (${fmtLong(longitudTubo(c))}).</div>` : ''}` : ''}
     ${c.type === 'pipe' ? `<label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:12px;color:var(--s200)"><input type="checkbox" data-p="sinCota" style="width:18px;height:18px"${c.sinCota ? ' checked' : ''}> Ocultar cota de este tramo</label>` : ''}
@@ -3065,8 +3082,10 @@ $('panel-sel').addEventListener('change', e => {
   const k = e.target.dataset.p, c = estado.components.find(x => x.id === seleccion); if (!k || !c) return;
   if (k === 'length') {
     const v = deUnidad(parseFloat(String(e.target.value).replace(',', '.')));
+    if (v === 0) { commit(() => { c.directo = true; c.lengthManual = false; }); aviso('Largo 0: tramo accesorio con accesorio (sin tubo)', 'ok', 2500); return; }
     if (!(v > 0)) { aviso('Longitud no válida', 'error'); renderPanelSeleccion(); return; }
     commit(() => { c.length = r3(v); c.lengthManual = true; });
+    sugerirPegado([c]);
   } else if (k === 'angulo') {
     const a = parseFloat(String(e.target.value).replace(',', '.'));
     if (!isFinite(a)) { aviso('Ángulo no válido', 'error'); renderPanelSeleccion(); return; }
@@ -3113,6 +3132,7 @@ $('panel-sel').addEventListener('click', e => {
     if (REDUCTORES_LINEA.includes(c.type)) aplicarReduccion(c);
   });
   if (b.dataset.acc === 'girar') { commit(() => { c.giro = ((Number(c.giro) || 0) + 1) % 4; if (!c.giro) delete c.giro; }); aviso('Orientación: ' + GIROS_TXT[(Number(c.giro) || 0) % 4], null, 1500); }
+  if (b.dataset.acc === 'hacerDirecto') { commit(() => { c.directo = true; c.lengthManual = false; }); aviso('Tramo accesorio con accesorio: sin tubo en el listado', 'ok', 2500); }
   if (b.dataset.acc === 'ladoCota') commit(() => { c.lado = c.lado === -1 ? 1 : -1; });
   if (b.dataset.acc === 'cotaAuto') commit(() => { delete c.valor; });
   if (b.dataset.acc === 'rotar') commit(() => {
