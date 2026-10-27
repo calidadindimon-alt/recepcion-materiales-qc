@@ -705,8 +705,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v23';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-10-26T16:26';      // fecha y hora de la publicación (UTC)
+const APP_VERSION = 'v24';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-10-27T17:20';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -1356,6 +1356,12 @@ function renderLienzo() {
       etiquetas.push({ texto, clase: 'wl wl-' + ej, w, h, rot: 0, cand, prio: 1, ancla: P, sel: c.id });
       continue;
     }
+    if (c.type === 'reducer_ecc' && !esVertical(c.rotation) && !(Number(c.giro) % 4 > 1)) {
+      /* lado plano arriba (FOT) o abajo (FOB), como en los isométricos de diseño */
+      const tag = Number(c.giro) % 4 === 1 ? 'FOB' : 'FOT', cand = [];
+      for (const d of [18, 24, 31]) for (const k of [2, 6, 1, 3, 5, 7, 0, 4]) { const a = k * Math.PI / 4; cand.push({ x: P.x + Math.cos(a) * d, y: P.y - Math.sin(a) * d }); }
+      etiquetas.push({ texto: tag, clase: 'angl', w: 22, h: 11, rot: 0, cand, prio: 3 });
+    }
     simbolos += `<g class="cmp${sel}" data-id="${c.id}" transform="${matrizSimbolo(c.rotation, P, c.giro)}">
       <rect class="hit" x="-14" y="-16" width="28" height="28"/>${SIM[dib] || SIM.coupling}</g>`;
   }
@@ -1739,14 +1745,36 @@ function sugerirPegado(lista) {
    (brida → válvula → brida → reducción…) con un tramo «accesorio con accesorio» de 1 a 3 pasos en la misma dirección */
 function extensionExtremo(pt, R) {
   let mejor = null;
+  const esNodo = E => estado.components.some(o => TIPOS[o.type].modo === 'nodo' && igual(o.coords[0], E));
   for (const t of tuberias()) for (const i of [0, 1]) {
     const E = t.coords[i], O = t.coords[1 - i], di = dirEntre(O, E); if (!di || !di.pasos) continue;
+    if (esNodo(E)) continue;   // en un codo o tee la línea sigue por sus brazos libres (abajo)
     if (tuberias().some(p => p !== t && (igual(p.coords[0], E) || igual(p.coords[1], E) || sobreTubo(E, p)))) continue;
     const e = aPantalla(E), o = aPantalla(O), L = Math.hypot(e.x - o.x, e.y - o.y) || 1, u = { x: (e.x - o.x) / L, y: (e.y - o.y) / L };
     const along = (pt.x - e.x) * u.x + (pt.y - e.y) * u.y, perp = Math.abs((pt.x - e.x) * u.y - (pt.y - e.y) * u.x);
     if (along < PASO_PX * 0.5 || along > PASO_PX * 3.5 || perp > Math.max(R, 12)) continue;
     const du = [(E[0] - O[0]) / di.pasos, (E[1] - O[1]) / di.pasos];
-    if (!mejor || perp < mejor.perp) mejor = { t, E, du, ang: angPantalla(O, E), perp };
+    if (!mejor || perp < mejor.perp) mejor = { t, E, du, ang: angPantalla(O, E), perp, nps: t.nps, schedule: t.schedule };
+  }
+  /* codos y tees con brazos libres, y piezas sueltas (la primera brida del spool): la pieza nueva sale
+     en la dirección isométrica más cercana al toque (un codo 90° solo gira a otro eje) */
+  for (const o of estado.components) {
+    const T = TIPOS[o.type]; if (T.noBOM || o.type === 'weld' || o.type === 'pipe') continue;
+    const E = o.coords[0], ocup = brazos(E), suelta = !tuberias().some(p => tocaTubo(E, p));
+    let permitidas;
+    if (T.modo === 'nodo') {
+      const max = /cross/.test(o.type) ? 4 : /tee/.test(o.type) ? 3 : /elbow90/.test(o.type) ? 2 : 0; if (ocup.length >= max) continue;
+      permitidas = DIRS.filter(D => !ocup.some(a => casiAng(a, D.ang)) && !(/elbow90/.test(o.type) && ocup.some(a => casiAng(a, D.ang + 180))));
+    } else if (suelta && ['linea', 'extremo'].includes(T.modo)) permitidas = DIRS.filter(D => casiAng(D.ang, o.rotation) || casiAng(D.ang, o.rotation + 180));
+    else continue;
+    const e = aPantalla(E), dist = Math.hypot(pt.x - e.x, pt.y - e.y);
+    if (dist < PASO_PX * 0.5 || dist > PASO_PX * 3.5) continue;
+    for (const D of permitidas) {
+      const u = unitAng(D.ang), along = (pt.x - e.x) * u.x + (pt.y - e.y) * u.y, perp = Math.abs((pt.x - e.x) * u.y - (pt.y - e.y) * u.x);
+      if (along < PASO_PX * 0.5 || perp > Math.max(R, 12)) continue;
+      const nps = diametroDesde(E, D.ang) || (o.type === 'tee_red' && ocup.length >= 2 && !ocup.some(a => casiAng(a, D.ang + 180)) ? o.npsRed : o.nps);
+      if (!mejor || perp < mejor.perp) mejor = { t: null, E, du: D.d, ang: D.ang, perp, nps, schedule: o.schedule, suelta: suelta && T.modo !== 'nodo' ? o : null };
+    }
   }
   return mejor;
 }
@@ -1760,6 +1788,7 @@ function extensionSimbolo(tipo) {
 }
 /* cuánto sobresale un símbolo de su punto hacia la dirección ang */
 function alcanceSimbolo(tipo, rot, ang) {
+  if (TIPOS[tipo].modo === 'nodo') return 16;   // brazo dibujado de codos y tees
   const [a, b] = extensionSimbolo(tipo);
   return casiAng(rot, ang) ? b : casiAng(rot, ang + 180) ? -a : Math.max(-a, b);
 }
@@ -1767,7 +1796,7 @@ function colocarSimbolo(tipo, pt, R) {
   if (TIPOS[tipo].modo === 'cota') { colocarCota(pt, R); return; }
   const Tx = TIPOS[tipo];
   let contraBrida = false;
-  if (['linea', 'extremo'].includes(Tx.modo) && !Tx.noBOM && !Tx.propiedad) {
+  if (['linea', 'extremo', 'nodo'].includes(Tx.modo) && !Tx.noBOM && !Tx.propiedad && !(Tx.modo === 'nodo' && (puertoCercano(pt, R) || tuberiaCercana(pt, R)))) {
     const ext = extensionExtremo(pt, R);
     if (ext) {
       /* brida después de una válvula o de otra brida: es la contrabrida, su cara mira hacia atrás */
@@ -1778,8 +1807,11 @@ function colocarSimbolo(tipo, pt, R) {
       const k = Math.max(0.5, Math.ceil((previo + atras + 9) / (PASO_PX / 2)) / 2);
       const P = [ext.E[0] + ext.du[0] * k, ext.E[1] + ext.du[1] * k].map(v => Math.round(v * 1e4) / 1e4);
       const seg = crearComponente('pipe', [ext.E, P], 0);
-      Object.assign(seg, { nps: diametroDesde(ext.E, ext.ang) || ext.t.nps, schedule: ext.t.schedule, directo: true, sinCota: true });
-      registrar(); estado.components.push(seg); actualizarTodo();
+      Object.assign(seg, { nps: diametroDesde(ext.E, ext.ang) || ext.nps, schedule: ext.schedule, directo: true, sinCota: true });
+      registrar(); estado.components.push(seg);
+      /* brida suelta de arranque: si la pieza soldada se pega a su cara, se voltea para que el cuello quede hacia la pieza */
+      if (ext.suelta && ext.suelta.type.startsWith('flange') && casiAng(ext.suelta.rotation, ext.ang) && !tipo.startsWith('flange') && Tx.mat !== 'val') ext.suelta.rotation = normAng(ext.suelta.rotation + 180);
+      actualizarTodo();
       pt = aPantalla(P);
     }
   }
