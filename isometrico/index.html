@@ -187,6 +187,10 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
   .wl-pendiente{fill:#475569}.wl-soldada{fill:#1d4ed8}.wl-liberada{fill:#15803d}.wl-rechazada{fill:#dc2626;text-decoration:underline}
 }
 .qc-resumen{font:600 11px var(--mono);color:var(--s300);margin:6px 0 2px;line-height:1.5}
+#pantalla-ingreso{position:fixed;inset:0;z-index:200;background:radial-gradient(circle at 30% 20%,#1e293b,#020617);display:flex;align-items:center;justify-content:center;padding:16px}
+.ingreso-caja{width:100%;max-width:340px;background:#0f172a;border:1px solid var(--s700);border-radius:14px;padding:18px}
+.ingreso-caja label{display:block;font:700 11px var(--mono);color:var(--s300);text-transform:uppercase;margin:10px 0 4px}
+.ingreso-caja input{width:100%;padding:11px;border-radius:8px;border:1px solid var(--s600);background:#020617;color:#fff;font-size:16px}
 .ob-linea{display:flex;gap:6px;align-items:center;padding:6px 8px;border:1px solid var(--s700);border-radius:8px;margin:4px 0}
 .ob-linea.actual{border-color:var(--cian)}
 .ob-linea .btn{min-height:32px;padding:4px 10px}
@@ -284,6 +288,10 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
             <button class="btn" onclick="abrirObras()"><svg class="ico" data-ico="layers"></svg>Obras y líneas</button>
             <button class="btn" onclick="abrirSoldadores()"><svg class="ico" data-ico="users"></svg>Soldadores</button></div>
+          <div class="qc-resumen" id="cuenta-actual" hidden></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+            <button class="btn" id="btn-usuarios" hidden onclick="abrirUsuarios()"><svg class="ico" data-ico="users"></svg>Usuarios</button>
+            <button class="btn" id="btn-salir" hidden onclick="salirCuenta()"><svg class="ico" data-ico="x"></svg>Salir</button></div>
         </div>
 
         <div class="sec">
@@ -338,7 +346,7 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
           <button class="btn ancho" onclick="nuevoPlano()"><svg class="ico" data-ico="file"></svg>Nuevo plano</button>
           <button class="btn ancho" onclick="document.getElementById('in-proyecto').click()"><svg class="ico" data-ico="folder"></svg>Abrir proyecto (.json)</button>
           <button class="btn ancho" onclick="guardarProyecto()"><svg class="ico" data-ico="save"></svg>Guardar proyecto (.json)</button>
-          <button class="btn ancho" onclick="downloadSelfHtml()"><svg class="ico" data-ico="code"></svg>Descargar app (.html sin internet)</button>
+          <button class="btn ancho" id="btn-descargar-html" onclick="downloadSelfHtml()"><svg class="ico" data-ico="code"></svg>Descargar app (.html sin internet)</button>
           <button class="btn ancho ambar" onclick="instalarApp(true)"><svg class="ico" data-ico="download"></svg>Instalar app (Android · iOS · PC)</button>
           <input type="file" id="in-proyecto" accept=".json,application/json" hidden>
           <input type="file" id="in-obra" accept=".json,application/json" multiple hidden>
@@ -2749,14 +2757,14 @@ async function bdOp(almacen, modo, fn) {
   });
 }
 const todasLineas = () => bdOp('lineas', 'readonly', s => s.getAll()).then(l => (l || []).sort((a, b) => String(a.obra).localeCompare(String(b.obra)) || String(a.linea).localeCompare(String(b.linea), 'es', { numeric: true })));
-const ponerLinea = L => bdOp('lineas', 'readwrite', s => s.put({ ...L, actualizado: new Date().toISOString() }));
+const ponerLinea = L => bdOp('lineas', 'readwrite', s => s.put({ ...L, actualizado: L.actualizado || new Date().toISOString() }));
 /* copia la línea abierta a la base local (crea su identificador la primera vez que tiene algo dibujado) */
 async function guardarLineaBD(forzar) {
   if (enIntercambio) return;
   if (!estado.lineaId) { if (!forzar && !estado.components.length) return; estado.lineaId = nuevoId(); try { localStorage.setItem(CLAVE_LOCAL, JSON.stringify(estado)); } catch (_) {} }
-  const cab = estado.cabecera;
-  try { await ponerLinea({ id: estado.lineaId, obra: (cab.proyecto || '').trim() || 'SIN OBRA', linea: (cab.linea || '').trim(), datos: JSON.parse(JSON.stringify(estado)) }); }
-  catch (_) { /* sin base local: la línea sigue guardada en localStorage */ }
+  const cab = estado.cabecera, L = { id: estado.lineaId, obra: (cab.proyecto || '').trim() || 'SIN OBRA', linea: (cab.linea || '').trim(), datos: JSON.parse(JSON.stringify(estado)), actualizado: new Date().toISOString(), por: nube.perfil ? nube.perfil.nombre : '' };
+  try { await ponerLinea(L); } catch (_) { /* sin base local: la línea sigue guardada en localStorage */ }
+  subirLineaNube(L);
 }
 /* Recorre otras líneas cargándolas temporalmente en «estado» (para usar las mismas funciones de cálculo) y deja todo como estaba */
 async function conLineas(lineas, fn) {
@@ -2786,7 +2794,7 @@ async function abrirObras() {
     return `<div class="ob-linea${actual ? ' actual' : ''}">
       <div style="flex:1;min-width:0"><b>${esc(L.linea || '(sin número)')}</b>${actual ? ' <span style="color:var(--cian)">· abierta</span>' : ''}
         <div style="font-size:11px;color:var(--s400)">${k.total} juntas · soldadas ${k.soldada + k.liberada + k.rechazada} · liberadas ${k.liberada} (${pct}%)${k.rechazada ? ` · <span style="color:#f87171">rechazadas ${k.rechazada}</span>` : ''}${k.reparaciones ? ` · reparaciones ${k.reparaciones}` : ''}
-        · ${fechaDMY((L.actualizado || '').slice(0, 10))}</div></div>
+        · ${fechaDMY((L.actualizado || '').slice(0, 10))}${L.por ? ' · ' + esc(L.por) : ''}${nube.activa && !obraPermitida(L.obra) ? ' · <span style="color:#f59e0b">obra no asignada: no se sube a la nube</span>' : ''}</div></div>
       ${actual ? '' : `<button type="button" class="btn" data-ob="abrir" data-id="${L.id}">Abrir</button>`}
       <button type="button" class="btn" data-ob="duplicar" data-id="${L.id}" title="Duplicar">⧉</button>
       <button type="button" class="btn" data-ob="borrar" data-id="${L.id}" title="Borrar" style="color:#f87171">✕</button></div>`; };
@@ -2795,7 +2803,8 @@ async function abrirObras() {
     html: `<p>Las líneas se guardan solas en este equipo. Toque <b>Abrir</b> para cambiar de isométrico. Para pasar una obra a otro equipo use <b>Exportar obra</b> y en el otro equipo <b>Importar</b>.</p>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
         <button type="button" class="btn ambar" data-ob="nueva">+ Nueva línea en esta obra</button>
-        <button type="button" class="btn" data-ob="importar">Importar (.json)</button></div>
+        <button type="button" class="btn" data-ob="importar">Importar (.json)</button>
+        ${nube.activa && nube.perfil ? '<button type="button" class="btn verde" data-ob="nube">Traer de la nube</button>' : ''}</div>
       ${obras.length ? obras.map(o => { const ls = lineas.filter(L => L.obra === o), t = ls.map(L => contarJuntas(L.datos)).reduce((a, k) => ({ total: a.total + k.total, lib: a.lib + k.liberada }), { total: 0, lib: 0 });
         return `<div class="ob-obra"><div style="display:flex;align-items:center;gap:6px;margin:10px 0 4px">
           <div style="flex:1"><b style="color:var(--cian)">${esc(o)}</b> <span style="font-size:11px;color:var(--s400)">${ls.length} líneas · ${t.total} juntas · ${t.total ? Math.round(100 * t.lib / t.total) : 0}% liberado</span></div>
@@ -2810,6 +2819,7 @@ async function accionObra(acc, id, obra) {
   try {
     if (acc === 'nueva') { cerrarModal(); await nuevaLinea(); return; }
     if (acc === 'importar') { $('in-obra').click(); return; }
+    if (acc === 'nube') { aviso('Trayendo líneas de la nube…', null, 4000); const n = await bajarLineasNube(); if (!n) aviso('Todo está al día', 'ok'); abrirObras(); return; }
     if (acc === 'exportar') { await exportarObra(obra, $('ob-fotos').checked); return; }
     const L = (await todasLineas()).find(x => x.id === id); if (!L) return;
     if (acc === 'abrir') { cerrarModal(); await abrirLineaGuardada(L); return; }
@@ -3051,6 +3061,187 @@ $('in-obra').addEventListener('change', async e => {
   try { await importarArchivos(f); if (!$('modal').hidden) abrirObras(); } catch (err) { aviso('No se pudo importar: ' + err.message, 'error', 5000); }
 });
 $('panel-sel').addEventListener('click', e => { const b = e.target.closest('[data-foto]'); if (b) verFoto(b.dataset.foto); });
+
+/* ---------- 11i. Cuentas y nube (Firebase): ingreso con correo y clave, administrador, obras asignadas ----------
+   Mientras FIREBASE_CONFIG sea null la app funciona como antes, sin cuentas (todo queda en el equipo).
+   La configuración web de Firebase es pública (no es una clave secreta); el acceso lo controlan las reglas
+   de Firestore (archivo firestore.rules) y la lista de usuarios activos que maneja el administrador. */
+const FIREBASE_CONFIG = null;
+const CORREO_DUENO = 'calidadindimon@gmail.com';   // primer administrador
+const CLAVE_PERFIL = 'indimon_cad_perfil';
+const nube = { activa: !!FIREBASE_CONFIG, app: null, auth: null, db: null, perfil: null, listo: false };
+const idObra = nombre => String(nombre || 'SIN OBRA').trim().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'SIN-OBRA';
+const esAdmin = () => !!(nube.perfil && nube.perfil.rol === 'admin' && nube.perfil.activo);
+const obraPermitida = obra => !nube.activa || esAdmin() || !!(nube.perfil && (nube.perfil.obras || []).includes(idObra(obra)));
+async function cargarFirebase() {
+  if (window.firebase && firebase.firestore) return;
+  for (const f of ['firebase-app-compat', 'firebase-auth-compat', 'firebase-firestore-compat']) await cargarScript('vendor/' + f + '.js');
+}
+/* pantalla de ingreso: tapa la app hasta que haya una cuenta activa */
+function pantallaIngreso(msg) {
+  let el = $('pantalla-ingreso');
+  if (!el) { el = document.createElement('div'); el.id = 'pantalla-ingreso'; document.body.appendChild(el); }
+  el.innerHTML = `<form class="ingreso-caja" onsubmit="return false">
+      <div style="font:900 20px var(--sans);color:#fff;background:#dc2626;border-radius:10px;padding:8px 14px;text-align:center;margin-bottom:14px">INDÍMON CAD</div>
+      <label>Correo</label><input id="ing-correo" type="email" autocomplete="username" required>
+      <label>Clave</label><input id="ing-clave" type="password" autocomplete="current-password" required>
+      <div id="ing-msg" style="min-height:18px;font-size:12px;color:#fca5a5;margin:8px 0">${esc(msg || '')}</div>
+      <button type="submit" class="btn ancho ambar" id="ing-entrar">Ingresar</button>
+      <button type="button" class="btn ancho" id="ing-olvido" style="margin-top:6px">Olvidé mi clave</button>
+      <div style="font-size:11px;color:var(--s400);margin-top:10px;text-align:center">Solo usuarios autorizados por INDIMON S.A.S.</div></form>`;
+  el.hidden = false;
+  el.querySelector('form').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const correo = $('ing-correo').value.trim(), clave = $('ing-clave').value;
+    $('ing-msg').textContent = 'Ingresando…'; $('ing-entrar').disabled = true;
+    try { await nube.auth.signInWithEmailAndPassword(correo, clave); }
+    catch (e) { $('ing-msg').textContent = /wrong-password|invalid-credential|user-not-found|invalid-login/.test(e.code || '') ? 'Correo o clave incorrectos' : /network/.test(e.code || '') ? 'Sin internet: el primer ingreso necesita conexión' : 'No se pudo ingresar: ' + (e.code || e.message); }
+    finally { if ($('ing-entrar')) $('ing-entrar').disabled = false; }
+  });
+  $('ing-olvido').onclick = async () => {
+    const correo = $('ing-correo').value.trim(); if (!correo) { $('ing-msg').textContent = 'Escriba su correo y toque de nuevo'; return; }
+    try { await nube.auth.sendPasswordResetEmail(correo); $('ing-msg').style.color = '#86efac'; $('ing-msg').textContent = 'Le enviamos un correo para cambiar la clave'; }
+    catch (e) { $('ing-msg').textContent = 'No se pudo enviar el correo: ' + (e.code || e.message); }
+  };
+}
+const quitarIngreso = () => { const el = $('pantalla-ingreso'); if (el) el.hidden = true; };
+async function iniciarCuentas() {
+  if (!nube.activa) return;
+  /* sin conexión y con perfil guardado: se trabaja con la última sesión válida */
+  try { nube.perfil = JSON.parse(localStorage.getItem(CLAVE_PERFIL) || 'null'); } catch (_) { nube.perfil = null; }
+  pantallaIngreso(nube.perfil ? '' : '');
+  try { await cargarFirebase(); }
+  catch (_) { if (nube.perfil && nube.perfil.activo) { quitarIngreso(); pintarCuenta(); aviso('Sin conexión: trabajando con la última sesión', null, 3000); } return; }
+  nube.app = firebase.initializeApp(FIREBASE_CONFIG); nube.auth = firebase.auth(); nube.db = firebase.firestore();
+  try { await nube.db.enablePersistence({ synchronizeTabs: true }); } catch (_) { /* otra pestaña abierta o navegador sin soporte */ }
+  nube.auth.onAuthStateChanged(async u => {
+    if (!u) { nube.perfil = null; localStorage.removeItem(CLAVE_PERFIL); pantallaIngreso(); pintarCuenta(); return; }
+    try {
+      const ref = nube.db.collection('usuarios').doc(u.uid);
+      let doc = await ref.get();
+      if (!doc.exists && (u.email || '').toLowerCase() === CORREO_DUENO) {
+        await ref.set({ email: u.email, nombre: 'ADMINISTRADOR', rol: 'admin', activo: true, obras: [], creado: firebase.firestore.FieldValue.serverTimestamp() });
+        doc = await ref.get();
+      }
+      const p = doc.exists ? doc.data() : null;
+      if (!p || !p.activo) { await nube.auth.signOut(); pantallaIngreso(p ? 'Su usuario está bloqueado. Hable con el administrador.' : 'Su usuario no está autorizado. Hable con el administrador.'); return; }
+      nube.perfil = { uid: u.uid, email: u.email, nombre: p.nombre || u.email, rol: p.rol || 'tecnico', activo: true, obras: p.obras || [] };
+      localStorage.setItem(CLAVE_PERFIL, JSON.stringify(nube.perfil));
+      quitarIngreso(); pintarCuenta(); nube.listo = true;
+      bajarLineasNube().catch(() => {});
+      guardarLineaBD();
+    } catch (e) {
+      /* sin conexión: si el perfil guardado es de este usuario, se sigue trabajando */
+      if (nube.perfil && nube.perfil.uid === u.uid && nube.perfil.activo) { quitarIngreso(); pintarCuenta(); }
+      else pantallaIngreso('No se pudo comprobar el usuario: ' + (e.code || e.message));
+    }
+  });
+}
+function pintarCuenta() {
+  const el = $('cuenta-actual'); if (!el) return;
+  el.hidden = !nube.activa;
+  if (!nube.activa) return;
+  el.innerHTML = nube.perfil ? `${esc(nube.perfil.nombre)} · <span style="color:${esAdmin() ? '#fbbf24' : 'var(--cian)'}">${esAdmin() ? 'administrador' : 'técnico'}</span>` : 'Sin sesión';
+  const bu = $('btn-usuarios'); if (bu) bu.hidden = !esAdmin();
+  const bd = $('btn-descargar-html'); if (bd) bd.hidden = true;
+  const bs = $('btn-salir'); if (bs) bs.hidden = !nube.perfil;   // con cuentas, la app no se reparte como archivo suelto
+}
+async function salirCuenta() {
+  if (!nube.auth) return;
+  if (!confirm('¿Cerrar la sesión en este equipo? Lo que no se haya subido se sube al volver a ingresar.')) return;
+  await guardarLineaBD(); await nube.auth.signOut();
+}
+/* ---- líneas en la nube: se suben al guardar y se bajan al ingresar ---- */
+let tNube;
+function subirLineaNube(L) {
+  if (!nube.activa || !nube.db || !nube.perfil) return;
+  if (!obraPermitida(L.obra)) return;
+  clearTimeout(tNube);
+  tNube = setTimeout(() => {
+    nube.db.collection('lineas').doc(L.id).set({ obraId: idObra(L.obra), obra: L.obra, linea: L.linea, datos: JSON.stringify(L.datos),
+      actualizado: L.actualizado || new Date().toISOString(), por: nube.perfil.email, porNombre: nube.perfil.nombre, uid: nube.perfil.uid })
+      .catch(e => aviso('No se pudo subir la línea a la nube: ' + (e.code || e.message), 'error', 4000));
+  }, 1500);
+}
+async function lineasNube() {
+  if (!nube.db || !nube.perfil) return [];
+  let q = nube.db.collection('lineas');
+  if (!esAdmin()) {
+    const obras = (nube.perfil.obras || []).slice(0, 30); if (!obras.length) return [];
+    q = q.where('obraId', 'in', obras);
+  }
+  const snap = await q.get();
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+/* trae a este equipo las líneas de la nube más nuevas que las locales */
+async function bajarLineasNube() {
+  const remotas = await lineasNube(), locales = new Map((await todasLineas()).map(L => [L.id, L]));
+  let n = 0;
+  for (const r of remotas) {
+    const loc = locales.get(r.id);
+    if (loc && String(loc.actualizado || '') >= String(r.actualizado || '')) continue;
+    let datos; try { datos = JSON.parse(r.datos); } catch (_) { continue; }
+    if (r.id === estado.lineaId) continue;   // la abierta no se pisa mientras se trabaja
+    await bdOp('lineas', 'readwrite', s => s.put({ id: r.id, obra: r.obra, linea: r.linea, datos, actualizado: r.actualizado, por: r.porNombre || r.por }));
+    n++;
+  }
+  if (n) aviso(`${n} línea${n > 1 ? 's' : ''} actualizada${n > 1 ? 's' : ''} desde la nube`, 'ok', 2500);
+  return n;
+}
+/* ---- administración de usuarios (solo administrador) ---- */
+async function abrirUsuarios() {
+  toggleSidebar(false);
+  if (!esAdmin()) { aviso('Solo el administrador maneja los usuarios', 'error'); return; }
+  let usuarios = [], obras = [];
+  try {
+    usuarios = (await nube.db.collection('usuarios').get()).docs.map(d => ({ uid: d.id, ...d.data() }));
+    obras = [...new Set([...(await todasLineas()).map(L => idObra(L.obra)), ...usuarios.flatMap(u => u.obras || [])])].sort();
+  } catch (e) { aviso('Se necesita internet para manejar usuarios: ' + (e.code || e.message), 'error', 4500); return; }
+  const fila = u => `<div class="sd-fila" data-uid="${u.uid}">
+    <div style="display:flex;gap:6px;align-items:center"><div style="flex:1;min-width:0"><b>${esc(u.nombre || u.email)}</b> <span style="font-size:11px;color:var(--s400)">${esc(u.email)} · ${u.rol === 'admin' ? 'administrador' : 'técnico'}</span></div>
+      ${u.rol === 'admin' ? '' : `<label style="display:flex;gap:6px;align-items:center;text-transform:none;font-size:12px;color:${u.activo ? '#4ade80' : '#f87171'}"><input type="checkbox" data-u="activo"${u.activo ? ' checked' : ''} style="width:18px;height:18px">${u.activo ? 'activo' : 'bloqueado'}</label>`}</div>
+    ${u.rol === 'admin' ? '' : `<label>Obras asignadas</label><div style="display:flex;flex-wrap:wrap;gap:4px 10px">${obras.map(o => `<label style="display:flex;gap:4px;align-items:center;text-transform:none;font-size:12px;color:var(--s200)"><input type="checkbox" data-obra="${esc(o)}"${(u.obras || []).includes(o) ? ' checked' : ''} style="width:16px;height:16px">${esc(o)}</label>`).join('') || '<span style="font-size:11px;color:var(--s400)">Aún no hay obras</span>'}</div>`}
+    <button type="button" class="btn" data-u="clave" style="margin-top:6px">Enviar correo para cambiar clave</button></div>`;
+  abrirModal({
+    titulo: 'Usuarios de INDIMON CAD',
+    html: `<p>Usted crea las cuentas de sus compañeros y les asigna obras. Un usuario <b>bloqueado</b> no puede entrar ni ver nada.</p>
+      <div id="us-lista">${usuarios.sort((a, b) => (a.rol === 'admin' ? -1 : 1) - (b.rol === 'admin' ? -1 : 1)).map(fila).join('')}</div>
+      <div class="sd-fila"><b>Nuevo usuario</b>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><div><label>Nombre</label><input id="us-nombre" maxlength="40"></div><div><label>Correo</label><input id="us-correo" type="email"></div></div>
+        <label>Clave inicial (mínimo 6 caracteres; él la puede cambiar)</label><input id="us-clave" type="text" minlength="6">
+        <label>Obras (separadas por coma)</label><input id="us-obras" placeholder="${esc(obras[0] || 'OBRA 1')}">
+        <button type="button" class="btn ancho ambar" id="us-crear" style="margin-top:6px">Crear usuario</button></div>`,
+    okTxt: 'Guardar cambios',
+    alAbrir: () => {
+      $('us-lista').onclick = async e => {
+        const b = e.target.closest('[data-u="clave"]'); if (!b) return;
+        const u = usuarios.find(x => x.uid === b.closest('[data-uid]').dataset.uid);
+        try { await nube.auth.sendPasswordResetEmail(u.email); aviso('Correo enviado a ' + u.email, 'ok'); } catch (err) { aviso('No se pudo: ' + (err.code || err.message), 'error'); }
+      };
+      $('us-crear').onclick = async () => {
+        const nombre = $('us-nombre').value.trim().toUpperCase(), correo = $('us-correo').value.trim().toLowerCase(), clave = $('us-clave').value;
+        const lista = $('us-obras').value.split(',').map(idObra).filter(o => o && o !== 'SIN-OBRA');
+        if (!correo || clave.length < 6) { aviso('Escriba el correo y una clave de 6 o más caracteres', 'error'); return; }
+        try {
+          /* se crea con una segunda conexión para no cerrar la sesión del administrador */
+          const sec = firebase.apps.find(a => a.name === 'altas') || firebase.initializeApp(FIREBASE_CONFIG, 'altas');
+          const cred = await sec.auth().createUserWithEmailAndPassword(correo, clave); await sec.auth().signOut();
+          await nube.db.collection('usuarios').doc(cred.user.uid).set({ email: correo, nombre: nombre || correo, rol: 'tecnico', activo: true, obras: lista, creado: firebase.firestore.FieldValue.serverTimestamp() });
+          aviso(`Usuario ${correo} creado`, 'ok', 3000); cerrarModal(); abrirUsuarios();
+        } catch (err) { aviso('No se pudo crear: ' + (err.code === 'auth/email-already-in-use' ? 'ese correo ya tiene cuenta' : err.code || err.message), 'error', 5000); }
+      };
+    },
+    alAceptar: () => {
+      const lote = nube.db.batch();
+      document.querySelectorAll('#us-lista [data-uid]').forEach(el => {
+        const u = usuarios.find(x => x.uid === el.dataset.uid); if (!u || u.rol === 'admin') return;
+        const activo = el.querySelector('[data-u="activo"]').checked, obrasU = [...el.querySelectorAll('[data-obra]:checked')].map(i => i.dataset.obra);
+        lote.update(nube.db.collection('usuarios').doc(u.uid), { activo, obras: obrasU });
+      });
+      lote.commit().then(() => aviso('Usuarios guardados', 'ok')).catch(e => aviso('No se pudo guardar: ' + (e.code || e.message), 'error', 4500));
+    }
+  });
+}
 
 /* ---------- 12. Selección y panel de propiedades ---------- */
 function seleccionar(id) {
@@ -3654,6 +3845,7 @@ window.addEventListener('beforeprint', () => { seleccion = null; renderLienzo();
 
 /* Descarga la app completa en un único .html (con la librería Excel incrustada) para usar sin internet */
 async function downloadSelfHtml() {
+  if (nube.activa) { aviso('Con cuentas activas la app no se descarga como archivo: se usa con usuario y clave', 'error', 4000); return; }
   toggleSidebar(false);
   let html = null;
   try {
@@ -3805,6 +3997,7 @@ function sincronizarSelectores() {
   const fechaTxt = isNaN(fv) ? '' : `${dosD(fv.getDate())}/${dosD(fv.getMonth() + 1)}/${fv.getFullYear()} ${dosD(fv.getHours())}:${dosD(fv.getMinutes())}`;
   $('version-app').textContent = `DP-F-009 · ⏲ ${APP_VERSION} · ${fechaTxt}`; $('hud-version').textContent = `${APP_VERSION} · ${fechaTxt}`;
   cargarLocal();
+  iniciarCuentas();
   if (!estado.cabecera.fecha) estado.cabecera.fecha = hoyISO();
   sincronizarSelectores(); pintarCabecera(); construirCatalogo(); sincronizarTrazo();
   prepararLienzo();
