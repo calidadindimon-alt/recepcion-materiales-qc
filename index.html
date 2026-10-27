@@ -250,6 +250,9 @@ function pintarListas() {
 const BASE = window.CATALOGO_QC || { tuberia: [], catalogo: [], listas: {} };
 /* proveedores habituales (los nuevos se agregan solos al guardar) */
 BASE.listas.tblProveedores = [["FERREORIENTE"], ["CASAVAL"], ["IMPORINOX"], ...(BASE.listas.tblProveedores || [])];
+/* materiales de las especificaciones de INDIMON CAD que no trae la plantilla */
+BASE.listas.tblMateriales = [...(BASE.listas.tblMateriales || []), ["Acero A333 Gr 6 (baja temperatura)"], ["Acero A335 P11 (Cr-Mo)"],
+  ["Hierro maleable galvanizado"], ["PVC"], ["CPVC"], ["HDPE PE100"], ["Cobre"], ["Bronce"]];
 const unir = (a = [], b = []) => { const vistos = new Set(), out = [];
   for (const r of [...a, ...(Array.isArray(b) ? b : [])]) { const k = String(r[0]).trim().toLowerCase(); if (k && !vistos.has(k)) { vistos.add(k); out.push(r); } }
   return out; };
@@ -379,6 +382,9 @@ function totalReporte() {
   $("pesoReporte").textContent = t ? `· Peso total del reporte: ${fmt(t)} kg` : "";
 }
 function render() {
+  /* recordar el campo donde está el cursor (ej. se tocó el buscador justo cuando el Material recalcula la tarjeta) */
+  const a = document.activeElement, caja = a && a.closest && a.closest(".mat");
+  const foco = caja && (a.dataset.k ? `[data-k="${a.dataset.k}"]` : a.dataset.buscar ? "[data-buscar]" : null);
   $("materiales").innerHTML = mats.map((m, i) => {
     if (m.u !== abierto) return `
    <div class="mat cerrado${incompleto(m) ? " falta" : ""}" data-u="${m.u}">
@@ -409,6 +415,10 @@ function render() {
      <div><label>&nbsp;</label><div class="peso" data-peso="${m.u}">${textoPeso(m)}</div></div>
     </div>
    </div>`; }).join("") || '<p class="small">Aún no hay materiales. Presione "+ Agregar material".</p>';
+  if (foco) {
+    const el = document.querySelector(`.mat[data-u="${caja.dataset.u}"] ${foco}`);
+    if (el) { el.focus({ preventScroll: true }); try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) { /* number/date */ } }
+  }
   totalReporte();
 }
 $("materiales").addEventListener("input", e => {
@@ -425,7 +435,8 @@ $("materiales").addEventListener("change", e => {
   const m = mats.find(x => x.u === box.dataset.u);
   if (e.target.dataset.catf) { m._catf = e.target.value; render(); guardarBorrador();
     const b = document.querySelector(`.mat[data-u="${m.u}"]`); b && pintarResultados(b, m); return; }
-  if (e.target.dataset.k === "Material" && m._ref && aplicarCatalogo(m)) { render(); guardarBorrador(); return; }
+  /* redibujar después de que el cursor llegue al campo que se tocó (si no, el toque se pierde y render() no sabe dónde reponerlo) */
+  if (e.target.dataset.k === "Material" && m._ref && aplicarCatalogo(m)) { setTimeout(render, 0); guardarBorrador(); return; }
   const u = e.target.dataset.file; if (!u) return;
   const f = e.target.files[0]; if (!f) return;
   archivos[u] = f; m.certNombre = f.name; render(); guardarBorrador();

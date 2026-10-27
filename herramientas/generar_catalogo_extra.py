@@ -107,11 +107,59 @@ for tipo, norma, dias in SOLD:
     for d in dias:
         fila("Consumible", tipo, f"Ø {d}", None, None, "", norma, norma, "Se recibe por peso: la cantidad es en kg", 1, 1, "kg/und", "kg")
 
+# ---------- 8. Piezas del catálogo de INDIMON CAD (isometrico/index.html) que no trae la plantilla ----------
+# Se leen las constantes del CAD con Node (NPS_LISTA, SPECS, TIPOS, FABRICANTES, CONSUMIBLES): al agregar piezas al CAD,
+# basta con volver a correr este script. Las normas salen de las especificaciones del CAD (carbono A106 / inox 316L).
+import subprocess
+cad = open("isometrico/index.html", encoding="utf-8").read()
+tramo = cad[cad.index("const NPS_LISTA"):cad.index("const UNIDADES")]
+js = tramo + "\nprocess.stdout.write(JSON.stringify({ NPS_LISTA, SPECS, TIPOS, FABRICANTES, CONSUMIBLES }));"
+C = json.loads(subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True).stdout)
+YA_EN_PLANTILLA = {"pipe", "weld", "elbow90", "elbow90_sr", "elbow45", "elbow180", "tee", "tee_red", "reducer", "reducer_ecc", "cap", "stub_end",
+                   "union", "half_coupling", "nipple", "bushing", "elbow90_sw", "elbow45_sw", "tee_sw", "flange_wn", "flange_so", "flange_sw",
+                   "flange_th", "flange_lj", "flange_bl", "v_gate", "v_globe", "v_ball", "v_butterfly", "v_check"}
+CAT_REC = {"ACCESORIO": "Accesorio tubería", "BRIDA": "Brida", "VÁLVULA": "Válvula", "ESPECIAL": "Especial de línea",
+           "INSTRUMENTO": "Instrumento", "SOPORTE": "Soporte", "EQUIPO": "Equipo"}
+CS, SS = C["SPECS"]["SCH 40 ASTM A106 Gr.B"], C["SPECS"]["SCH 40S ASTM A312 TP316L"]
+SIGLAS = {"PSV", "SW", "NPT", "BW", "RF", "FF", "HFC", "PICV", "UAP", "TIG", "MIG", "TAG", "ΔP", "ASTM", "ASME", "API", "AWS"}
+def bonito(t):   # "VÁLVULA DE ALIVIO / SEGURIDAD (PSV)" -> "Válvula de alivio / seguridad (PSV)"; deja siglas y códigos (EV220B, AB-QM, 4-1/2")
+    pal = []
+    for w in t.split():
+        limpio = re.sub(r"[()\[\],.:;]", "", w)
+        codigo = re.search(r"\d", w) or "-" in limpio.strip("-") or limpio in SIGLAS or (limpio == "Y" and pal and pal[-1] == "tipo") or (pal and pal[0].lower() == "danfoss" and len(pal) == 1)
+        pal.append(w if codigo else w.lower())
+    s = " ".join(pal); return s[:1].upper() + s[1:]
+NPS = C["NPS_LISTA"]
+def rango(a, b): return NPS[NPS.index(a):NPS.index(b) + 1]
+for tid, T in C["TIPOS"].items():
+    if tid in YA_EN_PLANTILLA or T.get("noBOM") or T.get("grupo", "").startswith("fab_") or T["cat"] not in CAT_REC: continue
+    mat, cat_r, nombre = T.get("mat"), CAT_REC[T["cat"]], bonito(T["nombre"])
+    ncs, nss = (CS.get(mat, ""), SS.get(mat, "")) if mat in ("acc", "forj", "brida", "val") else ("", "")
+    nota = "Pieza del catálogo de INDIMON CAD" + (" · indique el diámetro menor o del ramal" if T.get("reduce") or tid.endswith("olet") else "")
+    if T["cat"] == "EQUIPO":
+        fila("Equipo", nombre, "(indicar TAG, marca y modelo)", None, None, "", "", "", nota, None, None, "", "und"); continue
+    medidas = (rango('1/4"', '1"') if tid in ("pi", "ti", "v_needle") else rango('1/4"', '4"') if mat == "forj"
+               else rango('1/2"', '24"'))
+    for n in medidas:
+        fila(cat_r, nombre, n + (" (indicar menor)" if T.get("reduce") and mat != "forj" or tid.endswith("olet") else ""), None, None, "",
+             ncs, nss, nota, None, None, "", "und")
+for marca, F in C["FABRICANTES"].items():
+    for _id, base, nombre, corto in F["items"]:
+        B = C["TIPOS"][base]
+        fila(F["titulo"], bonito(nombre), "(indicar diámetro y código de pedido)", None, None, "", "", "",
+             f"Serie de {F['titulo']} del catálogo de INDIMON CAD ({CAT_REC.get(B['cat'], B['cat']).lower()}) · el código exacto va en la descripción u observaciones",
+             None, None, "", "und")
+UNI = {"KG": "kg", "UND": "und", "GLB": "und", "JGO": "juego", "ML": "m", "M": "m"}
+for nombre, uni in C["CONSUMIBLES"]:
+    if re.match(r"(SOLDADURA|VARILLA)\b", nombre): continue          # ya están en el punto 7, por diámetro
+    fila("Consumible", bonito(nombre), "—", None, None, "", "", "", "Consumible del catálogo de INDIMON CAD", 1 if uni == "KG" else None,
+         1 if uni == "KG" else None, "kg/und" if uni == "KG" else "", UNI.get(uni, "und"), clave=bonito(nombre))
+
 out = {"fuente": "herramientas/generar_catalogo_extra.py", "catalogo": filas}
 with open("catalogo-extra.js", "w", encoding="utf-8") as f:
     f.write("/* Catálogo adicional (no viene en la plantilla QC-F-002): stub ends 316L HECO 690, codos BW con peso calculado,\n"
-            "   tubería galvanizada, PVC/CPVC, cobre B88, espárragos B16.5 y soldaduras. Generado por\n"
+            "   tubería galvanizada, PVC/CPVC, cobre B88, espárragos B16.5, soldaduras y las piezas de INDIMON CAD. Generado por\n"
             "   herramientas/generar_catalogo_extra.py; no editar a mano. */\n")
     f.write("window.CATALOGO_EXTRA = " + json.dumps(out, ensure_ascii=False, separators=(",", ":")) + ";\n")
 from collections import Counter
-print(len(filas), "filas", Counter(r[1] for r in filas).most_common(40))
+print(len(filas), "filas", Counter(r[0] for r in filas).most_common(20))
