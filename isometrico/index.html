@@ -705,8 +705,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v25';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-10-27T19:51';      // fecha y hora de la publicación (UTC)
+const APP_VERSION = 'v26';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-10-27T19:56';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -3095,7 +3095,9 @@ function renderPanelSeleccion() {
     ${c.type === 'pipe' && !c.directo && longitudCorte(c) <= 0 ? `<div style="margin-top:8px;padding:8px;border:1px solid #f59e0b;border-radius:8px;font-size:12px;color:#fcd34d">
       El corte da ≤ 0: las piezas de los extremos se tocan. Si van soldadas o apernadas entre sí, no hay tubo.
       ${c.lengthManual && Number(c.length) > 0 ? `<button class="btn ancho verde" style="margin-top:6px" data-acc="hacerNiple">Es un niple de ${fmtLong(Number(c.length))} entre las piezas</button>` : ''}
-      <button class="btn ancho ambar" style="margin-top:6px" data-acc="hacerDirecto">Son piezas pegadas (sin tubo)</button></div>` : ''}
+      <label style="color:#fcd34d;margin-top:8px">¿Hay un niple entre las piezas? Escriba su largo (${txtUnidad()})</label>
+      <input data-p="nipleRapido" type="number" step="any" min="0" inputmode="decimal" placeholder="Ej: 140">
+      <button class="btn ancho ambar" style="margin-top:6px" data-acc="hacerDirecto">No hay niple: piezas pegadas (sin tubo)</button></div>` : ''}
     ${c.type === 'pipe' ? `<label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:12px;color:var(--s200)"><input type="checkbox" data-p="directo" style="width:18px;height:18px"${c.directo ? ' checked' : ''}> Accesorio con accesorio (sin tubo)</label>
       ${c.directo ? `<div style="font-size:11px;color:var(--s400)">Las piezas de los extremos van soldadas o unidas entre sí: no sale tubo en el listado y el largo es el de las piezas (${fmtLong(longitudTubo(c))}).</div>
       <label>Niple entre las piezas (${txtUnidad()}) · 0 = pegadas</label>
@@ -3131,6 +3133,11 @@ $('panel-sel').addEventListener('change', e => {
     const t = String(e.target.value).trim().replace(',', '.'), v = deUnidad(parseFloat(t));
     if (t !== '' && !(v >= 0)) { aviso('Largo no válido', 'error'); renderPanelSeleccion(); return; }
     commit(() => { if (t === '') delete c.largo; else c.largo = r3(v); });
+  } else if (k === 'nipleRapido') {
+    const t = String(e.target.value).trim().replace(',', '.'), v = deUnidad(parseFloat(t));
+    if (!(v > 0)) { aviso('Escriba el largo del niple', 'error'); return; }
+    commit(() => { c.directo = true; c.niple = r3(v); c.lengthManual = false; delete c.sinCota; });
+    aviso(`Niple de ${fmtLong(v)}: use «Generar juntas» para agregar su junta`, 'ok', 3500);
   } else if (k === 'niple') {
     const t = String(e.target.value).trim().replace(',', '.'), v = t === '' ? 0 : deUnidad(parseFloat(t));
     if (!(v >= 0)) { aviso('Largo de niple no válido', 'error'); renderPanelSeleccion(); return; }
