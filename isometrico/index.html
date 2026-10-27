@@ -706,7 +706,7 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
 const APP_VERSION = 'v24';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-10-27T17:20';      // fecha y hora de la publicación (UTC)
+const APP_FECHA = '2026-10-27T17:29';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -1196,7 +1196,9 @@ function descuentoTubo(c) {
 }
 const longitudCorte = c => r3(longitudTubo(c) - descuentoTubo(c));
 /* tramo «accesorio con accesorio»: no lleva tubo; su largo centro a centro es el de las piezas que une */
-const longitudTubo = c => c.directo ? r3(descuentoTubo(c)) : c.lengthManual ? Number(c.length) || 0 : r3(pasosReales(c) * estado.escala);
+/* niple: tubo corto de largo fijo entre dos piezas; su centro a centro es el de las piezas más el niple */
+const nipleDe = c => c.directo ? Math.max(0, Number(c.niple) || 0) : 0;
+const longitudTubo = c => c.directo ? r3(descuentoTubo(c) + nipleDe(c)) : c.lengthManual ? Number(c.length) || 0 : r3(pasosReales(c) * estado.escala);
 
 /* ---------- 7b. Acomodo de textos: cotas, marcas de soldadura y ángulos no se montan ----------
    Cada texto tiene varias posiciones candidatas; se elige la primera que no tape tuberías,
@@ -1302,7 +1304,7 @@ function renderLienzo() {
       let rot = -ang; while (rot < -90) rot += 180; while (rot >= 90) rot -= 180;
       const cc = longitudTubo(c), corte = longitudCorte(c), descuenta = corte < cc - 5e-4, negativo = !c.directo && corte <= 0;
       const ccTxt = `${fmtLong(cc)}${c.lengthManual ? '*' : ''}`, corteTxt = negativo ? '⚠ corte ≤ 0' : `corte ${enMM() ? Math.round(corte * 1000) : f2(corte)}`;
-      const texto = c.directo ? fmtLong(cc) : estado.cotas === 'cc' || (!descuenta && !negativo) ? ccTxt : estado.cotas === 'corte' ? (negativo ? '⚠ corte ≤ 0' : fmtLong(corte)) : `${ccTxt} (${corteTxt})`;
+      const texto = c.directo ? (nipleDe(c) ? `${fmtLong(cc)} (niple ${fmtLong(nipleDe(c))})` : fmtLong(cc)) : estado.cotas === 'cc' || (!descuenta && !negativo) ? ccTxt : estado.cotas === 'corte' ? (negativo ? '⚠ corte ≤ 0' : fmtLong(corte)) : `${ccTxt} (${corteTxt})`;
       const w = texto.length * 6.1 + 4, h = 13;
       const m = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
       const candidatos = (ancho, lados) => { const lista = [];
@@ -1917,7 +1919,7 @@ function descripcionBase(c) {
 function recalculateBOM() {
   const grupos = new Map();
   for (const c of estado.components) {
-    if (TIPOS[c.type].noBOM || c.directo) continue;
+    if (TIPOS[c.type].noBOM || (c.directo && !nipleDe(c))) continue;
     const T = TIPOS[c.type], key = [c.type, c.nps, c.npsRed || '', c.schedule, c.ref || '', c.tag || '', c.junta || ''].join('|');
     const g = grupos.get(key) || { key, orden: T.orden, nps: npsNum(c.nps), uni: c.type === 'pipe' ? 'ML' : (T.uni || 'UND'), desc: descripcion(c), cant: 0 };
     g.cant += c.type === 'pipe' ? (estado.descontar ? Math.max(0, longitudCorte(c)) : longitudTubo(c)) : 1;
@@ -2014,7 +2016,7 @@ function generarJuntas() {
     /* entre dos piezas pegadas (tramo accesorio con accesorio) hay una sola junta */
     const enSeg = (q, p) => { const a = aPantalla(p.coords[0]), b = aPantalla(p.coords[1]), dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy || 1, t = ((q.x - a.x) * dx + (q.y - a.y) * dy) / L2;
       return t > 0.02 && t < 0.98 && Math.hypot(a.x + t * dx - q.x, a.y + t * dy - q.y) < 2; };
-    const seg = tuberias().find(p => p.directo && enSeg(scr, p)), todas = [...existentes, ...nuevas.map(n => n.s)];
+    const seg = tuberias().find(p => p.directo && !nipleDe(p) && enSeg(scr, p)), todas = [...existentes, ...nuevas.map(n => n.s)];
     if (seg ? todas.some(q => enSeg(q, seg)) : todas.some(q => Math.hypot(q.x - scr.x, q.y - scr.y) < 7)) return;
     nuevas.push({ s: scr, origen, nps: nps || origen.nps, junta: tipoJunta(origen) });
   };
@@ -2305,7 +2307,7 @@ function elementosJunta(w) {
   const s = aPantalla(w.coords[0]), idx = new Map(rutaTuberias().map((r, i) => [r.c, { i, inv: r.inv }]));
   const proy = c => { const a = aPantalla(c.coords[0]), b = aPantalla(c.coords[1]), dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy || 1;
     const t = Math.max(0, Math.min(1, ((s.x - a.x) * dx + (s.y - a.y) * dy) / L2)); return { t, d: Math.hypot(a.x + t * dx - s.x, a.y + t * dy - s.y) }; };
-  const tubos = tuberias().filter(c => !c.directo).map(c => ({ c, ...proy(c) })).filter(x => x.d < 4).sort((a, b) => a.d - b.d);
+  const tubos = tuberias().filter(c => !c.directo || nipleDe(c)).map(c => ({ c, ...proy(c) })).filter(x => x.d < 4).sort((a, b) => a.d - b.d);
   const piezas = estado.components.filter(o => o.type !== 'pipe' && o.type !== 'weld' && !TIPOS[o.type].noBOM && TIPOS[o.type].modo !== 'equipo')
     .map(o => { const q = aPantalla(o.coords[0]); return { o, d: Math.hypot(q.x - s.x, q.y - s.y) }; }).filter(x => x.d < 16).sort((a, b) => a.d - b.d);
   const mm = v => v > 0 ? Math.round(v * 10000) / 10 : '';
@@ -2545,7 +2547,7 @@ function mlPorJunta() {
   const ml = new Map(), welds = estado.components.filter(c => c.type === 'weld'), sinJunta = [];
   welds.forEach(w => ml.set(w.id, 0));
   for (const t of tuberias()) {
-    if (t.directo) continue;   // sin tubo: no suma metros
+    if (t.directo && !nipleDe(t)) continue;   // sin tubo: no suma metros
     const a = aPantalla(t.coords[0]), b = aPantalla(t.coords[1]), dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy || 1;
     const suyas = welds.filter(w => { const s = aPantalla(w.coords[0]); const u = ((s.x - a.x) * dx + (s.y - a.y) * dy) / L2;
       return u > -0.01 && u < 1.01 && Math.hypot(a.x + u * dx - s.x, a.y + u * dy - s.y) < 4; });
@@ -3094,7 +3096,9 @@ function renderPanelSeleccion() {
       El corte da ≤ 0: las piezas de los extremos se tocan. Si van soldadas o apernadas entre sí, no hay tubo.
       <button class="btn ancho ambar" style="margin-top:6px" data-acc="hacerDirecto">Son piezas pegadas (sin tubo)</button></div>` : ''}
     ${c.type === 'pipe' ? `<label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:12px;color:var(--s200)"><input type="checkbox" data-p="directo" style="width:18px;height:18px"${c.directo ? ' checked' : ''}> Accesorio con accesorio (sin tubo)</label>
-      ${c.directo ? `<div style="font-size:11px;color:var(--s400)">Las piezas de los extremos van soldadas o unidas entre sí: no sale tubo en el listado y el largo es el de las piezas (${fmtLong(longitudTubo(c))}).</div>` : ''}` : ''}
+      ${c.directo ? `<div style="font-size:11px;color:var(--s400)">Las piezas de los extremos van soldadas o unidas entre sí: no sale tubo en el listado y el largo es el de las piezas (${fmtLong(longitudTubo(c))}).</div>
+      <label>Niple entre las piezas (${txtUnidad()}) · 0 = pegadas</label>
+      <input data-p="niple" type="number" step="any" min="0" inputmode="decimal" value="${nipleDe(c) ? aUnidad(nipleDe(c)) : ''}" placeholder="Ej: 20">` : ''}` : ''}
     ${c.type === 'pipe' ? `<label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:12px;color:var(--s200)"><input type="checkbox" data-p="sinCota" style="width:18px;height:18px"${c.sinCota ? ' checked' : ''}> Ocultar cota de este tramo</label>` : ''}
     ${panelUbicacion(c)}
     ${c.type === 'pipe' ? `<label>Pendiente</label><button class="btn" style="width:100%" data-acc="pend">${c.pendiente ? `PEND. ${c.pendiente.valor}% · baja hacia el ${c.pendiente.haciaFin === false ? 'inicio' : 'final'}` : 'Agregar pendiente'}</button>` : ''}
@@ -3126,6 +3130,11 @@ $('panel-sel').addEventListener('change', e => {
     const t = String(e.target.value).trim().replace(',', '.'), v = deUnidad(parseFloat(t));
     if (t !== '' && !(v >= 0)) { aviso('Largo no válido', 'error'); renderPanelSeleccion(); return; }
     commit(() => { if (t === '') delete c.largo; else c.largo = r3(v); });
+  } else if (k === 'niple') {
+    const t = String(e.target.value).trim().replace(',', '.'), v = t === '' ? 0 : deUnidad(parseFloat(t));
+    if (!(v >= 0)) { aviso('Largo de niple no válido', 'error'); renderPanelSeleccion(); return; }
+    commit(() => { if (v > 0) { c.niple = r3(v); delete c.sinCota; } else delete c.niple; });
+    if (v > 0) aviso(`Niple de ${fmtLong(v)}: sale como tubo en el listado y lleva junta en cada extremo`, 'ok', 3000);
   } else if (k === 'directo') {
     commit(() => { if (e.target.checked) { c.directo = true; c.lengthManual = false; } else delete c.directo; });
   } else if (k === 'posReal' || k === 'posRef') {
