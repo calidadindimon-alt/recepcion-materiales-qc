@@ -2,9 +2,9 @@
    Al publicar cambios, suba el número de VERSION para que los equipos descarguen la nueva copia.
    No atiende la carpeta isometrico/ (INDIMON CAD tiene su propio service worker) y solo borra sus propias copias. */
 const PREFIJO = 'recepcion-qc-';
-const VERSION = PREFIJO + 'v1';
+const VERSION = PREFIJO + 'v2';
 const ARCHIVOS = [
-  './', './index.html', './manifest.webmanifest', './catalogo.js', './vendor/msal-browser.min.js', './vendor/exceljs.min.js',
+  './', './index.html', './manifest.webmanifest', './catalogo.js', './catalogo-extra.js', './vendor/msal-browser.min.js', './vendor/exceljs.min.js',
   './plantilla/QC-F-002.xlsx', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'
 ];
 const guardarTodo = () => caches.open(VERSION).then(c => c.addAll(ARCHIVOS));

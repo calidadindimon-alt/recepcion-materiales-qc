@@ -14,6 +14,7 @@
 <script src="vendor/msal-browser.min.js"></script>
 <script src="vendor/exceljs.min.js"></script>
 <script src="catalogo.js"></script>
+<script src="catalogo-extra.js"></script>
 <style>
 :root{--azul:#1F4E78;--gris:#f3f5f8;--borde:#cfd6df;--ok:#2e7d32;--err:#c62828}
 *{box-sizing:border-box}
@@ -217,7 +218,8 @@ function armarCatalogo() {
   CAT = TUBERIA.filter(r => r[7]).map(r => ({ k: r[7], cat: /A270/.test(r[0]) ? "Tubería sanitaria" : "Tubería", src: "T", r,
     t: palabras(`${r[0]} tubo tuberia ${r[1]} sch ${r[3]} ${r[2]} x ${r[4]} mm ${r[7]}`) }));
   /* tblCatalogo: Categoria, Tipo, Designacion, A, B, e, Calc, NormaCS, NormaSS, Rating, PesoTabla, Area, PesoCS, PesoSS, Unidad, Clave */
-  CATALOGO.filter(r => r[15]).forEach(r => CAT.push({ k: r[15], cat: r[0], src: "C", r,
+  /* catálogo de la plantilla + catalogo-extra.js (stub ends HECO, codos con peso, cobre, PVC, espárragos, soldaduras) */
+  CATALOGO.concat((window.CATALOGO_EXTRA || {}).catalogo || []).filter(r => r[15]).forEach(r => CAT.push({ k: r[15], cat: r[0], src: "C", r,
     t: palabras(`${r[0]} ${r[1]} ${r[2]} ${r[5]} ${r[9]} ${r[15]}`) }));
   CATS = [...new Set(CAT.map(x => x.cat))];
 }
@@ -290,7 +292,8 @@ function aplicarCatalogo(m) {
     m._hint = r[0];
     return true;
   }
-  const [cat, tipo, desig, , , esp, calc, nCS, nSS, rating, , , pCS, pSS] = r;
+  /* columnas 15 (kg/und = peso por pieza) y 16 (unidad de compra) solo vienen en catalogo-extra.js */
+  const [cat, tipo, desig, od, , esp, calc, nCS, nSS, rating, , , pCS, pSS, uPeso, , uCompra] = r;
   m.Categoria = cat;
   let norma = inox ? nSS : nCS; if (!norma || norma === "-" || norma === "N/A") norma = inox ? nCS : nSS;
   if (norma && norma !== "-" && norma !== "N/A") m.Norma = m._normaCat = norma;
@@ -304,12 +307,18 @@ function aplicarCatalogo(m) {
     m.Unidad = "lámina"; if (!m.Dimension_mm) m.Dimension_mm = m._dimCat = CONFIG.largoLamina_mm;
   } else if (calc) {
     m.Peso_kg_m = fix3(p);
+    if (calc === "TUBO" && od !== "" && od != null) m.Diametro = `${desig} (OD ${fmt(od, 1)} mm)`;
     m.Unidad = "tramo"; if (!m.Dimension_mm) m.Dimension_mm = m._dimCat = CONFIG.largoTramo_mm;
   } else {
     m.Peso_kg_m = ""; m.Unidad = "und";
   }
+  if (uCompra) m.Unidad = uCompra;
+  const porPieza = uPeso === "kg/und" && p !== "" && p != null;
+  if (porPieza) m.Peso_und = m._pesoCat = fix3(p);
   m._hint = [rating, calc === "LAM" ? `Peso lámina = ${fmt(p)} kg/m² × ancho` : "",
-    calc ? "" : "El catálogo no trae el peso de este artículo: escriba el «Peso unitario (kg/und)» de la lista de empaque o el certificado"].filter(Boolean).join(" · ");
+    calc || porPieza ? "" : uPeso === "kg/und" && !inox && pSS !== ""
+      ? "Este peso es solo para inoxidable: para acero al carbono escriba el «Peso unitario (kg/und)»"
+      : "El catálogo no trae el peso de este artículo: escriba el «Peso unitario (kg/und)» de la lista de empaque o el certificado"].filter(Boolean).join(" · ");
   return true;
 }
 
@@ -319,7 +328,8 @@ function quitarCatalogo(m) {
   if (m._normaCat && m.Norma === m._normaCat) m.Norma = "";
   if (m._auto) { m.Descripcion = ""; m._auto = false; }
   if (m._dimCat && String(m.Dimension_mm) === String(m._dimCat)) m.Dimension_mm = "";
-  m.Unidad = "und"; m._ref = m._hint = m._normaCat = m._dimCat = "";
+  if (m._pesoCat && String(m.Peso_und) === String(m._pesoCat)) m.Peso_und = "";
+  m.Unidad = "und"; m._ref = m._hint = m._normaCat = m._dimCat = m._pesoCat = "";
 }
 function pintarResultados(box, m) {
   const res = box.querySelector(".res"); if (!res) return;
