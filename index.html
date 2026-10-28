@@ -216,11 +216,11 @@ $("btnLogin").onclick = () => {
 function armarCatalogo() {
   /* tblTuberia: Tipo, NPS, OD_mm, Cedula, Espesor_mm, Peso_CS, Peso_SS, Clave */
   CAT = TUBERIA.filter(r => r[7]).map(r => ({ k: r[7], cat: /A270/.test(r[0]) ? "Tubería sanitaria" : "Tubería", src: "T", r,
-    t: palabras(`${r[0]} tubo tuberia ${r[1]} sch ${r[3]} ${r[2]} x ${r[4]} mm ${r[7]}`) }));
+    t: palabras(`${r[0]} tubo tuberia ${r[1]} sch ${r[3]} ${r[2]} x ${r[4]} mm ${r[7]}`), kt: palabras(`tubo ${r[7]}`) }));
   /* tblCatalogo: Categoria, Tipo, Designacion, A, B, e, Calc, NormaCS, NormaSS, Rating, PesoTabla, Area, PesoCS, PesoSS, Unidad, Clave */
   /* catálogo de la plantilla + catalogo-extra.js (stub ends HECO, codos con peso, cobre, PVC, espárragos, soldaduras) */
   CATALOGO.concat((window.CATALOGO_EXTRA || {}).catalogo || []).filter(r => r[15]).forEach(r => CAT.push({ k: r[15], cat: r[0], src: "C", r,
-    t: palabras(`${r[0]} ${r[1]} ${r[2]} ${r[5]} ${r[9]} ${r[15]}`) }));
+    t: palabras(`${r[0]} ${r[1]} ${r[2]} ${r[5]} ${r[9]} ${r[15]}`), kt: palabras(r[15]) }));
   CATS = [...new Set(CAT.map(x => x.cat))];
 }
 /* búsqueda por palabras en cualquier orden: 'tubo sch 40 6"' encuentra '6" · 40 / STD / 40S · 168,3 x 7,11 mm' */
@@ -236,7 +236,8 @@ function buscarCatalogo(q, cat) {
   CAT.forEach((x, i) => {
     if (cat && x.cat !== cat) return;
     let sc = 0;
-    for (const t of qs) { const exacta = x.t.includes(t); if (!exacta && !x.t.some(w => w.startsWith(t))) return; sc += exacta ? 2 : 1; }
+    /* vale más que la palabra esté en el nombre del artículo que solo en su nota (ej. «Clase 150 / 300…» de una brida genérica) */
+    for (const t of qs) { const exacta = x.t.includes(t); if (!exacta && !x.t.some(w => w.startsWith(t))) return; sc += x.kt.includes(t) ? 3 : exacta ? 2 : 1; }
     out.push([sc, i]);
   });
   return out.sort((a, b) => b[0] - a[0] || a[1] - b[1]).map(([, i]) => i);
