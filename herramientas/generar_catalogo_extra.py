@@ -42,16 +42,51 @@ NPS_IN = {'1"': 1, '1-1/4"': 1.25, '1-1/2"': 1.5, '2"': 2, '2-1/2"': 2.5, '3"': 
           '10"': 10, '12"': 12, '14"': 14, '16"': 16, '18"': 18, '20"': 20, '24"': 24}
 R_SR = {k: round(v * 25.4, 1) for k, v in NPS_IN.items()}   # radio corto = 1 × NPS (desde 1")
 SCH_CODO = {"5S", "10S", "STD", "40", "40S", "XS", "80", "80S"}
-CODOS = [("Codo 90° radio largo BW", R_LR, math.pi / 2), ("Codo 45° radio largo BW", R_LR, math.pi / 4),
-         ("Codo 180° radio largo BW", R_LR, math.pi), ("Codo 90° radio corto BW", R_SR, math.pi / 2)]
-for nombre, R, ang in CODOS:
+# Pesos aproximados de fabricantes (wermac.org, ver herramientas/datos/pesos_wermac.json). Donde no hay tabla
+# (5S, 10S, 180°, cédulas intermedias) se calcula: el cálculo da 6-11 % menos que las piezas reales (la pared
+# se engruesa al formar el codo), por eso se prefiere la tabla.
+W = json.load(open("herramientas/datos/pesos_wermac.json", encoding="utf-8"))
+FUENTE_W = "Peso aprox. de fabricantes (wermac.org) · verificar con el certificado"
+NORMA_ACC = ("ASTM A234 WPB / ASME B16.9", "ASTM A403 WP304/316 / ASME B16.9")
+def clave_w(ced):   # cédula de la tabla de tubería -> columna de las tablas de pesos
+    t = tok(ced)
+    return "STD" if "STD" in t else "XS" if "XS" in t else "XXS" if "XXS" in t else "160" if "160" in t else None
+CODOS = [("Codo 90° radio largo BW", R_LR, math.pi / 2, "90LR"), ("Codo 45° radio largo BW", R_LR, math.pi / 4, "45"),
+         ("Codo 180° radio largo BW", R_LR, math.pi, None), ("Codo 90° radio corto BW", R_SR, math.pi / 2, "90SR")]
+for nombre, R, ang, wk in CODOS:
     for t in TUB:
         nps, od, ced, e, pcs, pss = t[1], t[2], t[3], t[4], t[5], t[6]
-        if nps not in R or not (tok(ced) & SCH_CODO): continue
+        k = clave_w(ced); pw = W["codo"].get(f"{wk} {k}", {}).get(nps) if wk and k else None
+        if nps not in R or not (tok(ced) & SCH_CODO or pw): continue
+        if pw:
+            fila("Accesorio tubería", nombre, f"{nps} · SCH {ced}", od, e, "", *NORMA_ACC, FUENTE_W, pw, pw, "kg/und", "und"); continue
         arco = R[nps] * ang / 1000
-        fila("Accesorio tubería", nombre, f"{nps} · SCH {ced}", od, e, "", "ASTM A234 WPB / ASME B16.9", "ASTM A403 WP304/316 / ASME B16.9",
-             f"Peso calculado: kg/m del tubo SCH {ced} × arco ({fmt(arco * 1000, 0)} mm, R {fmt(R[nps])} mm) · verificar con el certificado",
+        fila("Accesorio tubería", nombre, f"{nps} · SCH {ced}", od, e, "", *NORMA_ACC,
+             f"Peso calculado: kg/m del tubo SCH {ced} × arco ({fmt(arco * 1000, 0)} mm, R {fmt(R[nps])} mm), las piezas reales pesan algo más · verificar con el certificado",
              pcs * arco, pss * arco, "kg/und", "und")
+
+# ---------- 2b. Tees rectas, caps y reducciones BW con pesos de fabricantes (wermac.org) ----------
+for clave, nombre in [("tee", "Tee recta BW"), ("cap", "Tapa (cap) BW")]:
+    for t in TUB:
+        k = clave_w(t[3]); pw = W[clave].get(k, {}).get(t[1]) if k else None
+        if pw: fila("Accesorio tubería", nombre, f"{t[1]} · SCH {t[3]}", t[2], t[4], "", *NORMA_ACC, FUENTE_W, pw, pw, "kg/und", "und")
+OD = {t[1]: t[2] for t in TUB}
+for par, pw in W["reduccion"]["STD"].items():
+    mayor, menor = par.split("x")
+    for nombre in ("Reducción concéntrica BW", "Reducción excéntrica BW"):
+        fila("Accesorio tubería", nombre, f"{mayor} x {menor} · SCH STD", OD.get(mayor), None, "", *NORMA_ACC,
+             FUENTE_W + " · peso para cédula STD", pw, pw, "kg/und", "und")
+
+# ---------- 2c. Bridas ASME B16.5 clase 150, 300 y 600 (pesos aprox. de fabricantes, wermac.org) ----------
+TIPO_BRIDA = {"WN": "Brida cuello soldable (WN)", "SO": "Brida deslizante (SO)", "BL": "Brida ciega (BL)", "LJ": "Brida lap joint (LJ)",
+              "SW": "Brida socket weld (SW)", "THD": "Brida roscada (NPT)"}
+NPS_ORDEN = list(R_LR) + ['22"']
+for clase in ("150", "300", "600"):
+    for nps, pesos in W["brida"][clase].items():
+        for tipo, pw in pesos.items():
+            if not pw or (tipo == "SW" and nps not in NPS_ORDEN[:NPS_ORDEN.index('3"') + 1]): continue   # SW solo hasta 3"
+            fila("Brida", TIPO_BRIDA[tipo], f"{nps} · clase {clase}", OD.get(nps), None, "", "ASTM A105 / ASME B16.5",
+                 "ASTM A182 F304/F316 / ASME B16.5", FUENTE_W + (" · cuello para cédula STD" if tipo == "WN" else ""), pw, pw, "kg/und", "und")
 
 # ---------- 3. Tubería galvanizada ASTM A53 SCH 40 (peso del tubo negro, sin zinc) ----------
 for t in TUB:
