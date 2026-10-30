@@ -1,10 +1,10 @@
 /* Service worker de INDIMON CAD: guarda la app en el equipo para trabajar sin internet.
    Al publicar cambios, suba el número de VERSION para que los equipos descarguen la nueva copia. */
 const PREFIJO = 'indimon-cad-';
-const VERSION = PREFIJO + 'v26';
+const VERSION = PREFIJO + 'v27';
 const ARCHIVOS = [
   './', './index.html', './manifest.webmanifest', './vendor/xlsx.bundle.js',
-  './vendor/exceljs.min.js', './vendor/msal-browser.min.js', './plantillas/QC-F-004.xlsx', './plantillas/QC-F-015.xlsx', './plantillas/Maestro_Gerencia_Avance.xlsx',
+  './vendor/exceljs.min.js', './vendor/msal-browser.min.js', './vendor/firebase-app-compat.js', './vendor/firebase-auth-compat.js', './vendor/firebase-firestore-compat.js', './plantillas/QC-F-004.xlsx', './plantillas/QC-F-015.xlsx', './plantillas/Maestro_Gerencia_Avance.xlsx',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'
 ];
 

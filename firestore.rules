@@ -1,0 +1,25 @@
+rules_version = '2';
+// Reglas de INDIMON CAD: solo usuarios activos; el administrador ve y maneja todo,
+// cada técnico solo lee y escribe las líneas de las obras que tiene asignadas.
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function perfil() { return get(/databases/$(db)/documents/usuarios/$(request.auth.uid)).data; }
+    function activo() { return request.auth != null && exists(/databases/$(db)/documents/usuarios/$(request.auth.uid)) && perfil().activo == true; }
+    function admin() { return activo() && perfil().rol == 'admin'; }
+    function asignada(obra) { return activo() && obra in perfil().obras; }
+
+    match /usuarios/{uid} {
+      allow read: if admin() || (request.auth != null && request.auth.uid == uid);
+      allow update, delete: if admin();
+      // el dueño crea su propio perfil de administrador la primera vez; los demás los crea el administrador
+      allow create: if admin() || (request.auth != null && request.auth.uid == uid
+        && request.auth.token.email == 'calidadindimon@gmail.com'
+        && request.resource.data.rol == 'admin');
+    }
+    match /lineas/{id} {
+      allow read: if admin() || (resource != null && asignada(resource.data.obraId));
+      allow create, update: if admin() || asignada(request.resource.data.obraId);
+      allow delete: if admin();
+    }
+  }
+}
