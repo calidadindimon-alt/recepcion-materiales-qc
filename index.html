@@ -14,6 +14,7 @@
 <script src="vendor/msal-browser.min.js"></script>
 <script src="vendor/exceljs.min.js"></script>
 <script src="catalogo.js"></script>
+<script src="catalogo-extra.js"></script>
 <style>
 :root{--azul:#1F4E78;--gris:#f3f5f8;--borde:#cfd6df;--ok:#2e7d32;--err:#c62828}
 *{box-sizing:border-box}
@@ -215,10 +216,11 @@ $("btnLogin").onclick = () => {
 function armarCatalogo() {
   /* tblTuberia: Tipo, NPS, OD_mm, Cedula, Espesor_mm, Peso_CS, Peso_SS, Clave */
   CAT = TUBERIA.filter(r => r[7]).map(r => ({ k: r[7], cat: /A270/.test(r[0]) ? "Tubería sanitaria" : "Tubería", src: "T", r,
-    t: palabras(`${r[0]} tubo tuberia ${r[1]} sch ${r[3]} ${r[2]} x ${r[4]} mm ${r[7]}`) }));
+    t: palabras(`${r[0]} tubo tuberia ${r[1]} sch ${r[3]} ${r[2]} x ${r[4]} mm ${r[7]}`), kt: palabras(`tubo ${r[7]}`) }));
   /* tblCatalogo: Categoria, Tipo, Designacion, A, B, e, Calc, NormaCS, NormaSS, Rating, PesoTabla, Area, PesoCS, PesoSS, Unidad, Clave */
-  CATALOGO.filter(r => r[15]).forEach(r => CAT.push({ k: r[15], cat: r[0], src: "C", r,
-    t: palabras(`${r[0]} ${r[1]} ${r[2]} ${r[5]} ${r[9]} ${r[15]}`) }));
+  /* catálogo de la plantilla + catalogo-extra.js (stub ends HECO, codos con peso, cobre, PVC, espárragos, soldaduras) */
+  CATALOGO.concat((window.CATALOGO_EXTRA || {}).catalogo || []).filter(r => r[15]).forEach(r => CAT.push({ k: r[15], cat: r[0], src: "C", r,
+    t: palabras(`${r[0]} ${r[1]} ${r[2]} ${r[5]} ${r[9]} ${r[15]}`), kt: palabras(r[15]) }));
   CATS = [...new Set(CAT.map(x => x.cat))];
 }
 /* búsqueda por palabras en cualquier orden: 'tubo sch 40 6"' encuentra '6" · 40 / STD / 40S · 168,3 x 7,11 mm' */
@@ -234,7 +236,8 @@ function buscarCatalogo(q, cat) {
   CAT.forEach((x, i) => {
     if (cat && x.cat !== cat) return;
     let sc = 0;
-    for (const t of qs) { const exacta = x.t.includes(t); if (!exacta && !x.t.some(w => w.startsWith(t))) return; sc += exacta ? 2 : 1; }
+    /* vale más que la palabra esté en el nombre del artículo que solo en su nota (ej. «Clase 150 / 300…» de una brida genérica) */
+    for (const t of qs) { const exacta = x.t.includes(t); if (!exacta && !x.t.some(w => w.startsWith(t))) return; sc += x.kt.includes(t) ? 3 : exacta ? 2 : 1; }
     out.push([sc, i]);
   });
   return out.sort((a, b) => b[0] - a[0] || a[1] - b[1]).map(([, i]) => i);
@@ -248,6 +251,9 @@ function pintarListas() {
 const BASE = window.CATALOGO_QC || { tuberia: [], catalogo: [], listas: {} };
 /* proveedores habituales (los nuevos se agregan solos al guardar) */
 BASE.listas.tblProveedores = [["FERREORIENTE"], ["CASAVAL"], ["IMPORINOX"], ...(BASE.listas.tblProveedores || [])];
+/* materiales de las especificaciones de INDIMON CAD que no trae la plantilla */
+BASE.listas.tblMateriales = [...(BASE.listas.tblMateriales || []), ["Acero A333 Gr 6 (baja temperatura)"], ["Acero A335 P11 (Cr-Mo)"],
+  ["Hierro maleable galvanizado"], ["PVC"], ["CPVC"], ["HDPE PE100"], ["Cobre"], ["Bronce"]];
 const unir = (a = [], b = []) => { const vistos = new Set(), out = [];
   for (const r of [...a, ...(Array.isArray(b) ? b : [])]) { const k = String(r[0]).trim().toLowerCase(); if (k && !vistos.has(k)) { vistos.add(k); out.push(r); } }
   return out; };
@@ -290,7 +296,8 @@ function aplicarCatalogo(m) {
     m._hint = r[0];
     return true;
   }
-  const [cat, tipo, desig, , , esp, calc, nCS, nSS, rating, , , pCS, pSS] = r;
+  /* columnas 15 (kg/und = peso por pieza) y 16 (unidad de compra) solo vienen en catalogo-extra.js */
+  const [cat, tipo, desig, od, , esp, calc, nCS, nSS, rating, , , pCS, pSS, uPeso, , uCompra] = r;
   m.Categoria = cat;
   let norma = inox ? nSS : nCS; if (!norma || norma === "-" || norma === "N/A") norma = inox ? nCS : nSS;
   if (norma && norma !== "-" && norma !== "N/A") m.Norma = m._normaCat = norma;
@@ -304,12 +311,18 @@ function aplicarCatalogo(m) {
     m.Unidad = "lámina"; if (!m.Dimension_mm) m.Dimension_mm = m._dimCat = CONFIG.largoLamina_mm;
   } else if (calc) {
     m.Peso_kg_m = fix3(p);
+    if (calc === "TUBO" && od !== "" && od != null) m.Diametro = `${desig} (OD ${fmt(od, 1)} mm)`;
     m.Unidad = "tramo"; if (!m.Dimension_mm) m.Dimension_mm = m._dimCat = CONFIG.largoTramo_mm;
   } else {
     m.Peso_kg_m = ""; m.Unidad = "und";
   }
+  if (uCompra) m.Unidad = uCompra;
+  const porPieza = uPeso === "kg/und" && p !== "" && p != null;
+  if (porPieza) m.Peso_und = m._pesoCat = fix3(p);
   m._hint = [rating, calc === "LAM" ? `Peso lámina = ${fmt(p)} kg/m² × ancho` : "",
-    calc ? "" : "El catálogo no trae el peso de este artículo: escriba el «Peso unitario (kg/und)» de la lista de empaque o el certificado"].filter(Boolean).join(" · ");
+    calc || porPieza ? "" : uPeso === "kg/und" && !inox && pSS !== ""
+      ? "Este peso es solo para inoxidable: para acero al carbono escriba el «Peso unitario (kg/und)»"
+      : "El catálogo no trae el peso de este artículo: escriba el «Peso unitario (kg/und)» de la lista de empaque o el certificado"].filter(Boolean).join(" · ");
   return true;
 }
 
@@ -319,7 +332,8 @@ function quitarCatalogo(m) {
   if (m._normaCat && m.Norma === m._normaCat) m.Norma = "";
   if (m._auto) { m.Descripcion = ""; m._auto = false; }
   if (m._dimCat && String(m.Dimension_mm) === String(m._dimCat)) m.Dimension_mm = "";
-  m.Unidad = "und"; m._ref = m._hint = m._normaCat = m._dimCat = "";
+  if (m._pesoCat && String(m.Peso_und) === String(m._pesoCat)) m.Peso_und = "";
+  m.Unidad = "und"; m._ref = m._hint = m._normaCat = m._dimCat = m._pesoCat = "";
 }
 function pintarResultados(box, m) {
   const res = box.querySelector(".res"); if (!res) return;
@@ -369,6 +383,9 @@ function totalReporte() {
   $("pesoReporte").textContent = t ? `· Peso total del reporte: ${fmt(t)} kg` : "";
 }
 function render() {
+  /* recordar el campo donde está el cursor (ej. se tocó el buscador justo cuando el Material recalcula la tarjeta) */
+  const a = document.activeElement, caja = a && a.closest && a.closest(".mat");
+  const foco = caja && (a.dataset.k ? `[data-k="${a.dataset.k}"]` : a.dataset.buscar ? "[data-buscar]" : null);
   $("materiales").innerHTML = mats.map((m, i) => {
     if (m.u !== abierto) return `
    <div class="mat cerrado${incompleto(m) ? " falta" : ""}" data-u="${m.u}">
@@ -399,6 +416,10 @@ function render() {
      <div><label>&nbsp;</label><div class="peso" data-peso="${m.u}">${textoPeso(m)}</div></div>
     </div>
    </div>`; }).join("") || '<p class="small">Aún no hay materiales. Presione "+ Agregar material".</p>';
+  if (foco) {
+    const el = document.querySelector(`.mat[data-u="${caja.dataset.u}"] ${foco}`);
+    if (el) { el.focus({ preventScroll: true }); try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) { /* number/date */ } }
+  }
   totalReporte();
 }
 $("materiales").addEventListener("input", e => {
@@ -415,7 +436,8 @@ $("materiales").addEventListener("change", e => {
   const m = mats.find(x => x.u === box.dataset.u);
   if (e.target.dataset.catf) { m._catf = e.target.value; render(); guardarBorrador();
     const b = document.querySelector(`.mat[data-u="${m.u}"]`); b && pintarResultados(b, m); return; }
-  if (e.target.dataset.k === "Material" && m._ref && aplicarCatalogo(m)) { render(); guardarBorrador(); return; }
+  /* redibujar después de que el cursor llegue al campo que se tocó (si no, el toque se pierde y render() no sabe dónde reponerlo) */
+  if (e.target.dataset.k === "Material" && m._ref && aplicarCatalogo(m)) { setTimeout(render, 0); guardarBorrador(); return; }
   const u = e.target.dataset.file; if (!u) return;
   const f = e.target.files[0]; if (!f) return;
   archivos[u] = f; m.certNombre = f.name; render(); guardarBorrador();
