@@ -713,8 +713,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v27';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-10-30T04:17';      // fecha y hora de la publicación (UTC)
+const APP_VERSION = 'v28';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-11-04T20:38';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -2789,7 +2789,8 @@ async function abrirObras() {
   await guardarLineaBD();
   let lineas = [];
   try { lineas = await todasLineas(); } catch (err) { aviso('No se pudo leer la lista de líneas: ' + err.message, 'error', 5000); return; }
-  const obras = [...new Set(lineas.map(L => L.obra))];
+  /* la misma obra escrita con otras mayúsculas o tildes («Eon» y «EON») se agrupa una sola vez, igual que en la nube */
+  const obras = [...new Set(lineas.map(L => idObra(L.obra)))], nombreObra = id => (lineas.find(L => idObra(L.obra) === id) || {}).obra || id;
   const fila = L => { const k = contarJuntas(L.datos), actual = L.id === estado.lineaId, pct = k.total ? Math.round(100 * k.liberada / k.total) : 0;
     return `<div class="ob-linea${actual ? ' actual' : ''}">
       <div style="flex:1;min-width:0"><b>${esc(L.linea || '(sin número)')}</b>${actual ? ' <span style="color:var(--cian)">· abierta</span>' : ''}
@@ -2805,9 +2806,9 @@ async function abrirObras() {
         <button type="button" class="btn ambar" data-ob="nueva">+ Nueva línea en esta obra</button>
         <button type="button" class="btn" data-ob="importar">Importar (.json)</button>
         ${nube.activa && nube.perfil ? '<button type="button" class="btn verde" data-ob="nube">Traer de la nube</button>' : ''}</div>
-      ${obras.length ? obras.map(o => { const ls = lineas.filter(L => L.obra === o), t = ls.map(L => contarJuntas(L.datos)).reduce((a, k) => ({ total: a.total + k.total, lib: a.lib + k.liberada }), { total: 0, lib: 0 });
+      ${obras.length ? obras.map(o => { const ls = lineas.filter(L => idObra(L.obra) === o), t = ls.map(L => contarJuntas(L.datos)).reduce((a, k) => ({ total: a.total + k.total, lib: a.lib + k.liberada }), { total: 0, lib: 0 });
         return `<div class="ob-obra"><div style="display:flex;align-items:center;gap:6px;margin:10px 0 4px">
-          <div style="flex:1"><b style="color:var(--cian)">${esc(o)}</b> <span style="font-size:11px;color:var(--s400)">${ls.length} líneas · ${t.total} juntas · ${t.total ? Math.round(100 * t.lib / t.total) : 0}% liberado</span></div>
+          <div style="flex:1"><b style="color:var(--cian)">${esc(nombreObra(o))}</b> <span style="font-size:11px;color:var(--s400)">${ls.length} líneas · ${t.total} juntas · ${t.total ? Math.round(100 * t.lib / t.total) : 0}% liberado</span></div>
           <button type="button" class="btn" data-ob="exportar" data-obra="${esc(o)}">Exportar obra</button></div>${ls.map(fila).join('')}</div>`; }).join('') : '<p>Aún no hay líneas guardadas.</p>'}
       <label style="display:flex;gap:8px;align-items:center;text-transform:none;font-size:12px;color:var(--s300);margin-top:10px">
         <input type="checkbox" id="ob-fotos" checked style="width:16px;height:16px">Incluir las fotos al exportar una obra (el archivo queda más pesado)</label>`,
@@ -2861,7 +2862,7 @@ async function nuevaLinea() {
 const aBase64 = blob => new Promise(ok => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.readAsDataURL(blob); });
 async function exportarObra(obra, conFotos) {
   await guardarLineaBD();
-  const lineas = (await todasLineas()).filter(L => L.obra === obra);
+  const lineas = (await todasLineas()).filter(L => idObra(L.obra) === idObra(obra));
   const fotos = [];
   if (conFotos) for (const L of lineas) for (const f of await fotosDeLinea(L.id)) fotos.push({ ...f, blob: undefined, tipoMime: f.blob.type, data: await aBase64(f.blob) });
   const datos = { formato: 'INDIMON-OBRA', version: 1, guardado: new Date().toISOString(), obra, lineas, soldadores, fotos };
