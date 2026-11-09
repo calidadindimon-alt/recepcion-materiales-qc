@@ -713,8 +713,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v28';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-11-04T20:38';      // fecha y hora de la publicación (UTC)
+const APP_VERSION = 'v29';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-11-09T17:04';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -1171,6 +1171,13 @@ function largoAccesorio(c) {
 }
 /* Descuento de accesorios sobre un tramo: codos/tees en sus extremos (y tee pasante 2×C),
    piezas en línea completas si están dentro del tramo o repartidas si están en una unión */
+/* Inserción directa (stub-in / set-on): el extremo E de un tubo cae en medio de otro tubo y no hay tee ni olet ahí.
+   Devuelve el tubo principal o null */
+function cabezal(E, ramal) {
+  const p = tuberias().find(t => t !== ramal && !igual(E, t.coords[0]) && !igual(E, t.coords[1]) && sobreTubo(E, t)); if (!p) return null;
+  const pieza = estado.components.some(o => o.type !== 'pipe' && o.type !== 'weld' && !TIPOS[o.type].noBOM && igual(o.coords[0], E));
+  return pieza ? null : p;
+}
 function descuentoTubo(c) {
   const [A, B] = c.coords, a = aPantalla(A), b = aPantalla(B), dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy || 1;
   let total = 0;
@@ -1196,6 +1203,8 @@ function descuentoTubo(c) {
       total += L / Math.max(1, (reales.length ? reales : ahi).length) + g;
     }
   }
+  /* ramal insertado directo en otro tubo: llega hasta la pared del principal (radio exterior); la boca de pescado se traza en obra */
+  for (const P of [A, B]) { const h = cabezal(P, c); if (h) { total += (OD_MM[h.nps] || 0) / 2000; if (igual(P, A)) ocupado.A = true; else ocupado.B = true; } }
   /* unión directa tubo con tubo (sin accesorio): la apertura de raíz se reparte entre los dos tramos */
   if ((SPECS[c.schedule]?.junta || 'BW') === 'BW')
     for (const [k, P] of [['A', A], ['B', B]])
@@ -1328,6 +1337,12 @@ function renderLienzo() {
         const derecha = baja.x * Math.cos(tr) + baja.y * Math.sin(tr) > 0, v = String(c.pendiente.valor).replace('.', ',');
         const tp = `PEND. ${v}%`, wp = tp.length * 5.9 + 20, cp = candidatos(wp, [-1, 1]);
         etiquetas.push({ texto: tp, clase: 'pend', w: wp, h: 12, rot, cand: cp, prio: 0.5, flecha: derecha ? 1 : -1 });
+      }
+      for (const P of c.coords) {
+        const h = cabezal(P, c); if (!h) continue;
+        const Q = aPantalla(P), tag = `INS. ${h.nps}×${c.nps}`, cand = [];
+        for (const d of [16, 24, 32]) for (const k of [1, 3, 0, 2, 7, 5, 4, 6]) { const a = k * Math.PI / 4; cand.push({ x: Q.x + Math.cos(a) * d, y: Q.y - Math.sin(a) * d }); }
+        etiquetas.push({ texto: tag, clase: 'angl', w: tag.length * 5.6 + 4, h: 11, rot: 0, cand, prio: 2.5 });
       }
       continue;
     }
@@ -1564,6 +1579,7 @@ function propagarDiametro(inicio, nps) {
     }
     for (const Q of c.coords) {
       if (estado.components.some(o => o.type !== 'pipe' && igual(o.coords[0], Q) && (REDUCTORES_LINEA.includes(o.type) || DERIVACIONES.includes(o.type)))) continue;
+      if (cabezal(Q, c)) continue;   // inserción directa: el tubo principal conserva su diámetro
       for (const p of tuberias()) if (!vistos.has(p) && (igual(p.coords[0], Q) || igual(p.coords[1], Q) || sobreTubo(Q, p))) pila.push(p);
     }
   }
@@ -1588,7 +1604,26 @@ function crearTuberia(A, B, info) {
   if (info && info.libre && !dirEntre(A, B)) c.libre = { plano: info.plano, ang: info.angPlano };
   c.length = longitudTubo(c);
   commit(() => estado.components.push(c));
+  const h = cabezal(A, c);
+  if (h) { preguntarInsercion(c, h); return; }
   if ($('chk-manual-len').checked) pedirLongitud(c.id);
+}
+/* Ramal que arranca en medio de un tubo sin tee ni olet: inserción directa. Se elige el diámetro del ramal */
+function preguntarInsercion(c, h) {
+  const barra = $('spec-nps').value, opciones = NPS_LISTA.filter(n => npsNum(n) <= npsNum(h.nps));
+  const sugerido = barraElegida.nps && npsNum(barra) < npsNum(h.nps) ? barra : opciones[Math.max(0, opciones.length - 2)];
+  abrirModal({
+    titulo: `Inserción directa en tubo de Ø ${h.nps}`,
+    html: `<label>Diámetro del ramal</label><select id="m-ins">${opciones.map(n => `<option${n === sugerido ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>
+      <p>El ramal va soldado directo sobre el tubo principal (stub-in, sin tee ni olet). Su corte descuenta el radio exterior del Ø ${esc(h.nps)}
+      (${fmtLong((OD_MM[h.nps] || 0) / 2000)}) y lleva una junta en la inserción. Si va con tee o weldolet, colóquelo en ese punto.</p>`,
+    okTxt: 'Aceptar',
+    alAceptar: () => {
+      const n = $('m-ins').value;
+      commit(() => { c.nps = n; propagarDiametro(c, n); });
+      if ($('chk-manual-len').checked) setTimeout(() => pedirLongitud(c.id), 50);
+    }
+  });
 }
 function pedirLongitud(id) {
   const c = estado.components.find(x => x.id === id); if (!c) return;
@@ -2043,6 +2078,8 @@ function generarJuntas() {
     /* en reducciones, la junta del lado chico (+x local) lleva el diámetro menor */
     for (const [lx, ly] of locales) agregar({ x: P.x + e.x * lx + n.x * ly, y: P.y + e.y * lx + n.y * ly }, c, lx > 0 && c.npsRed && REDUCTORES_LINEA.includes(c.type) ? c.npsRed : c.nps);
   }
+  /* ramales insertados directo en otro tubo: una junta en la inserción */
+  for (const c of tuberias()) for (const P of c.coords) if (!c.directo && cabezal(P, c)) agregar(aPantalla(P), c, c.nps);
   /* uniones directas tubo con tubo (sin accesorio en el nodo) */
   const extremos = new Map();
   for (const c of tuberias()) for (const P of c.coords) { const k = P.map(v => v.toFixed(5)).join(','); if (!extremos.has(k)) extremos.set(k, { P, tubos: [] }); extremos.get(k).tubos.push(c); }
