@@ -337,7 +337,7 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
           <button class="btn ancho verde" onclick="exportarQC015()"><svg class="ico" data-ico="sheet"></svg>QC-F-015 Mapa de soldadura</button>
           <button class="btn ancho verde" onclick="exportarAnexo()"><svg class="ico" data-ico="camera"></svg>Anexo fotográfico de juntas</button>
           <button class="btn ancho ambar" onclick="abrirReporteAvance()"><svg class="ico" data-ico="sheet"></svg>Reporte semanal de avance (ML)</button>
-          <button class="btn ancho" onclick="descargarMaestro()"><svg class="ico" data-ico="sheet"></svg>Excel maestro de gerencia (tarifas)</button>
+          <button class="btn ancho verde" onclick="abrirCobro()"><svg class="ico" data-ico="sheet"></svg>Cobro mensual (Excel maestro con datos)</button>
           <button class="btn ancho" onclick="abrirColadas()"><svg class="ico" data-ico="folder"></svg>Coladas de Recepción (trazabilidad)</button>
         </div>
 
@@ -713,8 +713,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v29';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-11-09T17:04';      // fecha y hora de la publicación (UTC)
+const APP_VERSION = 'v30';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-11-12T18:52';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -2594,8 +2594,11 @@ function mlPorJunta() {
   for (const t of tuberias()) {
     if (t.directo && !nipleDe(t)) continue;   // sin tubo: no suma metros
     const a = aPantalla(t.coords[0]), b = aPantalla(t.coords[1]), dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy || 1;
+    /* la junta de un ramal (inserción directa u olet) cae sobre el tubo principal pero no cobra sus metros: cobra los del ramal */
+    const deRamal = w => estado.components.some(o => OLET_A[o.type] && igual(o.coords[0], w.coords[0]))
+      || tuberias().some(o => o !== t && o.coords.some(E => igual(E, w.coords[0]) && cabezal(E, o) === t));
     const suyas = welds.filter(w => { const s = aPantalla(w.coords[0]); const u = ((s.x - a.x) * dx + (s.y - a.y) * dy) / L2;
-      return u > -0.01 && u < 1.01 && Math.hypot(a.x + u * dx - s.x, a.y + u * dy - s.y) < 4; });
+      return u > -0.01 && u < 1.01 && Math.hypot(a.x + u * dx - s.x, a.y + u * dy - s.y) < 4 && !deRamal(w); });
     const L = longitudTubo(t);
     if (!suyas.length) { sinJunta.push(t); continue; }
     suyas.forEach(w => ml.set(w.id, ml.get(w.id) + L / suyas.length));
@@ -2765,6 +2768,87 @@ async function exportarAvance(sem, marcar, todaObra) {
     descargarBlob(new Blob([buf], { type: XLSX_MIME }), nombre);
     aviso(`Reporte ${sem.clave} generado: ${ev.length} eventos de ${d.lineas.length} línea${d.lineas.length === 1 ? '' : 's'}`, 'ok', 4500);
   } catch (err) { aviso('No se pudo generar el reporte: ' + err.message, 'error', 5000); }
+}
+/* ---- Cobro mensual: el Excel maestro sale ya lleno con todos los eventos de las líneas (de la nube y del equipo)
+   y con las tarifas guardadas, sin copiar y pegar reportes ni configurar Power Query ---- */
+const CLAVE_TARIFAS = 'indimon_tarifas';
+const COL_TARIFAS = ['Taller soldado', 'Taller liberado', 'Campo soldado', 'Campo liberado', 'Reparación (− = descuento)'];
+function leerTarifas() { try { return JSON.parse(localStorage.getItem(CLAVE_TARIFAS) || '{}') || {}; } catch (_) { return {}; } }
+function abrirTarifas(volver) {
+  const t = leerTarifas(), usados = new Set(estado.components.map(c => c.nps));
+  const lista = NPS_LISTA.filter(n => npsNum(n) >= 0.5);
+  abrirModal({
+    titulo: 'Tarifas por metro lineal ($/ML)',
+    html: `<p>Valor en pesos por metro lineal para cada diámetro. Deje vacío lo que no se cobra. La reparación se puede poner negativa para descontarla. Se guardan en este equipo.</p>
+      <div class="rj-lista" style="max-height:52vh;overflow:auto"><table style="min-width:420px;width:100%;border-collapse:collapse;font-size:12px">
+      <tr><th style="text-align:left">NPS</th>${COL_TARIFAS.map(c => `<th style="font-size:10px;padding:2px">${c}</th>`).join('')}</tr>
+      ${lista.map(n => `<tr><td style="font-weight:800;color:${usados.has(n) ? 'var(--cian)' : 'var(--s300)'}">${esc(n)}</td>${COL_TARIFAS.map((_, i) => `<td style="padding:2px"><input data-tar="${esc(n)}|${i}" type="number" inputmode="numeric" step="any" value="${t[n] && t[n][i] ? t[n][i] : ''}" style="width:100%;min-width:62px;padding:5px 3px;font-size:12px;text-align:right"></td>`).join('')}</tr>`).join('')}
+      </table></div>`,
+    okTxt: 'Guardar tarifas',
+    alAceptar: () => {
+      const nuevo = {};
+      document.querySelectorAll('[data-tar]').forEach(i => { const [n, k] = i.dataset.tar.split('|'), v = parseFloat(String(i.value).replace(',', '.')); if (isFinite(v) && v !== 0) { (nuevo[n] = nuevo[n] || [0, 0, 0, 0, 0])[k] = v; } });
+      try { localStorage.setItem(CLAVE_TARIFAS, JSON.stringify(nuevo)); } catch (_) { }
+      aviso('Tarifas guardadas', 'ok'); if (volver) setTimeout(abrirCobro, 50);
+    }
+  });
+}
+/* todos los eventos (soldada / reparación / liberada) de todas las líneas guardadas, trayendo antes lo de la nube */
+async function eventosTodas() {
+  await guardarLineaBD();
+  if (nube.activa && nube.db && nube.perfil) { try { await bajarLineasNube(); } catch (_) { } }
+  const sem = { clave: 'TOTAL', desde: '0000-01-01', hasta: '9999-12-31' }, ev = [];
+  if (estado.components.length) ev.push(...eventosLinea(sem, false).ev);
+  await conLineas((await todasLineas()).filter(L => L.id !== estado.lineaId), () => { ev.push(...eventosLinea(sem, false).ev); });
+  return ev;
+}
+async function abrirCobro() {
+  toggleSidebar(false);
+  const obras = [...new Set((await todasLineas()).map(L => (L.obra || '').trim()).filter(Boolean))].sort();
+  const t = leerTarifas(), nT = Object.keys(t).length, mes = hoyISO().slice(0, 7);
+  abrirModal({
+    titulo: 'Cobro mensual por metro lineal',
+    html: `<p>Sale el <b>Excel maestro ya lleno</b>: todos los metros soldados, liberados y reparados de las líneas${nube.activa ? ' (de la nube y de este equipo)' : ' de este equipo'}, con sus tarifas y el cobro del mes calculado. No hay que copiar reportes.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label>Mes</label><input id="cb-mes" type="month" value="${mes}"></div>
+        <div><label>Obra</label><select id="cb-obra"><option value="TODAS">Todas las obras</option>${obras.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('')}</select></div></div>
+      <div class="qc-resumen" style="margin-top:8px">${nT ? `Tarifas guardadas para ${nT} diámetro${nT > 1 ? 's' : ''}` : '<span style="color:#f59e0b">⚠ Aún no hay tarifas: el Excel saldrá con metros pero sin valores</span>'}</div>
+      <button type="button" class="btn ancho" id="cb-tarifas" style="margin-top:6px">Editar tarifas $/ML</button>
+      <button type="button" class="btn ancho" id="cb-vacio" style="margin-top:6px">Descargar maestro vacío (para llenar a mano)</button>`,
+    okTxt: 'Generar Excel de cobro',
+    alAbrir: () => { $('cb-tarifas').onclick = () => { cerrarModal(); abrirTarifas(true); }; $('cb-vacio').onclick = () => { cerrarModal(); descargarMaestro(); }; },
+    alAceptar: () => { exportarCobro($('cb-mes').value || mes, $('cb-obra').value); }
+  });
+}
+async function exportarCobro(mes, obra) {
+  try {
+    aviso('Reuniendo los datos de todas las líneas…', null, 8000);
+    const ev = await eventosTodas(), t = leerTarifas();
+    const ExcelJS = await cargarExcelJS(), wb = new ExcelJS.Workbook(); await wb.xlsx.load(await plantillaQC('Maestro_Gerencia_Avance'));
+    const wd = wb.getWorksheet('Datos'), wt = wb.getWorksheet('Tarifas'), wc = wb.getWorksheet('Cobro mensual');
+    const genero = new Date();
+    ev.sort((a, b) => a.fecha.localeCompare(b.fecha) || String(a.obra).localeCompare(String(b.obra)) || String(a.linea).localeCompare(String(b.linea)) || a.n - b.n);
+    ev.forEach((x, i) => {
+      const fila = wd.getRow(i + 2);
+      fila.values = [x.obra, x.cliente, x.linea, x.etiqueta, x.c.nps, SPECS[x.c.schedule]?.sch || x.c.schedule, UBIC_TXT[x.ubic] || 'SIN DEFINIR', x.evento,
+        new Date(x.fecha + 'T00:00:00Z'), x.fecha.slice(0, 7), semanaISO(x.fecha).clave, Math.round(x.ml * 1000) / 1000, x.c.junta === 'SW' || x.c.junta === 'FILETE' ? 'FW' : 'BW',
+        estampaDe(x.r.raiz), estampaDe(x.r.pres), x.r.tubero || '', `${x.obra}|${x.linea}|${x.etiqueta}|${x.evento}`, genero];
+      fila.getCell(9).numFmt = 'dd/mm/yyyy'; fila.getCell(12).numFmt = '0.000'; fila.getCell(18).numFmt = 'dd/mm/yyyy hh:mm';
+    });
+    /* tarifas: la hoja tiene una fila por NPS en el orden de la lista */
+    for (let r = 2; r <= wt.rowCount; r++) { const n = String(wt.getCell(r, 1).value || ''); if (t[n]) for (let k = 0; k < 5; k++) wt.getCell(r, 2 + k).value = t[n][k] || 0; }
+    const [a, m] = mes.split('-').map(Number);
+    wc.getCell('D3').value = new Date(Date.UTC(a, m - 1, 1)); wc.getCell('D4').value = obra === 'TODAS' ? 'TODAS' : obra;
+    wb.calcProperties = { ...(wb.calcProperties || {}), fullCalcOnLoad: true };
+    wb.views = [{ activeTab: wb.worksheets.indexOf(wc) }];
+    /* valor del mes para el aviso (mismo cálculo que el Excel) */
+    const enMes = ev.filter(x => x.fecha.slice(0, 7) === mes && (obra === 'TODAS' || String(x.obra).trim().toUpperCase() === obra.toUpperCase()));
+    const col = x => x.evento === 'REPARACION' ? 4 : (x.ubic === 'S' ? 0 : x.ubic === 'F' ? 2 : -1) + (x.evento === 'LIBERADA' ? 1 : 0);
+    const ml3 = x => Math.round(x.ml * 1000) / 1000;   // igual que la hoja Datos
+    const total = enMes.reduce((s, x) => { const k = col(x); return k < 0 || !t[x.c.nps] ? s : s + ml3(x) * (t[x.c.nps][k] || 0); }, 0);
+    descargarBlob(new Blob([await wb.xlsx.writeBuffer()], { type: XLSX_MIME }), `COBRO_${nombreSeguro(obra)}_${mes}.xlsx`);
+    aviso(`Cobro ${mes}: ${enMes.length} eventos · ${r2(enMes.reduce((s, x) => s + ml3(x), 0))} ML · $ ${Math.round(total).toLocaleString('es-CO')}`, 'ok', 7000);
+  } catch (err) { aviso('No se pudo generar el cobro: ' + err.message, 'error', 6000); }
 }
 async function descargarMaestro() {
   toggleSidebar(false);
