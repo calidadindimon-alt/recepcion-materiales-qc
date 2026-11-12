@@ -713,8 +713,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v30';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-11-12T18:52';      // fecha y hora de la publicación (UTC)
+const APP_VERSION = 'v31';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-11-12T19:14';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -2603,8 +2603,18 @@ function mlPorJunta() {
     if (!suyas.length) { sinJunta.push(t); continue; }
     suyas.forEach(w => ml.set(w.id, ml.get(w.id) + L / suyas.length));
   }
+  /* accesorios: cada uno vale «ML por accesorio» sin importar su tamaño (codo de 1/2" = 1 ML), repartido entre sus juntas */
+  const eq = mlPorAccesorio();
+  if (eq > 0) for (const o of estado.components) {
+    const T = TIPOS[o.type];
+    if (o.type === 'pipe' || o.type === 'weld' || T.noBOM || T.modo === 'equipo' || o.type === 'flange_lj') continue;
+    const q = aPantalla(o.coords[0]), suyas = welds.filter(w => { const s = aPantalla(w.coords[0]); return Math.hypot(s.x - q.x, s.y - q.y) < 18; });
+    suyas.forEach(w => ml.set(w.id, ml.get(w.id) + eq / suyas.length));
+  }
   return { ml, sinJunta };
 }
+const CLAVE_ML_ACC = 'indimon_ml_accesorio';
+function mlPorAccesorio() { try { const v = parseFloat(localStorage.getItem(CLAVE_ML_ACC)); return isFinite(v) && v >= 0 ? v : 1; } catch (_) { return 1; } }
 /* semana ISO (lunes a domingo) */
 function semanaISO(f) {
   const d = new Date(f + 'T12:00:00'), dia = (d.getDay() + 6) % 7, jue = new Date(d); jue.setDate(d.getDate() - dia + 3);
@@ -2755,7 +2765,7 @@ async function exportarAvance(sem, marcar, todaObra) {
       for (const k in T) T[k] += l[k];
     }
     celdas(r, ['TOTAL', T.juntas, r2(T.total), r2(T.sol), T.total ? T.sol / T.total : 0, r2(T.lib), T.total ? T.lib / T.total : 0, T.rep], true, fl);
-    ws.getCell(r + 2, 1).value = 'Los metros de cada tubo (centro a centro) se reparten por partes iguales entre sus juntas. Las reparaciones se informan aparte para cobrarlas o descontarlas. Los valores en pesos los pone gerencia en el Excel maestro.';
+    ws.getCell(r + 2, 1).value = `Los metros de cada tubo (centro a centro) se reparten por partes iguales entre sus juntas; cada accesorio soldado cuenta como ${mlPorAccesorio()} ML. Las reparaciones se informan aparte para cobrarlas o descontarlas. Los valores en pesos los pone gerencia en el Excel maestro.`;
     ws.getCell(r + 2, 1).font = { italic: true, size: 9 }; ws.mergeCells(r + 2, 1, r + 3, 8); ws.getCell(r + 2, 1).alignment = { wrapText: true, vertical: 'top' };
     ws.pageSetup = { orientation: 'portrait', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
     const buf = await wb.xlsx.writeBuffer();
@@ -2780,6 +2790,8 @@ function abrirTarifas(volver) {
   abrirModal({
     titulo: 'Tarifas por metro lineal ($/ML)',
     html: `<p>Valor en pesos por metro lineal para cada diámetro. Deje vacío lo que no se cobra. La reparación se puede poner negativa para descontarla. Se guardan en este equipo.</p>
+      <label>Cada accesorio soldado (codo, tee, reducción, brida, olet…) cuenta como</label>
+      <div style="display:flex;gap:6px;align-items:center"><input id="tar-acc" type="number" step="any" min="0" inputmode="decimal" value="${mlPorAccesorio()}" style="width:90px;text-align:right"><span>metro(s) lineal(es), sin importar su tamaño</span></div>
       <div class="rj-lista" style="max-height:52vh;overflow:auto"><table style="min-width:420px;width:100%;border-collapse:collapse;font-size:12px">
       <tr><th style="text-align:left">NPS</th>${COL_TARIFAS.map(c => `<th style="font-size:10px;padding:2px">${c}</th>`).join('')}</tr>
       ${lista.map(n => `<tr><td style="font-weight:800;color:${usados.has(n) ? 'var(--cian)' : 'var(--s300)'}">${esc(n)}</td>${COL_TARIFAS.map((_, i) => `<td style="padding:2px"><input data-tar="${esc(n)}|${i}" type="number" inputmode="numeric" step="any" value="${t[n] && t[n][i] ? t[n][i] : ''}" style="width:100%;min-width:62px;padding:5px 3px;font-size:12px;text-align:right"></td>`).join('')}</tr>`).join('')}
@@ -2788,7 +2800,8 @@ function abrirTarifas(volver) {
     alAceptar: () => {
       const nuevo = {};
       document.querySelectorAll('[data-tar]').forEach(i => { const [n, k] = i.dataset.tar.split('|'), v = parseFloat(String(i.value).replace(',', '.')); if (isFinite(v) && v !== 0) { (nuevo[n] = nuevo[n] || [0, 0, 0, 0, 0])[k] = v; } });
-      try { localStorage.setItem(CLAVE_TARIFAS, JSON.stringify(nuevo)); } catch (_) { }
+      const acc = parseFloat(String($('tar-acc').value).replace(',', '.'));
+      try { localStorage.setItem(CLAVE_TARIFAS, JSON.stringify(nuevo)); if (isFinite(acc) && acc >= 0) localStorage.setItem(CLAVE_ML_ACC, String(acc)); } catch (_) { }
       aviso('Tarifas guardadas', 'ok'); if (volver) setTimeout(abrirCobro, 50);
     }
   });
@@ -2797,10 +2810,17 @@ function abrirTarifas(volver) {
 async function eventosTodas() {
   await guardarLineaBD();
   if (nube.activa && nube.db && nube.perfil) { try { await bajarLineasNube(); } catch (_) { } }
-  const sem = { clave: 'TOTAL', desde: '0000-01-01', hasta: '9999-12-31' }, ev = [];
-  if (estado.components.length) ev.push(...eventosLinea(sem, false).ev);
-  await conLineas((await todasLineas()).filter(L => L.id !== estado.lineaId), () => { ev.push(...eventosLinea(sem, false).ev); });
-  return ev;
+  const sem = { clave: 'TOTAL', desde: '0000-01-01', hasta: '9999-12-31' }, ev = [], lineas = [];
+  const proc = L => {
+    const r = eventosLinea(sem, false), cab = estado.cabecera, s = e => r.ev.filter(x => x.evento === e).reduce((t, x) => t + x.ml, 0);
+    const k = contarJuntas(estado);
+    lineas.push({ obra: (cab.proyecto || '').trim() || 'SIN OBRA', linea: cab.linea || '(sin número)', cliente: cab.cliente || '', juntas: k.total, soldadas: k.soldada + k.liberada + k.rechazada, liberadas: k.liberada,
+      rechazadas: k.rechazada, reparaciones: k.reparaciones, total: r.totalML, sol: s('SOLDADA'), lib: s('LIBERADA'), rep: s('REPARACION'), actualizado: (L && L.actualizado) || new Date().toISOString(), por: (L && L.por) || '', ev: r.ev });
+    ev.push(...r.ev);
+  };
+  if (estado.components.length) proc((await todasLineas()).find(L => L.id === estado.lineaId));
+  await conLineas((await todasLineas()).filter(L => L.id !== estado.lineaId), L => proc(L));
+  return { ev, lineas };
 }
 async function abrirCobro() {
   toggleSidebar(false);
@@ -2823,7 +2843,7 @@ async function abrirCobro() {
 async function exportarCobro(mes, obra) {
   try {
     aviso('Reuniendo los datos de todas las líneas…', null, 8000);
-    const ev = await eventosTodas(), t = leerTarifas();
+    const { ev, lineas } = await eventosTodas(), t = leerTarifas();
     const ExcelJS = await cargarExcelJS(), wb = new ExcelJS.Workbook(); await wb.xlsx.load(await plantillaQC('Maestro_Gerencia_Avance'));
     const wd = wb.getWorksheet('Datos'), wt = wb.getWorksheet('Tarifas'), wc = wb.getWorksheet('Cobro mensual');
     const genero = new Date();
@@ -2839,6 +2859,29 @@ async function exportarCobro(mes, obra) {
     for (let r = 2; r <= wt.rowCount; r++) { const n = String(wt.getCell(r, 1).value || ''); if (t[n]) for (let k = 0; k < 5; k++) wt.getCell(r, 2 + k).value = t[n][k] || 0; }
     const [a, m] = mes.split('-').map(Number);
     wc.getCell('D3').value = new Date(Date.UTC(a, m - 1, 1)); wc.getCell('D4').value = obra === 'TODAS' ? 'TODAS' : obra;
+    /* hoja «Spools»: todas las líneas de la obra hasta la fecha, con su avance y su valor en el mes */
+    const mismaObra = o => obra === 'TODAS' || String(o).trim().toUpperCase() === obra.toUpperCase();
+    const precio = x => { const k = x.evento === 'REPARACION' ? 4 : (x.ubic === 'S' ? 0 : x.ubic === 'F' ? 2 : -1) + (x.evento === 'LIBERADA' ? 1 : 0); return k < 0 || !t[x.c.nps] ? 0 : Math.round(x.ml * 1000) / 1000 * (t[x.c.nps][k] || 0); };
+    const wsS = wb.addWorksheet('Spools', { views: [{ state: 'frozen', ySplit: 3 }] });
+    wsS.mergeCells('A1:N1'); wsS.getCell('A1').value = `SPOOLS / LÍNEAS ${obra === 'TODAS' ? 'DE TODAS LAS OBRAS' : 'DE LA OBRA ' + obra} HASTA ${fechaDMY(hoyISO())} · valor del mes ${mes}`;
+    wsS.getCell('A1').font = { bold: true, size: 13 };
+    const cabS = ['OBRA', 'LÍNEA / SPOOL', 'CLIENTE', 'JUNTAS', 'SOLDADAS', 'LIBERADAS', 'RECHAZADAS', 'REPARAC.', 'ML TOTAL', 'ML SOLDADO', 'ML LIBERADO', '% LIBERADO', 'VALOR DEL MES $', 'ÚLTIMO CAMBIO'];
+    wsS.getRow(3).values = cabS; wsS.getRow(3).font = { bold: true, color: { argb: 'FFFFFFFF' } }; wsS.getRow(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
+    wsS.columns = [14, 18, 18, 8, 9, 9, 10, 9, 10, 10, 10, 10, 15, 26].map(w => ({ width: w }));
+    const sel = lineas.filter(l => mismaObra(l.obra)).sort((a, b) => a.obra.localeCompare(b.obra) || a.linea.localeCompare(b.linea, 'es', { numeric: true }));
+    sel.forEach((l, i) => {
+      const valor = l.ev.filter(x => x.fecha.slice(0, 7) === mes).reduce((s, x) => s + precio(x), 0);
+      const fila = wsS.getRow(4 + i);
+      fila.values = [l.obra, l.linea, l.cliente, l.juntas, l.soldadas, l.liberadas, l.rechazadas, l.reparaciones, r3(l.total), r3(l.sol), r3(l.lib), l.total ? l.lib / l.total : 0, Math.round(valor), `${fechaDMY(String(l.actualizado).slice(0, 10))}${l.por ? ' · ' + l.por : ''}`];
+      [9, 10, 11].forEach(c => fila.getCell(c).numFmt = '#,##0.00'); fila.getCell(12).numFmt = '0.0%'; fila.getCell(13).numFmt = '"$" #,##0';
+    });
+    const ft = wsS.getRow(4 + sel.length);
+    ft.values = ['TOTAL', `${sel.length} líneas`, '', ...[3, 4, 5, 6, 7].map(k => sel.reduce((s, l) => s + [0, 0, 0, l.juntas, l.soldadas, l.liberadas, l.rechazadas, l.reparaciones][k], 0)),
+      r3(sel.reduce((s, l) => s + l.total, 0)), r3(sel.reduce((s, l) => s + l.sol, 0)), r3(sel.reduce((s, l) => s + l.lib, 0)), '', Math.round(sel.reduce((s, l) => s + l.ev.filter(x => x.fecha.slice(0, 7) === mes).reduce((a, x) => a + precio(x), 0), 0)), ''];
+    ft.font = { bold: true }; [9, 10, 11].forEach(c => ft.getCell(c).numFmt = '#,##0.00'); ft.getCell(13).numFmt = '"$" #,##0';
+    wsS.getCell(6 + sel.length, 1).value = `Cada accesorio soldado cuenta como ${mlPorAccesorio()} ML (sin importar su tamaño); los tubos, por su largo centro a centro.`;
+    wsS.getCell(6 + sel.length, 1).font = { italic: true, size: 9 };
+    wsS.pageSetup = { orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
     wb.calcProperties = { ...(wb.calcProperties || {}), fullCalcOnLoad: true };
     wb.views = [{ activeTab: wb.worksheets.indexOf(wc) }];
     /* valor del mes para el aviso (mismo cálculo que el Excel) */
