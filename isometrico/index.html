@@ -713,8 +713,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v32';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-11-12T19:54';      // fecha y hora de la publicación (UTC)
+const APP_VERSION = 'v33';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-11-12T20:49';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -2788,12 +2788,39 @@ async function exportarAvance(sem, marcar, todaObra) {
 const CLAVE_TARIFAS = 'indimon_tarifas';
 const COL_TARIFAS = ['Taller soldado', 'Taller liberado', 'Campo soldado', 'Campo liberado', 'Reparación (− = descuento)'];
 function leerTarifas() { try { return JSON.parse(localStorage.getItem(CLAVE_TARIFAS) || '{}') || {}; } catch (_) { return {}; } }
-function abrirTarifas(volver) {
+/* Tarifas y reglas en la nube (Firestore «config»): «reglas» (ML por accesorio y redondeo) la leen todos los usuarios activos,
+   porque cambian los metros de los reportes; «tarifas» (los pesos) solo el administrador. En el equipo queda una copia para trabajar sin señal. */
+function datosReglas() { return { mlAcc: mlPorAccesorio(), redondeo: redondeoTramo() }; }
+async function bajarConfigNube() {
+  if (!nube.activa || !nube.db || !nube.perfil) return;
+  const c = nube.db.collection('config');
+  try {
+    const r = await c.doc('reglas').get();
+    if (r.exists) { const d = r.data(); if (isFinite(d.mlAcc)) localStorage.setItem(CLAVE_ML_ACC, String(d.mlAcc)); if (typeof d.redondeo === 'boolean') localStorage.setItem(CLAVE_ML_REDONDEO, d.redondeo ? '1' : '0'); }
+    else if (esAdmin()) await c.doc('reglas').set({ ...datosReglas(), actualizado: new Date().toISOString(), por: nube.perfil.nombre });
+  } catch (_) { }
+  if (!esAdmin()) return;
+  try {
+    const t = await c.doc('tarifas').get();
+    if (t.exists) { const d = t.data(); if (d.tabla) localStorage.setItem(CLAVE_TARIFAS, d.tabla); }
+    else if (Object.keys(leerTarifas()).length) await subirTarifasNube();   // primera vez: sube las que había en este equipo
+  } catch (_) { }
+}
+async function subirTarifasNube() {
+  if (!nube.activa || !nube.db || !esAdmin()) return false;
+  const c = nube.db.collection('config'), meta = { actualizado: new Date().toISOString(), por: nube.perfil.nombre };
+  await c.doc('tarifas').set({ tabla: JSON.stringify(leerTarifas()), ...meta });
+  await c.doc('reglas').set({ ...datosReglas(), ...meta });
+  return true;
+}
+async function abrirTarifas(volver) {
+  if (nube.activa && nube.perfil && !esAdmin()) { aviso('Las tarifas las maneja el administrador', 'error', 3000); return; }
+  if (nube.activa) { aviso('Trayendo tarifas de la nube…', null, 1200); await bajarConfigNube(); }
   const t = leerTarifas(), usados = new Set(estado.components.map(c => c.nps));
   const lista = NPS_LISTA.filter(n => npsNum(n) >= 0.5);
   abrirModal({
     titulo: 'Tarifas por metro lineal ($/ML)',
-    html: `<p>Valor en pesos por metro lineal para cada diámetro. Deje vacío lo que no se cobra. La reparación se puede poner negativa para descontarla. Se guardan en este equipo.</p>
+    html: `<p>Valor en pesos por metro lineal para cada diámetro. Deje vacío lo que no se cobra. La reparación se puede poner negativa para descontarla. ${nube.activa ? 'Se guardan en la nube: salen iguales en cualquier equipo con su usuario.' : 'Se guardan en este equipo.'}</p>
       <label>Cada accesorio soldado (codo, tee, reducción, brida, olet…) cuenta como</label>
       <div style="display:flex;gap:6px;align-items:center"><input id="tar-acc" type="number" step="any" min="0" inputmode="decimal" value="${mlPorAccesorio()}" style="width:90px;text-align:right"><span>metro(s) lineal(es), sin importar su tamaño</span></div>
       <label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input id="tar-red" type="checkbox" ${redondeoTramo() ? 'checked' : ''} style="width:auto"><span>Cada tramo de tubo se cobra en metros enteros hacia arriba (10 cm = 1 ML · 99,9 cm = 1 ML · 1,10 m = 2 ML)</span></label>
@@ -2807,7 +2834,10 @@ function abrirTarifas(volver) {
       document.querySelectorAll('[data-tar]').forEach(i => { const [n, k] = i.dataset.tar.split('|'), v = parseFloat(String(i.value).replace(',', '.')); if (isFinite(v) && v !== 0) { (nuevo[n] = nuevo[n] || [0, 0, 0, 0, 0])[k] = v; } });
       const acc = parseFloat(String($('tar-acc').value).replace(',', '.'));
       try { localStorage.setItem(CLAVE_TARIFAS, JSON.stringify(nuevo)); if (isFinite(acc) && acc >= 0) localStorage.setItem(CLAVE_ML_ACC, String(acc)); localStorage.setItem(CLAVE_ML_REDONDEO, $('tar-red').checked ? '1' : '0'); } catch (_) { }
-      aviso('Tarifas guardadas', 'ok'); if (volver) setTimeout(abrirCobro, 50);
+      if (nube.activa) subirTarifasNube().then(ok => aviso(ok ? 'Tarifas guardadas en la nube' : 'Tarifas guardadas en este equipo', 'ok'))
+        .catch(e => aviso('Guardadas en este equipo; la nube no respondió: ' + (e.code || e.message), 'error', 4000));
+      else aviso('Tarifas guardadas', 'ok');
+      if (volver) setTimeout(abrirCobro, 50);
     }
   });
 }
@@ -2829,6 +2859,7 @@ async function eventosTodas() {
 }
 async function abrirCobro() {
   toggleSidebar(false);
+  await bajarConfigNube();
   const obras = [...new Set((await todasLineas()).map(L => (L.obra || '').trim()).filter(Boolean))].sort();
   const t = leerTarifas(), nT = Object.keys(t).length, mes = hoyISO().slice(0, 7);
   abrirModal({
@@ -3306,6 +3337,7 @@ async function iniciarCuentas() {
       localStorage.setItem(CLAVE_PERFIL, JSON.stringify(nube.perfil));
       quitarIngreso(); pintarCuenta(); nube.listo = true;
       bajarLineasNube().catch(() => {});
+      bajarConfigNube();
       guardarLineaBD();
     } catch (e) {
       /* sin conexión: si el perfil guardado es de este usuario, se sigue trabajando */
