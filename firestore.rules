@@ -16,6 +16,14 @@ service cloud.firestore {
         && request.auth.token.email == 'calidadindimon@gmail.com'
         && request.resource.data.rol == 'admin');
     }
+    // reglas de metros (ML por accesorio, redondeo): las leen todos; tarifas en pesos: solo el administrador
+    match /config/reglas {
+      allow read: if activo();
+      allow write: if admin();
+    }
+    match /config/tarifas {
+      allow read, write: if admin();
+    }
     match /lineas/{id} {
       allow read: if admin() || (resource != null && asignada(resource.data.obraId));
       allow create, update: if admin() || asignada(request.resource.data.obraId);
