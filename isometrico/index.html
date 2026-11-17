@@ -713,8 +713,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v34';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-11-17T21:12';      // fecha y hora de la publicación (UTC)
+const APP_VERSION = 'v35';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-11-17T21:37';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -2240,6 +2240,29 @@ function borrarReparacion() {
   if (!confirm(`¿Borrar la reparación R${c.reps.length} y sus datos?`)) return;
   commit(() => { c.reps.pop(); if (!c.reps.length) delete c.reps; });
 }
+/* Pad de refuerzo: sus dos soldaduras de filete (pad–cabezal y pad–ramal) se registran en la junta de la inserción
+   como W1-P1 y W1-P2 (registros en c.padR), con su propio soldador, inspección y END para el QC-F-004 */
+function padDeJunta(w) { return padsRefuerzo().find(x => igual(x.P, w.coords[0])) || null; }
+const PAD_FILETES = [['P1', 'pad – tubo principal'], ['P2', 'pad – ramal']];
+function registrosPad(w) {
+  const x = padDeJunta(w); if (!x) return [];
+  return PAD_FILETES.map(([tag, nom], i) => ({ r: (w.padR && w.padR[i]) || {}, i, tag, nom, nps: i ? x.c.nps : x.h.nps, x }));
+}
+function regPad(w, i) { w.padR = w.padR || [{}, {}]; return w.padR[i] = w.padR[i] || {}; }
+function panelPad(c, num) {
+  const l = registrosPad(c); if (!l.length) return '';
+  return `<div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--s600)"><div style="font-weight:800;color:#f87171">Pad de refuerzo · soldaduras de filete</div>
+    ${l.map(({ r, i, tag, nom, nps }) => { const ej = estadoRegistro(r), [t, col] = ESTADOS_JUNTA[ej], av = [...avisosSoldador({ ...c, nps, junta: 'FILETE' }, r, 'raiz'), ...avisosSoldador({ ...c, nps, junta: 'FILETE' }, r, 'pres')];
+      return `<div style="margin:8px 0 2px;font-weight:700;color:${col}">● W${num}-${tag} · ${nom} · Ø ${esc(nps)} · ${t}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div><label>Fecha</label><input data-pp="${i}|fecha" type="date" value="${esc(r.fecha || '')}"></div>
+        <div><label>Soldador</label><input data-pp="${i}|raiz" list="dl-personal" maxlength="40" value="${esc(r.raiz || '')}"></div>
+        <div><label>Visual</label><select data-pp="${i}|visual">${opcionesSel([['OK', 'OK'], ['RECHAZADA', 'Rechazada']], r.visual, 'Pendiente')}</select></div>
+        <div><label>END</label><select data-pp="${i}|nde">${opcionesSel(NDE_TIPOS.map(x => [x, x]), r.nde, '—')}</select></div>
+        <div style="grid-column:1/-1"><label>Resultado END</label><select data-pp="${i}|ndeRes">${opcionesSel(NDE_RESULTADOS.map(x => [x, x]), r.ndeRes, '—')}</select></div></div>
+      ${av.length ? `<div style="font-size:11px;color:#f59e0b;margin-top:4px">⚠ ${av.map(esc).join('<br>⚠ ')}</div>` : ''}`; }).join('')}
+    <div style="font-size:11px;color:var(--s400);margin-top:4px">Salen en el QC-F-004 como W${num}-P1 y W${num}-P2 (FW). Taller/campo y tubero se toman de la junta.</div></div>`;
+}
 const fechaDMY = f => /^\d{4}-\d{2}-\d{2}$/.test(f || '') ? f.split('-').reverse().join('/') : (f || '');
 function soldadurasOrdenadas() {
   const num = numeracionSoldaduras();
@@ -2274,12 +2297,19 @@ function panelJunta(c) {
     ${r.repSol || r.repLib ? `<div style="font-size:11px;color:var(--s400);margin-top:4px">Reportada a gerencia: ${r.repSol ? (k ? 'reparación ' : 'soldada ') + esc(r.repSol) : ''}${r.repLib ? ' · liberada ' + esc(r.repLib) : ''}</div>` : ''}
     ${ej === 'rechazada' ? `<button type="button" class="btn ancho ambar" style="margin-top:6px" onclick="crearReparacion()">Crear reparación ${etiquetaJ(num, k + 1)}</button>` : ''}
     ${k ? `<button type="button" class="btn ancho" style="margin-top:6px" onclick="borrarReparacion()">Borrar reparación R${k}</button>` : ''}
+    ${panelPad(c, num)}
     <label>Fotos de la junta</label>
     <div style="display:flex;gap:6px"><select id="foto-tipo" style="flex:1">${opcionesSel(FOTO_TIPOS.map(t => [t, t]), k ? 'Reparación' : ej === 'pendiente' ? FOTO_TIPOS[0] : FOTO_TIPOS[2])}</select>
       <button type="button" class="btn" onclick="document.getElementById('in-foto-cam').click()" title="Tomar foto"><svg class="ico" viewBox="0 0 24 24"><use href="#i-camera"/></svg></button>
       <button type="button" class="btn" onclick="document.getElementById('in-foto-gal').click()" title="Elegir de la galería"><svg class="ico" viewBox="0 0 24 24"><use href="#i-folder"/></svg></button></div>
     <div id="fotos-junta" class="fotos-lista"></div>`;
 }
+$('panel-sel').addEventListener('change', e => {
+  const pp = e.target.dataset.pp, w = pp && estado.components.find(x => x.id === seleccion); if (!w) return;
+  const [i, k] = pp.split('|'), v = k === 'raiz' ? e.target.value.trim().toUpperCase() : e.target.value;
+  commit(() => { const r = regPad(w, +i); if (v) r[k] = v; else delete r[k]; if (k === 'raiz') { if (v) r.pres = v; else delete r.pres; }
+    if (estadoRegistro(r) === 'liberada') { if (!r.fechaLib) r.fechaLib = hoyISO(); } else delete r.fechaLib; });
+});
 $('panel-sel').addEventListener('change', e => {
   const k = e.target.dataset.pw, c = estado.components.find(x => x.id === seleccion); if (!k || !c) return;
   const v = ['tubero', 'raiz', 'pres'].includes(k) ? e.target.value.trim().toUpperCase() : e.target.value, r = regJ(c);
@@ -2405,9 +2435,14 @@ async function plantillaQC(nombre) {
   return r.arrayBuffer();
 }
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+/* elementos que une cada filete del pad */
+function filetePad(p) {
+  const { h, c } = p.x, pad = { desc: `PAD REFUERZO ${h.nps} X ${c.nps}`, mm: '' }, t = x => ({ desc: `TUBO ${x.nps} ${(SPECS[x.schedule]?.corto || x.schedule).toUpperCase()}`, mm: '' });
+  return [pad, t(p.i ? c : h)];
+}
 async function exportarQC004() {
   toggleSidebar(false);
-  const l = soldadurasOrdenadas().flatMap(({ c, n }) => registrosJunta(c).map((r, k) => ({ c, n, r, k })));
+  const l = soldadurasOrdenadas().flatMap(({ c, n }) => [...registrosJunta(c).map((r, k) => ({ c, n, r, k })), ...registrosPad(c).map(p => ({ c, n, r: p.r, pad: p }))]);
   if (!l.length) { aviso('No hay juntas para el reporte: colóquelas o use «Generar juntas soldadas automáticas»', 'error', 3500); return; }
   if (l.length > 120) aviso('El reporte admite 120 registros (10 hojas): se exportan los primeros 120', 'error', 4000);
   try {
@@ -2421,13 +2456,14 @@ async function exportarQC004() {
       const v = (ref, val) => { ws.getCell(ref).value = val == null ? '' : val; };
       v('M1', `Página: ${p + 1} de ${pags}`); v('B6', q.wps); v('B7', q.pqr);
       v('C6', 'REFERENCIA: ' + [cab.proyecto, cab.linea].filter(Boolean).join(' · ')); v('H6', 'LUGAR: ' + (q.lugar || '')); v('M6', 'REPORTE No ' + (q.reporte || ''));
-      juntas.slice(p * 12, p * 12 + 12).forEach(({ c, n, r: g, k: kr }, k) => {
-        const r = 9 + 2 * k, [e1, e2] = elementosJunta(c), cel = (rr, col, val) => {
+      juntas.slice(p * 12, p * 12 + 12).forEach(({ c, n, r: g0, k: kr, pad }, k) => {
+        const g = pad ? { ...g0, ubic: g0.ubic || regJ(c).ubic, tubero: g0.tubero || regJ(c).tubero } : g0;
+        const r = 9 + 2 * k, [e1, e2] = pad ? filetePad(pad) : elementosJunta(c), cel = (rr, col, val) => {
           const x = ws.getCell(rr, col); x.value = val == null ? '' : val;
           if (typeof val === 'string' && val.length > 6) x.alignment = { ...(x.alignment || {}), shrinkToFit: true, wrapText: false };  /* textos largos en celdas angostas */
         };
-        cel(r, 1, fechaDMY(g.fecha)); cel(r, 2, cab.linea); cel(r, 3, e1.desc); cel(r, 4, etiquetaJ(n, kr)); cel(r, 5, c.junta === 'SW' || c.junta === 'FILETE' ? 'FW' : 'BW');
-        cel(r, 6, c.nps); cel(r, 7, e1.mm); cel(r, 9, g.ubic); cel(r, 10, g.tubero); cel(r, 11, estampaDe(g.raiz)); cel(r, 12, estampaDe(g.pres)); cel(r, 13, g.visual); cel(r, 14, g.nde); cel(r, 15, g.ndeRes);
+        cel(r, 1, fechaDMY(g.fecha)); cel(r, 2, cab.linea); cel(r, 3, e1.desc); cel(r, 4, pad ? `W${n}-${pad.tag}` : etiquetaJ(n, kr)); cel(r, 5, pad || c.junta === 'SW' || c.junta === 'FILETE' ? 'FW' : 'BW');
+        cel(r, 6, pad ? pad.nps : c.nps); cel(r, 7, e1.mm); cel(r, 9, g.ubic); cel(r, 10, g.tubero); cel(r, 11, estampaDe(g.raiz)); cel(r, 12, estampaDe(g.pres)); cel(r, 13, g.visual); cel(r, 14, g.nde); cel(r, 15, g.ndeRes);
         cel(r + 1, 3, e2.desc); cel(r + 1, 7, e2.mm);
       });
       v('C33', 'OBSERVACIONES: ' + (q.observaciones || ''));
