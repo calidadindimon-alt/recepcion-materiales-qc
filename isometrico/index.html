@@ -3180,7 +3180,7 @@ async function respaldoOneDrive(obra, conFotos) {
       capturaArchivos = [];
       try { exportToExcel(); } catch (_) { }
       if (estado.components.some(c => c.type === 'weld')) { await exportarQC004(); await exportarQC015(); }
-      for (const f of capturaArchivos) archivos.push({ ruta: `${sub}/${f.nombre}`, blob: f.blob });
+      for (const f of capturaArchivos) archivos.push({ ruta: `${sub}/${f.nombre.replace(/_\d{4}-\d{2}-\d{2}(?=\.xlsx$)/, '')}`, blob: f.blob });   // sin fecha: un respaldo nuevo reemplaza al anterior
       archivos.push({ ruta: `${sub}/${nombreL}.json`, blob: new Blob([JSON.stringify({ formato: 'INDIMON-DP-F-009', version: 1, guardado: L.actualizado || new Date().toISOString(), ...L.datos, lineaId: L.id })], { type: 'application/json' }) });
     });
   } finally { capturaArchivos = null; actualizarTodo(); }
