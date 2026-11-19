@@ -713,8 +713,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v35';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-11-17T21:37';      // fecha y hora de la publicación (UTC)
+const APP_VERSION = 'v36';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-11-19T16:27';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -3062,7 +3062,7 @@ async function abrirObras() {
       <button type="button" class="btn" data-ob="borrar" data-id="${L.id}" title="Borrar" style="color:#f87171">✕</button></div>`; };
   abrirModal({
     titulo: 'Obras y líneas (isométricos)',
-    html: `<p>Las líneas se guardan solas en este equipo. Toque <b>Abrir</b> para cambiar de isométrico. Para pasar una obra a otro equipo use <b>Exportar obra</b> y en el otro equipo <b>Importar</b>.</p>
+    html: `<p>Las líneas se guardan solas en este equipo${nube.activa ? ' y, con señal, <b>suben solas a la nube</b> (Firebase): con su usuario se ven en cualquier equipo' : ''}. Toque <b>Abrir</b> para cambiar de isométrico. <b>Respaldo en OneDrive</b> deja la obra en la carpeta <b>Isometricos</b> de OneDrive (planos, listados, QC-F-004, QC-F-015 y un respaldo para Importar).${nube.activa ? '' : ' Para pasar una obra a otro equipo use <b>Exportar obra</b> y en el otro equipo <b>Importar</b>.'}</p>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
         <button type="button" class="btn ambar" data-ob="nueva">+ Nueva línea en esta obra</button>
         <button type="button" class="btn" data-ob="importar">Importar (.json)</button>
@@ -3070,9 +3070,10 @@ async function abrirObras() {
       ${obras.length ? obras.map(o => { const ls = lineas.filter(L => idObra(L.obra) === o), t = ls.map(L => contarJuntas(L.datos)).reduce((a, k) => ({ total: a.total + k.total, lib: a.lib + k.liberada }), { total: 0, lib: 0 });
         return `<div class="ob-obra"><div style="display:flex;align-items:center;gap:6px;margin:10px 0 4px">
           <div style="flex:1"><b style="color:var(--cian)">${esc(nombreObra(o))}</b> <span style="font-size:11px;color:var(--s400)">${ls.length} líneas · ${t.total} juntas · ${t.total ? Math.round(100 * t.lib / t.total) : 0}% liberado</span></div>
-          <button type="button" class="btn" data-ob="exportar" data-obra="${esc(o)}">Exportar obra</button></div>${ls.map(fila).join('')}</div>`; }).join('') : '<p>Aún no hay líneas guardadas.</p>'}
+          <button type="button" class="btn" data-ob="exportar" data-obra="${esc(o)}">Exportar obra</button>
+          <button type="button" class="btn azul" data-ob="onedrive" data-obra="${esc(o)}">Respaldo en OneDrive</button></div>${ls.map(fila).join('')}</div>`; }).join('') : '<p>Aún no hay líneas guardadas.</p>'}
       <label style="display:flex;gap:8px;align-items:center;text-transform:none;font-size:12px;color:var(--s300);margin-top:10px">
-        <input type="checkbox" id="ob-fotos" checked style="width:16px;height:16px">Incluir las fotos al exportar una obra (el archivo queda más pesado)</label>`,
+        <input type="checkbox" id="ob-fotos" checked style="width:16px;height:16px">Incluir las fotos al exportar o respaldar una obra (el archivo queda más pesado)</label>`,
     okTxt: 'Cerrar',
     alAbrir: () => { $('modal-cuerpo').onclick = e => { const b = e.target.closest('[data-ob]'); if (b) accionObra(b.dataset.ob, b.dataset.id, b.dataset.obra); }; }
   });
@@ -3083,6 +3084,7 @@ async function accionObra(acc, id, obra) {
     if (acc === 'importar') { $('in-obra').click(); return; }
     if (acc === 'nube') { aviso('Trayendo líneas de la nube…', null, 4000); const n = await bajarLineasNube(); if (!n) aviso('Todo está al día', 'ok'); abrirObras(); return; }
     if (acc === 'exportar') { await exportarObra(obra, $('ob-fotos').checked); return; }
+    if (acc === 'onedrive') { await respaldoOneDrive(obra, $('ob-fotos').checked); return; }
     const L = (await todasLineas()).find(x => x.id === id); if (!L) return;
     if (acc === 'abrir') { cerrarModal(); await abrirLineaGuardada(L); return; }
     if (acc === 'duplicar') {
@@ -3129,6 +3131,64 @@ async function exportarObra(obra, conFotos) {
   const datos = { formato: 'INDIMON-OBRA', version: 1, guardado: new Date().toISOString(), obra, lineas, soldadores, fotos };
   descargarBlob(new Blob([JSON.stringify(datos)], { type: 'application/json' }), `OBRA_${nombreSeguro(obra)}_${hoyISO()}.json`);
   aviso(`Obra exportada: ${lineas.length} líneas${conFotos ? `, ${fotos.length} fotos` : ''}`, 'ok', 3500);
+}
+/* ---- Respaldo en OneDrive: carpeta Isometricos/<OBRA>/ con un respaldo .json de toda la obra (se puede Importar)
+   y, por línea, la imagen del plano, el listado de materiales, el QC-F-004 y el QC-F-015. Usa la cuenta de Microsoft de Recepción. ---- */
+const GRAPH_RAIZ = 'https://graph.microsoft.com/v1.0/me/drive/root:/';
+async function subirOneDrive(ruta, blob, token) {
+  const url = GRAPH_RAIZ + ruta.split('/').map(encodeURIComponent).join('/'), auth = { Authorization: 'Bearer ' + token };
+  if (blob.size < 4e6) {
+    const r = await fetch(url + ':/content', { method: 'PUT', headers: { ...auth, 'Content-Type': blob.type || 'application/octet-stream' }, body: blob });
+    if (!r.ok) throw new Error(`OneDrive respondió ${r.status} al subir ${ruta}`); return;
+  }
+  /* archivos grandes (respaldo con fotos): sesión de carga por partes de 3,1 MB */
+  const s = await fetch(url + ':/createUploadSession', { method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ item: { '@microsoft.graph.conflictBehavior': 'replace' } }) });
+  if (!s.ok) throw new Error(`OneDrive respondió ${s.status} al preparar ${ruta}`);
+  const { uploadUrl } = await s.json(), T = 320 * 1024 * 10;
+  for (let i = 0; i < blob.size; i += T) {
+    const parte = blob.slice(i, i + T), r = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Range': `bytes ${i}-${i + parte.size - 1}/${blob.size}` }, body: parte });
+    if (!r.ok) throw new Error(`OneDrive respondió ${r.status} al subir ${ruta}`);
+  }
+}
+async function respaldoOneDrive(obra, conFotos) {
+  if (!location.protocol.startsWith('http')) { aviso('El respaldo en OneDrive solo funciona en la app publicada', 'error', 4000); return; }
+  if (!navigator.onLine) { aviso('Sin conexión: el respaldo necesita internet', 'error', 3500); return; }
+  await iniciarMS();
+  if (!cuentaMS()) {
+    if (!confirm('Para guardar en OneDrive debe ingresar con su cuenta de Microsoft (la misma de Recepción de Materiales).\n\nAl volver, toque otra vez «Respaldo en OneDrive».')) return;
+    await guardarLineaBD(); guardarYa(); await msApp.loginRedirect({ scopes: MS.scopes }); return;
+  }
+  let token; try { token = await tokenMS(); } catch (e) { aviso('Microsoft: ' + e.message, 'error', 4000); return; }
+  await guardarLineaBD();
+  if (nube.activa && nube.db && nube.perfil) { try { await bajarLineasNube(); } catch (_) { } }
+  const lineas = (await todasLineas()).filter(L => idObra(L.obra) === idObra(obra)), carpeta = 'Isometricos/' + (nombreSeguro(obra) || 'SIN_OBRA');
+  if (!lineas.length) { aviso('La obra no tiene líneas', 'error'); return; }
+  cerrarModal();
+  const archivos = [], hoy = hoyISO();
+  const fotos = [];
+  if (conFotos) for (const L of lineas) for (const f of await fotosDeLinea(L.id)) fotos.push({ ...f, blob: undefined, tipoMime: f.blob.type, data: await aBase64(f.blob) });
+  archivos.push({ ruta: `${carpeta}/RESPALDO_${nombreSeguro(obra)}_${hoy}.json`, blob: new Blob([JSON.stringify({ formato: 'INDIMON-OBRA', version: 1, guardado: new Date().toISOString(), obra, lineas, soldadores, fotos })], { type: 'application/json' }) });
+  let n = 0;
+  try {
+    capturaArchivos = [];
+    await conLineas(lineas, async L => {
+      n++; aviso(`Preparando ${n} de ${lineas.length}: ${L.linea || '(sin número)'}…`, null, 60000);
+      const sub = `${carpeta}/${nombreSeguro(L.linea) || 'SIN_NUMERO_' + L.id.slice(-4)}`, nombreL = nombreSeguro(L.linea) || 'SIN_NUMERO';
+      if (!estado.components.length) return;
+      actualizarTodo(); recalculateBOM();
+      try { const img = await mapaPNG(); archivos.push({ ruta: `${sub}/${nombreL}_plano.png`, blob: new Blob([img.buffer], { type: 'image/png' }) }); } catch (_) { }
+      capturaArchivos = [];
+      try { exportToExcel(); } catch (_) { }
+      if (estado.components.some(c => c.type === 'weld')) { await exportarQC004(); await exportarQC015(); }
+      for (const f of capturaArchivos) archivos.push({ ruta: `${sub}/${f.nombre}`, blob: f.blob });
+      archivos.push({ ruta: `${sub}/${nombreL}.json`, blob: new Blob([JSON.stringify({ formato: 'INDIMON-DP-F-009', version: 1, guardado: L.actualizado || new Date().toISOString(), ...L.datos, lineaId: L.id })], { type: 'application/json' }) });
+    });
+  } finally { capturaArchivos = null; actualizarTodo(); }
+  let k = 0;
+  try {
+    for (const a of archivos) { k++; aviso(`Subiendo a OneDrive ${k} de ${archivos.length}…`, null, 60000); await subirOneDrive(a.ruta, a.blob, token); }
+  } catch (e) { aviso(`Se subieron ${k - 1} de ${archivos.length} archivos. ${e.message}`, 'error', 8000); return; }
+  aviso(`Respaldo listo en OneDrive: ${carpeta} · ${lineas.length} líneas · ${archivos.length} archivos`, 'ok', 7000);
 }
 /* Importa obras completas o proyectos sueltos (.json); si la línea ya existe se queda la versión más reciente */
 async function importarArchivos(files) {
@@ -3997,7 +4057,10 @@ function nuevoPlano() {
 }
 const nombreSeguro = s => String(s || '').trim().replace(/[\\/:*?"<>|#%&\s]+/g, '_').slice(0, 60);
 const nombreBase = () => ['DP-F-009', nombreSeguro(estado.cabecera.linea) || 'ISO', nombreSeguro(estado.cabecera.consecutivo)].filter(Boolean).join('_');
+/* mientras se arma un respaldo, los archivos no se descargan: se guardan aquí para subirlos a OneDrive */
+let capturaArchivos = null;
 function descargarBlob(blob, nombre) {
+  if (capturaArchivos) { capturaArchivos.push({ blob, nombre }); return; }
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nombre;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
@@ -4106,6 +4169,7 @@ function exportToExcel() {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'BOM DP-F-009');
   XLSX.utils.book_append_sheet(wb, ws2, 'Componentes');
+  if (capturaArchivos) { descargarBlob(new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: XLSX_MIME }), nombreBase() + '.xlsx'); return; }
   XLSX.writeFile(wb, nombreBase() + '.xlsx');
   aviso('Excel exportado', 'ok');
 }
