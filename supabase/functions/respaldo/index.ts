@@ -36,13 +36,19 @@ Deno.serve(async (req) => {
     if (!r.ok) { fallidas[id] = "firestore " + r.status; continue; }
     const f = (await r.json()).fields || {};
     const actualizado = valor(f.actualizado) || new Date().toISOString();
-    let datos: unknown = null;
+    let datos: unknown = null, bom: unknown = null;
     try { datos = valor(f.datos) ? JSON.parse(valor(f.datos)) : null; } catch (_) { datos = null; }
-    const fila = { id, obra: valor(f.obra) || "", obra_id: valor(f.obraId) || "", linea: valor(f.linea) || "", datos, borrada: valor(f.borrada) === true,
+    try { bom = valor(f.bom) ? JSON.parse(valor(f.bom)) : null; } catch (_) { bom = null; }
+    const fila = { id, obra: valor(f.obra) || "", obra_id: valor(f.obraId) || "", linea: valor(f.linea) || "", datos, bom, borrada: valor(f.borrada) === true,
       actualizado, por_email: valor(f.por), por_nombre: valor(f.porNombre), uid: valor(f.uid) };
-    // no repite una versión que ya está guardada
-    const { data: hay } = await db.from("respaldo_lineas").select("actualizado").eq("id", id).maybeSingle();
-    if (hay && new Date(hay.actualizado).getTime() === new Date(actualizado).getTime()) { copiadas.push(id); continue; }
+    // no repite una versión que ya está guardada (salvo que ahora traiga el listado de materiales y la guardada no)
+    const { data: hay } = await db.from("respaldo_lineas").select("actualizado, con_bom:bom->0").eq("id", id).maybeSingle();
+    if (hay && new Date(hay.actualizado).getTime() === new Date(actualizado).getTime()) {
+      if (!bom || hay.con_bom != null) { copiadas.push(id); continue; }
+      const e = (await db.from("respaldo_lineas").update({ bom, recibido: new Date().toISOString() }).eq("id", id)).error;
+      if (e) fallidas[id] = e.message; else copiadas.push(id);
+      continue;
+    }
     const e1 = (await db.from("respaldo_lineas").upsert({ ...fila, recibido: new Date().toISOString() })).error;
     const e2 = e1 ? null : (await db.from("respaldo_versiones").insert({ linea_id: id, obra: fila.obra, linea: fila.linea, datos, borrada: fila.borrada, actualizado, por_email: fila.por_email })).error;
     if (e1 || e2) fallidas[id] = (e1 || e2)!.message; else copiadas.push(id);

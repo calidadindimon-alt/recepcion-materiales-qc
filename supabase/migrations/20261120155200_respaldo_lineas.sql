@@ -44,3 +44,6 @@ end $$;
 revoke execute on function public.podar_versiones() from public, anon, authenticated;
 create trigger podar_versiones after insert on public.respaldo_versiones
   for each row execute function public.podar_versiones();
+
+-- (segunda migración, respaldo_bom) listado de materiales (DP-F-009) calculado por la app para cada línea
+alter table public.respaldo_lineas add column bom jsonb;
