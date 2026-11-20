@@ -8,7 +8,6 @@ Funciona con dedo, lápiz o ratón, en Android, iPhone/iPad y PC, también sin i
 | Opción | Pasos |
 |---|---|
 | **Instalar (recomendado)** | Publique el repositorio en GitHub Pages (Settings → Pages → rama `main`, carpeta `/root`). Abra `https://<usuario>.github.io/recepcion-materiales-qc/isometrico/` y pulse **Instalar** (Chrome/Edge en Android o PC) o **Compartir → Agregar a pantalla de inicio** en Safari (iOS). |
-| **Archivo único .html** | Desde la app: menú *Simbología → 5. Archivo → Descargar app (.html)*. Genera un solo archivo con la librería Excel incluida; se abre con doble clic y no necesita internet. |
 | **Local** | `python3 -m http.server` dentro de esta carpeta y abrir `http://localhost:8000`. |
 
 ## Uso rápido
