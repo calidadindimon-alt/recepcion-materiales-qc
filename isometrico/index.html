@@ -749,8 +749,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v42';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-11-23T20:30';      // fecha y hora de la publicación (UTC)
+const APP_VERSION = 'v43';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-11-23T21:10';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -2349,6 +2349,13 @@ function panelJunta(c) {
       <button type="button" class="btn" onclick="document.getElementById('in-foto-gal').click()" title="Elegir de la galería"><svg class="ico" viewBox="0 0 24 24"><use href="#i-folder"/></svg></button></div>
     <div id="fotos-junta" class="fotos-lista"></div>`;
 }
+/* Fechas: mientras se escribe el año, el navegador avisa «cambió» con años a medias (0002, 0020, 0202) y la app
+   guardaba y redibujaba el panel, quitando el cursor: no se podía terminar de escribir 2026. Esos cambios (y los de
+   un campo a medio escribir, que el navegador reporta vacío) se ignoran
+   hasta que el año esté completo; si se sale del campo con un año imposible, se avisa y no se guarda. */
+const fechaAMedias = el => !!el && el.type === 'date' && ((el.validity && el.validity.badInput) || (/^\d{4}-/.test(el.value) && +el.value.slice(0, 4) < 2000));
+document.addEventListener('change', e => { if (fechaAMedias(e.target)) e.stopImmediatePropagation(); }, true);
+document.addEventListener('blur', e => { if (fechaAMedias(e.target)) aviso('Escriba el año completo (por ejemplo 2026): esa fecha no se guardó', 'error', 4500); }, true);
 $('panel-sel').addEventListener('change', e => {
   const pp = e.target.dataset.pp, w = pp && estado.components.find(x => x.id === seleccion); if (!w) return;
   const [i, k] = pp.split('|'), v = k === 'raiz' ? e.target.value.trim().toUpperCase() : e.target.value;
