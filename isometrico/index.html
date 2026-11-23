@@ -749,8 +749,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v44';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-11-23T22:00';      // fecha y hora de la publicación (UTC)
+const APP_VERSION = 'v45';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-11-23T22:40';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -2712,12 +2712,19 @@ function mlPorJunta() {
     if (!suyas.length) { sinJunta.push(t); continue; }
     suyas.forEach(w => ml.set(w.id, ml.get(w.id) + L / suyas.length));
   }
-  /* accesorios: cada uno vale «ML por accesorio» sin importar su tamaño (codo de 1/2" = 1 ML), repartido entre sus juntas */
+  /* accesorios: cada uno vale «ML por accesorio» sin importar su tamaño (codo de 1/2" = 1 ML), repartido entre sus juntas.
+     Sus juntas son las que están pegadas a él y las que están sobre un tramo «directo» (accesorio contra accesorio)
+     que llega a él: antes una reducción entre dos tramos directos quedaba sin juntas y no sumaba su metro. */
+  const directos = tuberias().filter(t => t.directo && !nipleDe(t));
+  const sobreTramo = (w, t) => { const a = aPantalla(t.coords[0]), b = aPantalla(t.coords[1]), s = aPantalla(w.coords[0]), dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy || 1;
+    const u = ((s.x - a.x) * dx + (s.y - a.y) * dy) / L2; return u > -0.01 && u < 1.01 && Math.hypot(a.x + u * dx - s.x, a.y + u * dy - s.y) < 4; };
+  const juntasDe = P => { const q = aPantalla(P), tramos = directos.filter(t => t.coords.some(E => igual(E, P)));
+    return welds.filter(w => { const s = aPantalla(w.coords[0]); return Math.hypot(s.x - q.x, s.y - q.y) < 18 || tramos.some(t => sobreTramo(w, t)); }); };
   const eq = mlPorAccesorio();
   if (eq > 0) for (const o of estado.components) {
     const T = TIPOS[o.type];
     if (o.type === 'pipe' || o.type === 'weld' || T.noBOM || T.modo === 'equipo' || o.type === 'flange_lj') continue;
-    const q = aPantalla(o.coords[0]), suyas = welds.filter(w => { const s = aPantalla(w.coords[0]); return Math.hypot(s.x - q.x, s.y - q.y) < 18; });
+    const suyas = juntasDe(o.coords[0]);
     suyas.forEach(w => ml.set(w.id, ml.get(w.id) + eq / suyas.length));
   }
   if (eq > 0) for (const x of padsRefuerzo()) {   // el pad de refuerzo también es un accesorio soldado
@@ -3008,8 +3015,10 @@ async function exportarCobro(mes, obra) {
     wb.eachSheet(ws => { if (ws.properties) delete ws.properties.outlineProperties; });
     const wd = wb.getWorksheet('Datos'), wt = wb.getWorksheet('Tarifas'), wc = wb.getWorksheet('Cobro mensual');
     const genero = new Date();
-    ev.sort((a, b) => a.fecha.localeCompare(b.fecha) || String(a.obra).localeCompare(String(b.obra)) || String(a.linea).localeCompare(String(b.linea)) || a.n - b.n);
-    ev.forEach((x, i) => {
+    /* la hoja Datos trae solo los eventos del mes y la obra elegidos (antes traía todo y confundía) */
+    const evDatos = ev.filter(x => x.fecha.slice(0, 7) === mes && (obra === 'TODAS' || String(x.obra).trim().toUpperCase() === obra.toUpperCase()));
+    evDatos.sort((a, b) => a.fecha.localeCompare(b.fecha) || String(a.obra).localeCompare(String(b.obra)) || String(a.linea).localeCompare(String(b.linea)) || a.n - b.n);
+    evDatos.forEach((x, i) => {
       const fila = wd.getRow(i + 2);
       fila.values = [x.obra, x.cliente, x.linea, x.etiqueta, x.c.nps, SPECS[x.c.schedule]?.sch || x.c.schedule, UBIC_TXT[x.ubic] || 'SIN DEFINIR', x.evento,
         new Date(x.fecha + 'T00:00:00Z'), x.fecha.slice(0, 7), semanaISO(x.fecha).clave, Math.round(x.ml * 1000) / 1000, x.c.junta === 'SW' || x.c.junta === 'FILETE' ? 'FW' : 'BW',
@@ -3020,6 +3029,7 @@ async function exportarCobro(mes, obra) {
     for (let r = 2; r <= wt.rowCount; r++) { const n = String(wt.getCell(r, 1).value || ''); if (t[n]) for (let k = 0; k < 5; k++) wt.getCell(r, 2 + k).value = t[n][k] || 0; }
     const [a, m] = mes.split('-').map(Number);
     wc.getCell('D3').value = new Date(Date.UTC(a, m - 1, 1)); wc.getCell('D4').value = obra === 'TODAS' ? 'TODAS' : obra;
+    wc.getColumn(4).width = 20;   // «noviembre 2026» no cabía y salía ######
     /* hoja «Spools»: todas las líneas de la obra hasta la fecha, con su avance y su valor en el mes */
     const mismaObra = o => obra === 'TODAS' || String(o).trim().toUpperCase() === obra.toUpperCase();
     const precio = x => { const k = x.evento === 'REPARACION' ? 4 : (x.ubic === 'S' ? 0 : x.ubic === 'F' ? 2 : -1) + (x.evento === 'LIBERADA' ? 1 : 0); return k < 0 || !t[x.c.nps] ? 0 : Math.round(x.ml * 1000) / 1000 * (t[x.c.nps][k] || 0); };
