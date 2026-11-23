@@ -36,16 +36,20 @@ Deno.serve(async (req) => {
     if (!r.ok) { fallidas[id] = "firestore " + r.status; continue; }
     const f = (await r.json()).fields || {};
     const actualizado = valor(f.actualizado) || new Date().toISOString();
-    let datos: unknown = null, bom: unknown = null;
+    let datos: unknown = null, bom: unknown = null, num_juntas: unknown = null;
     try { datos = valor(f.datos) ? JSON.parse(valor(f.datos)) : null; } catch (_) { datos = null; }
     try { bom = valor(f.bom) ? JSON.parse(valor(f.bom)) : null; } catch (_) { bom = null; }
-    const fila = { id, obra: valor(f.obra) || "", obra_id: valor(f.obraId) || "", linea: valor(f.linea) || "", datos, bom, borrada: valor(f.borrada) === true,
+    try { num_juntas = valor(f.numJ) ? JSON.parse(valor(f.numJ)) : null; } catch (_) { num_juntas = null; }
+    const fila = { id, obra: valor(f.obra) || "", obra_id: valor(f.obraId) || "", linea: valor(f.linea) || "", datos, bom, num_juntas, borrada: valor(f.borrada) === true,
       actualizado, por_email: valor(f.por), por_nombre: valor(f.porNombre), uid: valor(f.uid) };
-    // no repite una versión que ya está guardada (salvo que ahora traiga el listado de materiales y la guardada no)
-    const { data: hay } = await db.from("respaldo_lineas").select("actualizado, con_bom:bom->0").eq("id", id).maybeSingle();
+    // no repite una versión que ya está guardada; solo completa el listado de materiales y los números de junta si faltaban
+    const { data: hay } = await db.from("respaldo_lineas").select("actualizado, con_bom:bom->0, con_num:num_juntas").eq("id", id).maybeSingle();
     if (hay && new Date(hay.actualizado).getTime() === new Date(actualizado).getTime()) {
-      if (!bom || hay.con_bom != null) { copiadas.push(id); continue; }
-      const e = (await db.from("respaldo_lineas").update({ bom, recibido: new Date().toISOString() }).eq("id", id)).error;
+      const falta: Record<string, unknown> = {};
+      if (bom && hay.con_bom == null) falta.bom = bom;
+      if (num_juntas && hay.con_num == null) falta.num_juntas = num_juntas;
+      if (!Object.keys(falta).length) { copiadas.push(id); continue; }
+      const e = (await db.from("respaldo_lineas").update({ ...falta, recibido: new Date().toISOString() }).eq("id", id)).error;
       if (e) fallidas[id] = e.message; else copiadas.push(id);
       continue;
     }
