@@ -107,6 +107,41 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
 #tarjeta-version{position:fixed;right:14px;bottom:calc(74px + var(--safe-b));z-index:85;display:flex;align-items:center;gap:10px;max-width:min(460px,calc(100vw - 28px));
   background:var(--s900);border:1px solid var(--ambar);border-radius:12px;padding:10px 12px;font-size:13px;color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.5)}
 #tarjeta-version[hidden]{display:none}
+.tablero{position:fixed;inset:0;z-index:70;background:var(--s950);overflow:auto;padding:calc(10px + env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) calc(20px + var(--safe-b)) max(12px,env(safe-area-inset-left));color:var(--s200)}
+.tablero[hidden]{display:none}
+.tb-cab{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-top:4px solid #dc2626;padding-top:8px}
+.tb-cab h2{margin:0;font-size:18px;flex:1;min-width:200px}
+.tb-cab h2 small{display:block;font-size:11px;color:#f87171;letter-spacing:.06em;text-transform:uppercase}
+.tb-lead{font-size:13px;color:var(--s300);margin:8px 0;line-height:1.5}
+.tb-filtros{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.tb-filtros label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--s400);flex:1 1 130px;max-width:200px}
+.tb-filtros select,.tb-filtros input,.tb-buscar{background:var(--s800);border:1px solid var(--s700);border-radius:7px;padding:7px;font-size:14px;color:#fff;width:100%}
+.tb-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:10px 0}
+.tb-kpi{background:var(--s900);border:1px solid var(--s700);border-radius:10px;padding:10px}
+.tb-kpi b{display:block;font-size:24px;color:#fff;font-variant-numeric:tabular-nums}
+.tb-kpi span{font-size:11px;color:var(--s400)}
+.tb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:10px}
+.tb-card{background:var(--s900);border:1px solid var(--s700);border-radius:10px;padding:12px;min-width:0}
+.tb-card h3{margin:0 0 4px;font-size:14px;color:var(--ambar2)}
+.tb-nota{font-size:11px;color:var(--s400);margin:0 0 8px}
+.tb-barra{display:grid;grid-template-columns:minmax(80px,38%) 1fr auto;gap:6px;align-items:center;font-size:12px;margin:3px 0}
+.tb-barra .et{text-align:right;color:var(--s300);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tb-barra .bg{height:16px;background:var(--s800);border-radius:4px;overflow:hidden;display:flex}
+.tb-barra .bg i{display:block;height:100%}
+.tb-barra .v{color:#fff;font-variant-numeric:tabular-nums;white-space:nowrap;min-width:64px}
+.tb-col{display:flex;align-items:flex-end;gap:3px;height:150px;border-bottom:1px solid var(--s700);padding-top:16px}
+.tb-col div{flex:1;background:var(--azul);border-radius:3px 3px 0 0;position:relative;min-width:6px}
+.tb-col div b{position:absolute;top:-15px;left:50%;transform:translateX(-50%);font-size:10px;color:#fff;font-weight:600}
+.tb-colx{display:flex;gap:3px;font-size:9px;color:var(--s400)}
+.tb-colx span{flex:1;text-align:center;overflow:hidden;white-space:nowrap}
+.tb-ley{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--s400);margin-bottom:6px}
+.tb-ley i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.tb-tabla{overflow:auto;max-height:420px;border:1px solid var(--s700);border-radius:8px}
+.tb-tabla table{width:100%;border-collapse:collapse;font-size:12px}
+.tb-tabla th{position:sticky;top:0;background:var(--s800);text-align:left;padding:6px 8px;color:var(--s400);white-space:nowrap}
+.tb-tabla td{padding:5px 8px;border-top:1px solid var(--s800);vertical-align:top}
+.tb-tabla .n{text-align:right;font-variant-numeric:tabular-nums}
+.tb-est{font-size:11px;border:1px solid currentColor;border-radius:99px;padding:0 7px;white-space:nowrap}
 .modal{position:fixed;inset:0;background:rgba(2,6,23,.7);z-index:80;display:flex;align-items:center;justify-content:center;padding:14px}
 .modal[hidden]{display:none}
 .modal-card{width:100%;max-width:440px;max-height:90vh;overflow:auto;background:var(--s900);border:1px solid var(--s700);border-radius:14px;padding:16px}
@@ -336,6 +371,7 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
           <button class="btn ancho verde" onclick="exportarQC004()"><svg class="ico" data-ico="sheet"></svg>QC-F-004 Reporte de soldadura</button>
           <button class="btn ancho verde" onclick="exportarQC015()"><svg class="ico" data-ico="sheet"></svg>QC-F-015 Mapa de soldadura</button>
           <button class="btn ancho verde" onclick="exportarAnexo()"><svg class="ico" data-ico="camera"></svg>Anexo fotográfico de juntas</button>
+          <button class="btn ancho azul" onclick="abrirTablero()"><svg class="ico" data-ico="sheet"></svg>Tablero de obra (avance, soldadores y material)</button>
           <button class="btn ancho ambar" onclick="abrirReporteAvance()"><svg class="ico" data-ico="sheet"></svg>Reporte semanal de avance (ML)</button>
           <button class="btn ancho verde" onclick="abrirCobro()"><svg class="ico" data-ico="sheet"></svg>Cobro mensual (Excel maestro con datos)</button>
           <button class="btn ancho" onclick="abrirColadas()"><svg class="ico" data-ico="folder"></svg>Coladas de Recepción (trazabilidad)</button>
@@ -471,6 +507,7 @@ details.grupo-cat .rejilla{padding:0 6px 6px}
   <button class="btn ambar" onclick="location.reload()">Actualizar ahora</button>
   <button class="btn" onclick="document.getElementById('tarjeta-version').hidden = true" aria-label="Más tarde">Más tarde</button>
 </div>
+<div id="tablero" class="tablero no-print" hidden></div>
 <div id="modal" class="modal no-print" hidden>
   <form class="modal-card" id="modal-form" onsubmit="return false" novalidate>
     <h3 id="modal-titulo"></h3>
@@ -712,8 +749,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v40';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-11-20T21:30';      // fecha y hora de la publicación (UTC)
+const APP_VERSION = 'v41';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-11-23T15:30';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -1998,6 +2035,8 @@ function calcularBOM() {
   for (const k of estado.consumibles) filas.push({ key: 'CONS|' + k.id, id: k.id, uni: k.uni, desc: k.desc, cant: k.cant, consumible: true });
   return filas;
 }
+/* número de cada junta (W#) como sale en el plano, para la nube y el tablero de obra */
+function numJuntas() { try { return Object.fromEntries(numeracionSoldaduras()); } catch (_) { return null; } }
 /* listado de materiales de la línea abierta, en forma corta, para la nube y su copia de respaldo (dashboard de obra) */
 function bomResumen() {
   try {
@@ -3029,7 +3068,7 @@ const ponerLinea = L => bdOp('lineas', 'readwrite', s => s.put({ ...L, actualiza
 async function guardarLineaBD(forzar) {
   if (enIntercambio) return;
   if (!estado.lineaId) { if (!forzar && !estado.components.length) return; estado.lineaId = nuevoId(); try { localStorage.setItem(CLAVE_LOCAL, JSON.stringify(estado)); } catch (_) {} }
-  const cab = estado.cabecera, L = { id: estado.lineaId, obra: (cab.proyecto || '').trim() || 'SIN OBRA', linea: (cab.linea || '').trim(), datos: JSON.parse(JSON.stringify(estado)), bom: bomResumen(), actualizado: new Date().toISOString(), por: nube.perfil ? nube.perfil.nombre : '' };
+  const cab = estado.cabecera, L = { id: estado.lineaId, obra: (cab.proyecto || '').trim() || 'SIN OBRA', linea: (cab.linea || '').trim(), datos: JSON.parse(JSON.stringify(estado)), bom: bomResumen(), numJ: numJuntas(), actualizado: new Date().toISOString(), por: nube.perfil ? nube.perfil.nombre : '' };
   try { await ponerLinea(L); } catch (_) { /* sin base local: la línea sigue guardada en localStorage */ }
   subirLineaNube(L);
 }
@@ -3151,7 +3190,7 @@ async function aplicarMovimiento(L, obra, cliente) {
     const datos = JSON.parse(JSON.stringify(L.datos)); datos.cabecera = { ...(datos.cabecera || {}), proyecto: obra, cliente };
     const N = { ...L, obra, datos, actualizado: ahora, por: nube.perfil ? nube.perfil.nombre : (L.por || '') };
     await ponerLinea(N);
-    if (nube.activa && nube.db && nube.perfil) await nube.db.collection('lineas').doc(N.id).set({ obraId: idObra(obra), obra, linea: N.linea, datos: JSON.stringify(datos), ...(N.bom ? { bom: JSON.stringify(N.bom) } : {}),
+    if (nube.activa && nube.db && nube.perfil) await nube.db.collection('lineas').doc(N.id).set({ obraId: idObra(obra), obra, linea: N.linea, datos: JSON.stringify(datos), ...(N.bom ? { bom: JSON.stringify(N.bom) } : {}), ...(N.numJ ? { numJ: JSON.stringify(N.numJ) } : {}),
       actualizado: ahora, por: nube.perfil.email, porNombre: nube.perfil.nombre, uid: nube.perfil.uid }).then(() => respaldoSupabase([N.id]));
   }
   aviso(`Línea ${L.linea || '(sin número)'} movida a la obra ${obra}`, 'ok', 3500); abrirObras();
@@ -3162,6 +3201,164 @@ async function marcarBorradaNube(L) {
     actualizado: new Date().toISOString(), por: nube.perfil.email, porNombre: nube.perfil.nombre, uid: nube.perfil.uid });
   respaldoSupabase([L.id]);
 }
+/* ---------- Tablero de obra: avance de juntas, soldadores, tuberos y material, con las líneas de este equipo
+   (las que el usuario puede ver: el técnico solo sus obras asignadas). No muestra precios. ---------- */
+const TB_COL = { Liberada: 'var(--verde)', Soldada: 'var(--ambar)', Rechazada: 'var(--rojo)', Pendiente: 'var(--s600)' };
+const tb = { filas: null, f: { obra: '', linea: '', soldador: '', tubero: '', ubic: '', diam: '', desde: '', hasta: '' }, qMat: '', qJun: '' };
+const tbNum = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 2 });
+const tbNom = s => String(s || '').trim().replace(/\s+/g, ' ').toUpperCase();
+const tbFecha = f => /^\d{4}-\d{2}-\d{2}$/.test(f || '') && +f.slice(0, 4) >= 2020 && f <= `${new Date().getFullYear() + 1}-12-31` ? f : '';
+const tbEstado = c => { const e = estadoRegistro(regJ(c)); return e[0].toUpperCase() + e.slice(1); };
+async function abrirTablero() {
+  toggleSidebar(false);
+  aviso('Preparando el tablero…', null, 2500);
+  await guardarLineaBD();
+  if (nube.activa && nube.perfil && navigator.onLine) { try { await bajarLineasNube(); } catch (_) { /* se usa lo del equipo */ } }
+  let lineas = (await todasLineas()).filter(L => obraPermitida(L.obra));
+  /* líneas sin listado o sin números de junta (guardadas con versiones viejas): se calculan aquí sin cambiarlas */
+  const faltan = lineas.filter(L => !L.bom || !L.numJ);
+  if (faltan.length) {
+    const calc = new Map();
+    await conLineas(faltan, async L => { calc.set(L.id, { bom: bomResumen(), numJ: numJuntas() }); });
+    lineas = lineas.map(L => calc.has(L.id) ? { ...L, bom: L.bom || calc.get(L.id).bom, numJ: L.numJ || calc.get(L.id).numJ } : L);
+  }
+  const juntas = [], regs = [], material = [];
+  for (const L of lineas) {
+    const obra = L.obra, linea = L.linea || '(sin número)', numJ = L.numJ || {};
+    const ws = (L.datos.components || []).filter(c => c.type === 'weld');
+    ws.forEach((c, i) => {
+      const n = numJ[c.id] || i + 1, junta = 'W' + n, pulg = npsNum(c.nps) || 0, e = tbEstado(c);
+      juntas.push({ obra, linea, junta, n, diam: c.nps || '', pulg, fecha: tbFecha(c.fecha), fechaTxt: c.fecha || '', raiz: tbNom(c.raiz), pres: tbNom(c.pres), tubero: tbNom(c.tubero),
+        ubic: c.ubic === 'T' ? 'Taller' : c.ubic === 'F' ? 'Campo' : '', estado: e });
+      const recs = [[c, 'Original', junta], ...(c.reps || []).map((r, k) => [r, 'Reparación', `${junta}-R${k + 1}`]), ...(c.padR || []).map((r, k) => [r || {}, 'Filete de pad', `${junta}-P${k + 1}`])];
+      for (const [r, clase, reg] of recs) {
+        const sr = tbNom(r.raiz), sp = tbNom(r.pres);
+        for (const sold of new Set([sr, sp].filter(Boolean))) regs.push({ obra, linea, junta, reg, clase, sold, raiz: sold === sr, pres: sold === sp, pulg, fecha: tbFecha(r.fecha), tubero: tbNom(r.tubero || c.tubero), ubic: (r.ubic || c.ubic) === 'T' ? 'Taller' : (r.ubic || c.ubic) === 'F' ? 'Campo' : '', diam: c.nps || '' });
+      }
+    });
+    for (const b of L.bom || []) if (b.tipo !== 'weld') material.push({ obra, linea, tipo: b.tipo, desc: b.desc, diam: b.nps + (b.npsRed ? ' x ' + b.npsRed : ''), nps: b.nps, uni: b.uni, cant: Number(b.cant) || 0 });
+  }
+  tb.filas = { juntas, regs, material, lineas: lineas.map(L => ({ obra: L.obra, linea: L.linea || '(sin número)', actualizado: L.actualizado || '', por: L.por || '' })) };
+  if (!tb.f.obra && estado.cabecera.proyecto && lineas.some(L => idObra(L.obra) === idObra(estado.cabecera.proyecto))) tb.f.obra = lineas.find(L => idObra(L.obra) === idObra(estado.cabecera.proyecto)).obra;
+  $('tablero').hidden = false;
+  clearTimeout(aviso.t); $('aviso').style.display = 'none';
+  pintarTablero();
+}
+function cerrarTablero() { $('tablero').hidden = true; }
+function pintarTablero() {
+  const D = tb.filas, f = tb.f; if (!D) return;
+  const opc = (vals, sel, todas) => `<option value="">${todas}</option>` + vals.map(v => `<option${v === sel ? ' selected' : ''}>${esc(v)}</option>`).join('');
+  const uniq = a => [...new Set(a.filter(Boolean))].sort((x, y) => x.localeCompare(y, 'es', { numeric: true }));
+  const okJ = j => (!f.obra || j.obra === f.obra) && (!f.linea || j.linea === f.linea) && (!f.soldador || j.raiz === f.soldador || j.pres === f.soldador)
+    && (!f.tubero || j.tubero === f.tubero) && (!f.ubic || j.ubic === f.ubic) && (!f.diam || j.diam === f.diam) && (!f.desde || (j.fecha && j.fecha >= f.desde)) && (!f.hasta || (j.fecha && j.fecha <= f.hasta));
+  const J = D.juntas.filter(okJ), claves = new Set(J.map(j => j.obra + '|' + j.linea + '|' + j.junta));
+  const R = D.regs.filter(r => claves.has(r.obra + '|' + r.linea + '|' + r.junta) && (!f.soldador || r.sold === f.soldador) && (!f.desde || (r.fecha && r.fecha >= f.desde)) && (!f.hasta || (r.fecha && r.fecha <= f.hasta)));
+  const M = D.material.filter(m => (!f.obra || m.obra === f.obra) && (!f.linea || m.linea === f.linea) && (!f.diam || m.nps === f.diam));
+  const Ls = D.lineas.filter(l => (!f.obra || l.obra === f.obra) && (!f.linea || l.linea === f.linea));
+  const cuenta = e => J.filter(j => j.estado === e).length, sold = J.filter(j => j.estado !== 'Pendiente'), lib = cuenta('Liberada');
+  const pct = J.length ? Math.round(1000 * lib / J.length) / 10 : 0, pulg = sold.reduce((s, j) => s + j.pulg, 0);
+  const ml = M.filter(m => m.tipo === 'pipe').reduce((s, m) => s + m.cant, 0);
+  const agrupa = (filas, k, extra) => { const g = new Map(); for (const x of filas) { const y = g.get(x[k]) || { k: x[k], n: 0, p: 0, ...extra() }; y.n++; y.p += x.pulg; g.set(x[k], y); } return [...g.values()]; };
+  const porSold = agrupa(R, 'sold', () => ({ raiz: 0, pres: 0, rep: 0 })); R.forEach(r => { const y = porSold.find(z => z.k === r.sold); if (r.raiz) y.raiz++; if (r.pres) y.pres++; if (r.clase !== 'Original') y.rep++; });
+  porSold.sort((a, b) => b.n - a.n || b.p - a.p);
+  const porTub = agrupa(J.filter(j => j.tubero), 'tubero', () => ({})).sort((a, b) => b.n - a.n);
+  const barras = (filas, val, txt, color = 'var(--azul)') => { const mx = Math.max(1, ...filas.map(val)); return filas.map(x => `<div class="tb-barra"><span class="et" title="${esc(x.k)}">${esc(x.k)}</span><span class="bg"><i style="width:${(100 * val(x) / mx).toFixed(1)}%;background:${color}"></i></span><span class="v">${txt(x)}</span></div>`).join('') || '<p class="tb-nota">Sin datos con estos filtros.</p>'; };
+  /* semanas (lunes a domingo) */
+  const lunes = s => { const d = new Date(s + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - (d.getUTCDay() + 6) % 7); return d.toISOString().slice(0, 10); };
+  const sem = new Map(); sold.filter(j => j.fecha).forEach(j => { const w = lunes(j.fecha); sem.set(w, (sem.get(w) || 0) + 1); });
+  const ws = [...sem.keys()].sort(), semanas = [];
+  if (ws.length) for (let d = new Date(ws[0] + 'T00:00:00Z'); d.toISOString().slice(0, 10) <= ws[ws.length - 1]; d.setUTCDate(d.getUTCDate() + 7)) { const w = d.toISOString().slice(0, 10); semanas.push([w, sem.get(w) || 0]); }
+  const mxS = Math.max(1, ...semanas.map(s => s[1])), cada = Math.max(1, Math.ceil(semanas.length / 10));
+  /* estado por línea */
+  const porLinea = new Map(); J.forEach(j => { const k = (f.obra ? '' : j.obra + ' · ') + j.linea, y = porLinea.get(k) || { k, Liberada: 0, Soldada: 0, Rechazada: 0, Pendiente: 0, t: 0 }; y[j.estado]++; y.t++; porLinea.set(k, y); });
+  const lineasEst = [...porLinea.values()].sort((a, b) => b.Liberada / b.t - a.Liberada / a.t || b.t - a.t);
+  /* material */
+  const gm = new Map(); M.forEach(m => { const k = m.desc + '|' + m.uni, y = gm.get(k) || { ...m, cant: 0 }; y.cant += m.cant; gm.set(k, y); });
+  const mat = [...gm.values()], porDiam = new Map(); mat.filter(m => m.tipo === 'pipe').forEach(m => porDiam.set(m.diam, (porDiam.get(m.diam) || 0) + m.cant));
+  const grupo = t => t === 'pipe' ? 'Tubería' : t.startsWith('flange') ? 'Brida' : t.startsWith('v_') ? 'Válvula' : t === 'pad' ? 'Pad de refuerzo' : t === 'consumible' ? 'Consumible' : 'Accesorio y otros';
+  const top = mat.filter(m => m.uni === 'UND' && m.tipo !== 'pipe').sort((a, b) => b.cant - a.cant).slice(0, 12);
+  const qm = tb.qMat.toUpperCase(), matT = mat.filter(m => !qm || (m.desc + ' ' + grupo(m.tipo)).toUpperCase().includes(qm)).sort((a, b) => grupo(a.tipo).localeCompare(grupo(b.tipo)) || npsNum(b.nps) - npsNum(a.nps));
+  const qj = tb.qJun.toUpperCase(), junT = J.filter(j => !qj || [j.obra, j.linea, j.junta, j.raiz, j.pres, j.tubero, j.estado].join(' ').includes(qj)).sort((a, b) => a.obra.localeCompare(b.obra) || a.linea.localeCompare(b.linea, 'es', { numeric: true }) || a.n - b.n);
+  /* datos por revisar */
+  const rev = [], en = o => !f.obra || o === f.obra;
+  D.juntas.filter(j => en(j.obra)).forEach(j => {
+    const w = `${j.obra} · ${j.linea} · ${j.junta}`;
+    if (j.fechaTxt && !j.fecha) rev.push(['Fecha imposible', w, j.fechaTxt]);
+    if (j.fechaTxt && !j.raiz && !j.pres) rev.push(['Fecha sin soldador', w, 'Tiene fecha pero no soldador']);
+    if ((j.raiz || j.pres) && !j.fechaTxt) rev.push(['Soldador sin fecha', w, 'Tiene soldador pero no fecha']);
+    if (j.estado !== 'Pendiente' && !j.tubero) rev.push(['Soldada sin tubero', w, 'Sin tubero registrado']);
+  });
+  const nombres = uniq(D.regs.filter(r => en(r.obra)).map(r => r.sold)), base = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Z0-9]/g, ''), gb = new Map();
+  nombres.forEach(s => gb.set(base(s), [...(gb.get(base(s)) || []), s]));
+  gb.forEach(v => { if (v.length > 1) rev.push(['Mismo soldador escrito distinto', v.join(' / '), 'Corrija el nombre para que se sumen sus juntas']); });
+  nombres.filter(s => /^\d+$/.test(s)).forEach(s => rev.push(['Soldador con solo un número', s, 'Parece una estampa: escriba el nombre']));
+  D.lineas.filter(l => en(l.obra) && l.linea === '(sin número)').forEach(l => rev.push(['Línea sin número', l.obra, `Guardada ${fechaDMY((l.actualizado || '').slice(0, 10))} por ${l.por || '—'}`]));
+  const ultima = Ls.map(l => l.actualizado).sort().pop() || '', lider = porSold[0];
+  $('tablero').innerHTML = `
+  <div class="tb-cab"><h2><small>INDIMON S.A.S. · Tablero de obra</small>${esc(f.obra || 'Todas las obras')}</h2>
+    <button class="btn" type="button" onclick="cerrarTablero()"><svg class="ico" data-ico="x"></svg>Cerrar</button></div>
+  <p class="tb-lead"><b>${tbNum.format(lib)}</b> de <b>${tbNum.format(J.length)}</b> juntas están liberadas (${tbNum.format(pct)} %).${lider ? ` Quien más juntas lleva es <b>${esc(lider.k)}</b>, con ${tbNum.format(lider.n)}.` : ''} Última línea guardada: ${esc(fechaDMY(ultima.slice(0, 10)))}.</p>
+  <div class="tb-filtros">
+    <label>Obra<select data-tbf="obra">${opc(uniq(D.lineas.map(l => l.obra)), f.obra, 'Todas las obras')}</select></label>
+    <label>Línea<select data-tbf="linea">${opc(uniq(D.lineas.filter(l => !f.obra || l.obra === f.obra).map(l => l.linea)), f.linea, 'Todas')}</select></label>
+    <label>Soldador<select data-tbf="soldador">${opc(uniq(D.regs.map(r => r.sold)), f.soldador, 'Todos')}</select></label>
+    <label>Tubero<select data-tbf="tubero">${opc(uniq(D.juntas.map(j => j.tubero)), f.tubero, 'Todos')}</select></label>
+    <label>Taller / campo<select data-tbf="ubic">${opc(['Taller', 'Campo'], f.ubic, 'Ambos')}</select></label>
+    <label>Diámetro<select data-tbf="diam">${opc(uniq(D.juntas.map(j => j.diam)).sort((a, b) => npsNum(a) - npsNum(b)), f.diam, 'Todos')}</select></label>
+    <label>Desde<input type="date" data-tbf="desde" value="${esc(f.desde)}"></label>
+    <label>Hasta<input type="date" data-tbf="hasta" value="${esc(f.hasta)}"></label>
+    <label style="flex:0 0 auto;justify-content:flex-end"><button class="btn" type="button" data-tbx="limpiar">Quitar filtros</button></label>
+  </div>
+  <div class="tb-kpis">
+    <div class="tb-kpi"><b>${tbNum.format(J.length)}</b><span>juntas · ${tbNum.format(cuenta('Pendiente'))} pendientes</span></div>
+    <div class="tb-kpi"><b>${tbNum.format(pct)} %</b><span>liberadas · ${tbNum.format(lib)} juntas</span></div>
+    <div class="tb-kpi"><b>${tbNum.format(sold.length)}</b><span>soldadas · ${tbNum.format(cuenta('Rechazada'))} rechazadas</span></div>
+    <div class="tb-kpi"><b>${tbNum.format(Math.round(pulg * 10) / 10)}</b><span>pulgadas diametrales soldadas</span></div>
+    <div class="tb-kpi"><b>${tbNum.format(Math.round(ml * 100) / 100)}</b><span>ML de tubería (listado DP-F-009)</span></div>
+    <div class="tb-kpi"><b>${tbNum.format(Ls.length)}</b><span>líneas (isométricos)</span></div>
+  </div>
+  <div class="tb-grid">
+    <div class="tb-card"><h3>Juntas por soldador</h3><p class="tb-nota">Raíz o presentación; incluye reparaciones y filetes de pad. A la derecha, juntas y pulgadas.</p>
+      ${barras(porSold, x => x.n, x => `${tbNum.format(x.n)} · ${tbNum.format(Math.round(x.p * 10) / 10)}"`)}</div>
+    <div class="tb-card"><h3>Juntas por tubero</h3><p class="tb-nota">Juntas con tubero registrado.</p>
+      ${barras(porTub, x => x.n, x => `${tbNum.format(x.n)} · ${tbNum.format(Math.round(x.p * 10) / 10)}"`)}</div>
+    <div class="tb-card"><h3>Juntas soldadas por semana</h3><p class="tb-nota">Semana desde el lunes, por fecha de soldadura.</p>
+      ${semanas.length ? `<div class="tb-col">${semanas.map(([w, n]) => `<div style="height:${(100 * n / mxS).toFixed(1)}%" title="Semana del ${fechaDMY(w)}: ${n} juntas">${n ? `<b>${n}</b>` : ''}</div>`).join('')}</div>
+      <div class="tb-colx">${semanas.map(([w], i) => `<span>${i % cada ? '' : w.slice(8, 10) + '/' + w.slice(5, 7)}</span>`).join('')}</div>` : '<p class="tb-nota">Sin juntas soldadas con fecha.</p>'}</div>
+    <div class="tb-card"><h3>Estado de las juntas por línea</h3>
+      <div class="tb-ley">${Object.entries(TB_COL).map(([e, c]) => `<span><i style="background:${c}"></i>${e}</span>`).join('')}</div>
+      <div style="max-height:380px;overflow:auto">${lineasEst.map(x => `<div class="tb-barra"><span class="et" title="${esc(x.k)}">${esc(x.k)}</span><span class="bg">${Object.keys(TB_COL).map(e => x[e] ? `<i style="width:${(100 * x[e] / x.t).toFixed(1)}%;background:${TB_COL[e]}" title="${e}: ${x[e]}"></i>` : '').join('')}</span><span class="v">${Math.round(100 * x.Liberada / x.t)} % · ${x.t}</span></div>`).join('') || '<p class="tb-nota">Sin juntas.</p>'}</div></div>
+    <div class="tb-card"><h3>Tubería por diámetro (ML)</h3><p class="tb-nota">Del listado de materiales de cada línea.</p>
+      ${barras([...porDiam].map(([k, v]) => ({ k: 'Ø ' + k, v, o: npsNum(k) })).sort((a, b) => b.o - a.o), x => x.v, x => tbNum.format(Math.round(x.v * 100) / 100), 'var(--cian)')}</div>
+    <div class="tb-card"><h3>Piezas más usadas</h3><p class="tb-nota">Accesorios, bridas, válvulas y otras, por unidades.</p>
+      ${barras(top.map(m => ({ k: m.desc, v: m.cant })), x => x.v, x => tbNum.format(x.v) + ' UND', 'var(--verde)')}</div>
+  </div>
+  <div class="tb-card" style="margin-top:10px"><h3>Material total</h3><p class="tb-nota">Solo cambia con los filtros de obra, línea y diámetro.</p>
+    <input class="tb-buscar" data-tbq="qMat" placeholder="Buscar material…" value="${esc(tb.qMat)}" style="margin-bottom:6px">
+    <div class="tb-tabla"><table><thead><tr><th>Grupo</th><th>Descripción</th><th>Unidad</th><th class="n">Cantidad</th></tr></thead><tbody>
+    ${matT.map(m => `<tr><td>${grupo(m.tipo)}</td><td>${esc(m.desc)}</td><td>${esc(m.uni)}</td><td class="n">${tbNum.format(m.uni === 'UND' ? m.cant : Math.round(m.cant * 100) / 100)}</td></tr>`).join('') || '<tr><td colspan="4">Sin material con estos filtros.</td></tr>'}</tbody></table></div></div>
+  <div class="tb-card" style="margin-top:10px"><h3>Detalle de juntas</h3><p class="tb-nota">W# como en el plano.</p>
+    <input class="tb-buscar" data-tbq="qJun" placeholder="Buscar línea, soldador, tubero…" value="${esc(tb.qJun)}" style="margin-bottom:6px">
+    <div class="tb-tabla"><table><thead><tr><th>Obra</th><th>Línea</th><th>Junta</th><th>Ø</th><th>Fecha</th><th>Raíz</th><th>Presentación</th><th>Tubero</th><th>Ubic.</th><th>Estado</th></tr></thead><tbody>
+    ${junT.slice(0, 500).map(j => `<tr><td>${esc(j.obra)}</td><td>${esc(j.linea)}</td><td>${j.junta}</td><td>${esc(j.diam)}</td><td>${j.fecha ? fechaDMY(j.fecha) : esc(j.fechaTxt)}</td><td>${esc(j.raiz)}</td><td>${esc(j.pres)}</td><td>${esc(j.tubero)}</td><td>${j.ubic}</td><td><span class="tb-est" style="color:${TB_COL[j.estado]}">${j.estado}</span></td></tr>`).join('') || '<tr><td colspan="10">Ninguna junta.</td></tr>'}
+    ${junT.length > 500 ? `<tr><td colspan="10">… y ${junT.length - 500} juntas más: use los filtros o la búsqueda.</td></tr>` : ''}</tbody></table></div></div>
+  <div class="tb-card" style="margin-top:10px;border-left:3px solid var(--ambar)"><h3>Datos por revisar (${rev.length})</h3><p class="tb-nota">Para corregir en el CAD. No se cambió ningún dato.</p>
+    <div class="tb-tabla" style="max-height:300px"><table><thead><tr><th>Qué revisar</th><th>Dónde</th><th>Detalle</th></tr></thead><tbody>
+    ${rev.map(r => `<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td>${esc(r[2])}</td></tr>`).join('') || '<tr><td colspan="3">Nada por revisar.</td></tr>'}</tbody></table></div></div>`;
+  $('tablero').querySelectorAll('svg[data-ico]').forEach(s => { s.setAttribute('viewBox', '0 0 24 24'); s.innerHTML = `<use href="#i-${s.dataset.ico}"/>`; });
+}
+$('tablero').addEventListener('change', e => {
+  const k = e.target.dataset.tbf; if (!k) return;
+  if (e.target.type === 'date' && e.target.value && !e.target.validity.valid) return;
+  tb.f[k] = e.target.value; if (k === 'obra') tb.f.linea = '';
+  pintarTablero();
+});
+$('tablero').addEventListener('click', e => { if (e.target.closest('[data-tbx="limpiar"]')) { for (const k in tb.f) tb.f[k] = ''; tb.qMat = tb.qJun = ''; pintarTablero(); } });
+$('tablero').addEventListener('input', e => {
+  const k = e.target.dataset.tbq; if (!k) return;
+  tb[k] = e.target.value.trim(); const pos = e.target.selectionStart;
+  pintarTablero(); const el = $('tablero').querySelector(`[data-tbq="${k}"]`); if (el) { el.focus(); el.setSelectionRange(pos, pos); }
+});
 function prepararLineaAbierta() {
   historial = []; rehacerPila = []; seleccion = null; terminarTrazo();
   if (!estado.cabecera.fecha) estado.cabecera.fecha = hoyISO();
@@ -3547,7 +3744,7 @@ function subirLineaNube(L) {
   clearTimeout(tNube.get(L.id));
   tNube.set(L.id, setTimeout(() => {
     tNube.delete(L.id);
-    nube.db.collection('lineas').doc(L.id).set({ obraId: idObra(L.obra), obra: L.obra, linea: L.linea, datos: JSON.stringify(L.datos), ...(L.bom ? { bom: JSON.stringify(L.bom) } : {}),
+    nube.db.collection('lineas').doc(L.id).set({ obraId: idObra(L.obra), obra: L.obra, linea: L.linea, datos: JSON.stringify(L.datos), ...(L.bom ? { bom: JSON.stringify(L.bom) } : {}), ...(L.numJ ? { numJ: JSON.stringify(L.numJ) } : {}),
       actualizado: L.actualizado || new Date().toISOString(), por: nube.perfil.email, porNombre: nube.perfil.nombre, uid: nube.perfil.uid })
       .then(() => respaldoSupabase([L.id]))
       .catch(e => aviso('No se pudo subir la línea a la nube: ' + (e.code || e.message), 'error', 4000));
@@ -3557,7 +3754,7 @@ function subirLineaNube(L) {
    las lee directo de Firebase con el token del usuario (las reglas de Firebase siguen mandando) y las guarda aparte.
    Si falla no molesta al técnico: la próxima vez se vuelve a intentar. ---- */
 const RESPALDO_URL = 'https://nlbzhdqfiyrlhpiinbuh.supabase.co/functions/v1/respaldo';
-const CLAVE_RESPALDO_DIA = 'indimon_respaldo_supabase_dia_v40';   // nombre nuevo en la v40: completa el listado de materiales de las líneas viejas
+const CLAVE_RESPALDO_DIA = 'indimon_respaldo_supabase_dia_v41';   // nombre nuevo en la v41: completa listado de materiales y números de junta de las líneas viejas
 const colaRespaldo = new Set(); let tRespaldo;
 function respaldoSupabase(ids) {
   if (!nube.auth || !nube.auth.currentUser || !location.protocol.startsWith('http')) return;
@@ -3580,15 +3777,15 @@ async function respaldoDiario() {
   if (!esAdmin()) return;
   const hoy = hoyISO(); try { if (localStorage.getItem(CLAVE_RESPALDO_DIA) === hoy) return; localStorage.setItem(CLAVE_RESPALDO_DIA, hoy); } catch (_) {}
   const remotas = await lineasNube();
-  /* líneas guardadas antes de la v40: se les calcula el listado de materiales (sin cambiar su fecha ni su autor) */
-  const sinBom = new Set(remotas.filter(d => !d.borrada && !d.bom).map(d => d.id));
+  /* líneas guardadas antes de la v41: se les calcula el listado de materiales y la numeración de juntas (sin cambiar su fecha ni su autor) */
+  const sinBom = new Set(remotas.filter(d => !d.borrada && (!d.bom || !d.numJ)).map(d => d.id));
   const locales = (await todasLineas()).filter(L => sinBom.has(L.id) && L.id !== estado.lineaId);
   if (locales.length) {
     const hechas = [];
-    await conLineas(locales, async L => { hechas.push({ ...L, bom: bomResumen() }); });
+    await conLineas(locales, async L => { hechas.push({ ...L, bom: bomResumen(), numJ: numJuntas() }); });
     for (const L of hechas) {
-      if (!L.bom) continue;
-      try { await ponerLinea(L); await nube.db.collection('lineas').doc(L.id).update({ bom: JSON.stringify(L.bom) }); } catch (_) { /* se reintenta otro día */ }
+      if (!L.bom || !L.numJ) continue;
+      try { await ponerLinea(L); await nube.db.collection('lineas').doc(L.id).update({ bom: JSON.stringify(L.bom), numJ: JSON.stringify(L.numJ) }); } catch (_) { /* se reintenta otro día */ }
     }
   }
   respaldoSupabase(remotas.map(d => d.id));
@@ -3613,8 +3810,8 @@ async function bajarLineasNube() {
     if (loc && String(loc.actualizado || '') >= String(r.actualizado || '')) continue;
     let datos; try { datos = JSON.parse(r.datos); } catch (_) { continue; }
     if (r.id === estado.lineaId) continue;   // la abierta no se pisa mientras se trabaja
-    let bom = null; try { bom = r.bom ? JSON.parse(r.bom) : null; } catch (_) { bom = null; }
-    await bdOp('lineas', 'readwrite', s => s.put({ id: r.id, obra: r.obra, linea: r.linea, datos, bom, actualizado: r.actualizado, por: r.porNombre || r.por }));
+    let bom = null, numJ = null; try { bom = r.bom ? JSON.parse(r.bom) : null; numJ = r.numJ ? JSON.parse(r.numJ) : null; } catch (_) { /* se recalculan */ }
+    await bdOp('lineas', 'readwrite', s => s.put({ id: r.id, obra: r.obra, linea: r.linea, datos, bom, numJ, actualizado: r.actualizado, por: r.porNombre || r.por }));
     n++;
   }
   if (n) aviso(`${n} línea${n > 1 ? 's' : ''} actualizada${n > 1 ? 's' : ''} desde la nube`, 'ok', 2500);

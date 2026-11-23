@@ -47,3 +47,6 @@ create trigger podar_versiones after insert on public.respaldo_versiones
 
 -- (segunda migración, respaldo_bom) listado de materiales (DP-F-009) calculado por la app para cada línea
 alter table public.respaldo_lineas add column bom jsonb;
+
+-- (tercera migración, respaldo_num_juntas) número de cada junta (W#) como sale en el plano
+alter table public.respaldo_lineas add column num_juntas jsonb;
