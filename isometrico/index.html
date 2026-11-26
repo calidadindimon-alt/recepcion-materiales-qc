@@ -749,8 +749,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v45';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-11-23T22:40';      // fecha y hora de la publicación (UTC)
+const APP_VERSION = 'v46';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-11-26T19:30';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -3278,6 +3278,26 @@ async function abrirTablero() {
   clearTimeout(aviso.t); $('aviso').style.display = 'none';
   pintarTablero();
 }
+/* cambia un nombre (soldador de raíz/presentación o tubero) en todas las líneas que el usuario puede ver, y las sube a la nube */
+async function renombrarPersona(de, a) {
+  de = tbNom(de); a = tbNom(a);
+  if (!puedeMover()) { aviso('Solo el administrador corrige nombres', 'error'); return; }
+  if (!de || !a) { aviso('Elija el nombre actual y escriba el correcto', 'error', 3500); return; }
+  if (de === a) { aviso('Los dos nombres son iguales', 'error'); return; }
+  const cambia = obj => { let n = 0; for (const k of ['raiz', 'pres', 'tubero']) if (obj && obj[k] && tbNom(obj[k]) === de) { obj[k] = a; n++; } return n; };
+  const corregir = datos => { let n = 0; for (const c of datos.components || []) if (c.type === 'weld') { n += cambia(c); for (const r of c.reps || []) n += cambia(r); for (const r of c.padR || []) n += cambia(r); } return n; };
+  let total = 0, lineas = 0;
+  await guardarLineaBD();
+  const n0 = corregir(estado);
+  if (n0) { total += n0; lineas++; await guardarLineaBD(); actualizarTodo(); }
+  for (const L of (await todasLineas()).filter(x => x.id !== estado.lineaId && obraPermitida(x.obra))) {
+    const datos = JSON.parse(JSON.stringify(L.datos)), n = corregir(datos); if (!n) continue;
+    const N = { ...L, datos, actualizado: new Date().toISOString(), por: nube.perfil ? nube.perfil.nombre : (L.por || '') };
+    await ponerLinea(N); subirLineaNube(N); total += n; lineas++;
+  }
+  if (total) await abrirTablero();
+  aviso(total ? `«${de}» cambiado por «${a}» en ${total} campos de ${lineas} línea${lineas > 1 ? 's' : ''}` : `No se encontró «${de}»`, total ? 'ok' : 'error', 5000);
+}
 function cerrarTablero() { $('tablero').hidden = true; }
 function pintarTablero() {
   const D = tb.filas, f = tb.f; if (!D) return;
@@ -3378,7 +3398,13 @@ function pintarTablero() {
     ${junT.length > 500 ? `<tr><td colspan="10">… y ${junT.length - 500} juntas más: use los filtros o la búsqueda.</td></tr>` : ''}</tbody></table></div></div>
   <div class="tb-card" style="margin-top:10px;border-left:3px solid var(--ambar)"><h3>Datos por revisar (${rev.length})</h3><p class="tb-nota">Para corregir en el CAD. No se cambió ningún dato.</p>
     <div class="tb-tabla" style="max-height:300px"><table><thead><tr><th>Qué revisar</th><th>Dónde</th><th>Detalle</th></tr></thead><tbody>
-    ${rev.map(r => `<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td>${esc(r[2])}</td></tr>`).join('') || '<tr><td colspan="3">Nada por revisar.</td></tr>'}</tbody></table></div></div>`;
+    ${rev.map(r => `<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td>${esc(r[2])}</td></tr>`).join('') || '<tr><td colspan="3">Nada por revisar.</td></tr>'}</tbody></table></div>
+    ${puedeMover() ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--s700)"><h3>Corregir un nombre en todas las líneas</h3>
+      <p class="tb-nota">Cambia un soldador o tubero mal escrito (o una estampa) por el nombre correcto en todas las juntas, reparaciones y filetes de pad de todas las obras. Solo el administrador.</p>
+      <div class="tb-filtros" style="margin:0">
+        <label>Nombre actual<select id="tb-ren-de">${opc(uniq([...D.regs.map(x => x.sold), ...D.juntas.map(j => j.tubero)]), '', '— elija —')}</select></label>
+        <label>Cambiar por<input id="tb-ren-a" list="tb-ren-lista" maxlength="60" placeholder="Nombre correcto"><datalist id="tb-ren-lista">${uniq([...D.regs.map(x => x.sold), ...D.juntas.map(j => j.tubero)]).map(n => `<option value="${esc(n)}">`).join('')}</datalist></label>
+        <label style="flex:0 0 auto;justify-content:flex-end"><button class="btn ambar" type="button" data-tbx="renombrar">Corregir</button></label></div></div>` : ''}</div>`;
   $('tablero').querySelectorAll('svg[data-ico]').forEach(s => { s.setAttribute('viewBox', '0 0 24 24'); s.innerHTML = `<use href="#i-${s.dataset.ico}"/>`; });
 }
 $('tablero').addEventListener('change', e => {
@@ -3387,7 +3413,7 @@ $('tablero').addEventListener('change', e => {
   tb.f[k] = e.target.value; if (k === 'obra') tb.f.linea = '';
   pintarTablero();
 });
-$('tablero').addEventListener('click', e => { if (e.target.closest('[data-tbx="limpiar"]')) { for (const k in tb.f) tb.f[k] = ''; tb.qMat = tb.qJun = ''; pintarTablero(); } });
+$('tablero').addEventListener('click', e => { if (e.target.closest('[data-tbx="renombrar"]')) { renombrarPersona($('tb-ren-de').value, $('tb-ren-a').value); return; } if (e.target.closest('[data-tbx="limpiar"]')) { for (const k in tb.f) tb.f[k] = ''; tb.qMat = tb.qJun = ''; pintarTablero(); } });
 $('tablero').addEventListener('input', e => {
   const k = e.target.dataset.tbq; if (!k) return;
   tb[k] = e.target.value.trim(); const pos = e.target.selectionStart;
