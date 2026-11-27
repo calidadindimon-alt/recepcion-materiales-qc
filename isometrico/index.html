@@ -673,7 +673,8 @@ const TIPOS = {
   /* anotaciones del plano (no van al BOM) */
   flow:          { grupo: 'anot', cat: 'ANOTACIÓN', mat: 'anot', modo: 'linea', orden: 90, nombre: 'FLECHA DE DIRECCIÓN DE FLUJO', corto: 'Flecha de flujo', noBOM: true },
   slope:         { grupo: 'anot', cat: 'ANOTACIÓN', mat: 'anot', modo: 'linea', orden: 91, nombre: 'PENDIENTE DEL TRAMO', corto: 'Pendiente', noBOM: true, propiedad: true },
-  cota:          { grupo: 'anot', cat: 'ANOTACIÓN', mat: 'anot', modo: 'cota', orden: 92, nombre: 'COTA ENTRE DOS PUNTOS', corto: 'Cota', noBOM: true }
+  cota:          { grupo: 'anot', cat: 'ANOTACIÓN', mat: 'anot', modo: 'cota', orden: 92, nombre: 'COTA ENTRE DOS PUNTOS', corto: 'Cota', noBOM: true },
+  cont:          { grupo: 'anot', cat: 'ANOTACIÓN', mat: 'anot', modo: 'continua', orden: 93, off: 30, nombre: 'CONTINUACIÓN / CONEXIÓN CON OTRA LÍNEA', corto: 'Continúa en otra línea', noBOM: true }
 };
 /* Catálogo de fabricante: series Danfoss (válvulas, reguladores, filtros e instrumentos).
    Cada serie usa un símbolo base del catálogo; el código de pedido exacto según diámetro y
@@ -727,7 +728,7 @@ for (const [marca, { items }] of Object.entries(FABRICANTES))
     TIPOS[id] = { grupo: 'fab_' + marca, cat: B.cat, mat: 'gen', modo: B.modo, orden: 61 + i / 100, nombre, corto, base, uni: 'UND' };
   });
 const GRUPOS = [['acc_bw', 'Accesorios soldables (BW)'], ['acc_rs', 'Roscados · Socket weld · Derivaciones'], ['brida', 'Bridas'], ['val', 'Válvulas'],
-  ['esp', 'Especiales de línea'], ['inst', 'Instrumentos'], ['sop', 'Soportes'], ['equipo', 'Equipos: bombas, tanques e intercambiadores'], ['junta', 'Juntas'], ['anot', 'Anotaciones (flujo y pendiente)'],
+  ['esp', 'Especiales de línea'], ['inst', 'Instrumentos'], ['sop', 'Soportes'], ['equipo', 'Equipos: bombas, tanques e intercambiadores'], ['junta', 'Juntas'], ['anot', 'Anotaciones (flujo, pendiente y continuación)'],
   ...Object.entries(FABRICANTES).map(([m, f]) => ['fab_' + m, `Fabricante: ${f.titulo}`]), ['propio', 'Catálogo propio']];
 const CATEGORIAS = ['ACCESORIO', 'BRIDA', 'VÁLVULA', 'ESPECIAL', 'INSTRUMENTO', 'SOPORTE', 'OTRO'];
 const CONSUMIBLES = [
@@ -749,8 +750,8 @@ const UNIDADES = ['ML', 'm', 'UND', 'GLB', 'KG', 'JGO'];
 
 /* ---------- 3. Estado global único (single source of truth) ---------- */
 const CLAVE_LOCAL = 'indimon_cad_dpf009_v1';
-const APP_VERSION = 'v47';               // subir junto con VERSION en sw.js en cada publicación
-const APP_FECHA = '2026-11-27T14:30';      // fecha y hora de la publicación (UTC)
+const APP_VERSION = 'v48';               // subir junto con VERSION en sw.js en cada publicación
+const APP_FECHA = '2026-11-27T17:00';      // fecha y hora de la publicación (UTC)
 const estado = {
   cabecera: { cliente: '', proyecto: '', linea: '', fecha: '', consecutivo: '', nps: '2"', spec: 'SCH 40 ASTM A106 Gr.B',
               servicio: '', pagina: '1', paginas: '1', notas: '', elaboro: '', reviso: '', aprobo: '' },
@@ -1013,6 +1014,7 @@ const SIM = {
   eq_hx_pl: '<rect x="-13" y="-18" width="26" height="36" class="sb"/><path d="M-7 -18V18M-2 -18V18M3 -18V18M8 -18V18" class="s" style="stroke-width:.8"/>',
   eq_comp: '<circle r="14" class="sb"/><path d="M-9 -9L11 -5V5L-9 9Z" class="s"/>',
   eq_filter: '<rect x="-10" y="-18" width="20" height="36" rx="5" class="sb"/><path d="M-5 -12V12M0 -12V12M5 -12V12" class="s" style="stroke-width:.8"/>',
+  cont: '<path d="M-14 0H-2" class="s" style="stroke-width:2.4"/><path d="M-2 0H9" class="s" style="stroke-dasharray:3 2;stroke-width:1.2"/><path d="M9 -7Q14 0 9 7" class="s" style="stroke-width:1.2"/>',
   flow: '<path d="M-13 0H2" class="s" style="stroke-width:2"/><polygon points="12,0 0,-6 0,6" class="sn"/>',
   cota: '<path d="M-13 -9V5M13 -9V5M-13 0H13" class="s" style="stroke-width:1.2"/><polygon points="-13,0 -7,-2.5 -7,2.5" class="sn"/><polygon points="13,0 7,-2.5 7,2.5" class="sn"/>',
   slope: '<polygon points="-12,4 12,4 12,-6" class="sb"/><text x="3" y="2.5" font-size="7" font-weight="800" text-anchor="middle">%</text>',
@@ -1321,6 +1323,8 @@ function renderLienzo() {
       const a = aPantalla(c.coords[0]), b = aPantalla(c.coords[1]), L = Math.hypot(b.x - a.x, b.y - a.y) || 1, s = c.lado === -1 ? -1 : 1;
       const nx = -(b.y - a.y) / L * s, ny = (b.x - a.x) / L * s, n = Math.max(1, Math.ceil(L / 5));
       for (const d of [24, 32]) for (let i = 0; i <= n; i++) obst.push({ x: a.x + (b.x - a.x) * i / n + nx * d, y: a.y + (b.y - a.y) * i / n + ny * d });
+    } else if (TIPOS[c.type].modo === 'continua') {
+      const P = aPantalla(c.coords[0]), u = unitAng(c.rotation); obst.push(P, { x: P.x + u.x * 14, y: P.y + u.y * 14 }, { x: P.x + u.x * 28, y: P.y + u.y * 28 });
     } else if (TIPOS[c.type].modo === 'equipo') {
       const P = aPantalla(c.coords[0]), u = unitAng(c.rotation), d = TIPOS[c.type].off || 30;
       const C = { x: P.x + u.x * d, y: P.y + u.y * d }; obst.push(C); anillo(C, 14, 10); anillo(C, 26, 16);
@@ -1399,6 +1403,7 @@ function renderLienzo() {
       }
       continue;
     }
+    if (T.modo === 'continua') { simbolos += dibujoContinua(c, P, sel); continue; }
     if (T.modo === 'equipo') {
       const u = unitAng(c.rotation), d = T.off || 30, C = { x: P.x + u.x * d, y: P.y + u.y * d };
       simbolos += `<g class="cmp${sel}" data-id="${c.id}"><line x1="${P.x}" y1="${P.y}" x2="${C.x.toFixed(1)}" y2="${C.y.toFixed(1)}" stroke="#000" stroke-width="3"/>
@@ -1448,10 +1453,58 @@ function renderLienzo() {
         <path d="M${xa} 0H${xb - s * 4}" stroke="#1d4ed8" stroke-width="1.4"/><polygon points="${xb},0 ${xb - s * 6},-3.2 ${xb - s * 6},3.2" fill="#1d4ed8"/></g>`;
     } else textos += `<text class="${E.clase}" text-anchor="middle" dominant-baseline="central" transform="${tf}">${esc(E.texto)}</text>`;
   }
+  simbolos += cuadroConexiones();
   $('capa-tuberia').innerHTML = tubos;
   $('capa-simbolos').innerHTML = simbolos;
   $('capa-cotas').innerHTML = textos;
   $('hud-count').textContent = estado.components.length;
+}
+/* ---------- Continuación / conexión con otra línea (nota tipo «CONT'D ON») ----------
+   Se elige la otra línea de la lista de la obra: el nombre se toma siempre de esa línea (si la renombran, se actualiza)
+   y en la otra línea aparece sola la nota de regreso en el cuadro «CONEXIONES». */
+let cacheLineas = [];
+async function refrescarCacheLineas() {
+  try {
+    cacheLineas = (await todasLineas()).map(L => ({ id: L.id, obra: L.obra, linea: L.linea || '(sin número)',
+      conts: (L.datos.components || []).filter(c => c.type === 'cont' && c.destino).map(c => ({ destino: c.destino, sentido: c.sentido || 'sigue' })) }));
+  } catch (_) { cacheLineas = []; }
+}
+const nombreLineaDestino = c => (cacheLineas.find(x => x.id === c.destino) || {}).linea || c.destinoTxt || '(elija la línea)';
+const TXT_SENTIDO = { sigue: 'CONTINÚA EN', viene: 'VIENE DE' };
+const POS_NOTA = { 'ab-der': [1, 1], 'ab-izq': [-1, 1], 'ar-der': [1, -1], 'ar-izq': [-1, -1] };
+function lineasNotaContinua(c) {
+  return [TXT_SENTIDO[c.sentido] || TXT_SENTIDO.sigue, nombreLineaDestino(c), c.ewVal ? `${c.ewDir || 'E'} ${c.ewVal}` : '', c.nsVal ? `${c.nsDir || 'N'} ${c.nsVal}` : '', c.nota || ''].filter(Boolean);
+}
+function dibujoContinua(c, P, sel) {
+  const u = unitAng(c.rotation), n = { x: -u.y, y: u.x }, Q = { x: P.x + u.x * 28, y: P.y + u.y * 28 };
+  const [sx, sy] = POS_NOTA[c.posNota] || POS_NOTA['ab-der'], K = { x: P.x + sx * 46, y: P.y + sy * 58 };
+  const lin = lineasNotaContinua(c), x0 = K.x + sx * 10, y0 = sy > 0 ? K.y + 4 : K.y - (lin.length - 1) * 13 - 2;
+  const corte = `M${(Q.x + n.x * 7).toFixed(1)} ${(Q.y + n.y * 7).toFixed(1)}Q${(Q.x + u.x * 6).toFixed(1)} ${(Q.y + u.y * 6).toFixed(1)} ${(Q.x - n.x * 7).toFixed(1)} ${(Q.y - n.y * 7).toFixed(1)}`;
+  const ang = Math.atan2(K.y - P.y, K.x - P.x), fl = (d, a) => `${(P.x + Math.cos(ang + a) * d).toFixed(1)},${(P.y + Math.sin(ang + a) * d).toFixed(1)}`;
+  return `<g class="cmp${sel}" data-id="${c.id}"><rect class="hit" x="${Math.min(P.x, Q.x) - 8}" y="${Math.min(P.y, Q.y) - 8}" width="${Math.abs(Q.x - P.x) + 16}" height="${Math.abs(Q.y - P.y) + 16}"/>
+    <line x1="${P.x}" y1="${P.y}" x2="${Q.x.toFixed(1)}" y2="${Q.y.toFixed(1)}" stroke="#000" stroke-width="1.2" stroke-dasharray="4 3"/><path d="${corte}" fill="none" stroke="#000" stroke-width="1.2"/>
+    <circle cx="${P.x}" cy="${P.y}" r="2.6" fill="#000"/>
+    <polyline points="${P.x},${P.y} ${K.x.toFixed(1)},${K.y.toFixed(1)} ${(K.x + sx * 8).toFixed(1)},${K.y.toFixed(1)}" fill="none" stroke="#000" stroke-width="1"/>
+    <polygon points="${fl(0, 0)} ${fl(9, 0.25)} ${fl(9, -0.25)}" fill="#000"/>
+    <g font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#000">${lin.map((t, i) => `<text x="${x0.toFixed(1)}" y="${(y0 + i * 13).toFixed(1)}" text-anchor="${sx > 0 ? 'start' : 'end'}"${i === 1 ? ' font-weight="700"' : ''}>${esc(t)}</text>`).join('')}</g>
+    <rect class="hit" x="${(sx > 0 ? x0 : x0 - 150).toFixed(1)}" y="${(y0 - 11).toFixed(1)}" width="150" height="${lin.length * 13 + 4}"/></g>`;
+}
+/* notas de regreso: otras líneas de la obra que dicen continuar en (o venir de) esta línea */
+function conexionesEntrantes() {
+  const yo = estado.lineaId; if (!yo) return [];
+  const obra = idObra(estado.cabecera.proyecto), propias = new Set(estado.components.filter(c => c.type === 'cont' && c.destino).map(c => c.destino));
+  const out = [];
+  for (const L of cacheLineas) {
+    if (L.id === yo || idObra(L.obra) !== obra || propias.has(L.id)) continue;
+    for (const k of L.conts) if (k.destino === yo) out.push(`${k.sentido === 'viene' ? 'CONTINÚA EN' : 'VIENE DE'} ${L.linea}`);
+  }
+  return [...new Set(out)];
+}
+function cuadroConexiones() {
+  const l = conexionesEntrantes(); if (!l.length) return '';
+  const w = Math.max(120, ...l.map(t => t.length * 6.4 + 16)), h = 20 + l.length * 14;
+  return `<g pointer-events="none" font-family="Arial, Helvetica, sans-serif"><rect x="12" y="26" width="${w.toFixed(0)}" height="${h}" fill="#fff" stroke="#000" stroke-width=".8"/>
+    <text x="20" y="39" font-size="9" font-weight="700" fill="#000">CONEXIONES</text>${l.map((t, i) => `<text x="20" y="${53 + i * 14}" font-size="11" fill="#000">${esc(t)}</text>`).join('')}</g>`;
 }
 /* Brazos de codos, tees y cruces: se orientan con las tuberías realmente conectadas al nodo */
 function brazosAccesorio(c) {
@@ -1698,8 +1751,8 @@ function cambiarAnguloLibre(c, a) {
 /* Calcula dónde y con qué orientación queda un símbolo según el cursor */
 function posicionSimbolo(tipo, pt, R) {
   const T = TIPOS[tipo];
-  if (T.modo === 'equipo') {
-    /* el equipo se conecta en el extremo libre de un tramo; su cuerpo queda hacia afuera de la tubería */
+  if (T.modo === 'equipo' || T.modo === 'continua') {
+    /* el equipo (o la nota de continuación) se conecta en el extremo libre de un tramo; queda hacia afuera de la tubería */
     const pp = puertoCercano(pt, R * 1.5);
     if (pp) { const br = brazos(pp); return { P: pp, rot: br.length ? br[0] + 180 : rotacionActual, iman: true }; }
     return { P: nodoMasCercano(pt.x, pt.y), rot: rotacionActual, iman: false };
@@ -3101,6 +3154,7 @@ const ponerLinea = L => bdOp('lineas', 'readwrite', s => s.put({ ...L, actualiza
 async function guardarLineaBD(forzar) {
   if (enIntercambio) return;
   if (!estado.lineaId) { if (!forzar && !estado.components.length) return; estado.lineaId = nuevoId(); try { localStorage.setItem(CLAVE_LOCAL, JSON.stringify(estado)); } catch (_) {} }
+  for (const c of estado.components) if (c.type === 'cont' && c.destino) { const d = cacheLineas.find(x => x.id === c.destino); if (d) c.destinoTxt = d.linea; }   // nombre vigente para otros equipos
   const cab = estado.cabecera, L = { id: estado.lineaId, obra: (cab.proyecto || '').trim() || 'SIN OBRA', linea: (cab.linea || '').trim(), datos: JSON.parse(JSON.stringify(estado)), bom: bomResumen(), numJ: numJuntas(), actualizado: new Date().toISOString(), por: nube.perfil ? nube.perfil.nombre : '' };
   try { await ponerLinea(L); } catch (_) { /* sin base local: la línea sigue guardada en localStorage */ }
   subirLineaNube(L);
@@ -3128,6 +3182,7 @@ async function abrirObras() {
   await guardarLineaBD();
   /* con señal, primero se trae lo nuevo de la nube (líneas cambiadas o borradas en otros equipos) */
   if (nube.activa && nube.db && nube.perfil && navigator.onLine) { try { await Promise.race([bajarLineasNube(), new Promise(ok => setTimeout(ok, 6000))]); } catch (_) {} }
+  await refrescarCacheLineas(); renderLienzo();
   let lineas = [];
   try { lineas = await todasLineas(); } catch (err) { aviso('No se pudo leer la lista de líneas: ' + err.message, 'error', 5000); return; }
   /* la misma obra escrita con otras mayúsculas o tildes («Eon» y «EON») se agrupa una sola vez, igual que en la nube */
@@ -3427,7 +3482,7 @@ function prepararLineaAbierta() {
   pintarCabecera(); sincronizarSelectores(); sincronizarTrazo(); construirCatalogo(); actualizarTodo(); fitSheetToScreen();
 }
 async function abrirLineaGuardada(L) {
-  await guardarLineaBD();
+  await guardarLineaBD(); await refrescarCacheLineas();
   aplicarProyecto(L.datos); estado.lineaId = L.id; prepararLineaAbierta();
   aviso(`Abierta: ${L.obra} · ${L.linea || '(sin número)'}`, 'ok');
 }
@@ -3895,6 +3950,7 @@ async function bajarLineasNube() {
     n++;
   }
   if (n) aviso(`${n} línea${n > 1 ? 's' : ''} actualizada${n > 1 ? 's' : ''} desde la nube`, 'ok', 2500);
+  await refrescarCacheLineas(); renderLienzo();
   return n;
 }
 /* ---- administración de usuarios (solo administrador) ---- */
@@ -3979,6 +4035,22 @@ function renderPanelSeleccion() {
         <button class="btn peligro" data-acc="borrar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-trash"/></svg>Borrar</button></div>`;
     p.hidden = false; return;
   }
+  if (c.type === 'cont') {
+    const obra = idObra(estado.cabecera.proyecto), ops = cacheLineas.filter(L => L.id !== estado.lineaId && idObra(L.obra) === obra).sort((a, b) => a.linea.localeCompare(b.linea, 'es', { numeric: true }));
+    const sel = (k, v, o) => `<select data-p="${k}">${o.map(([a, t]) => `<option value="${a}"${a === v ? ' selected' : ''}>${t}</option>`).join('')}</select>`;
+    p.innerHTML = `<h4><span>Continuación / conexión</span><button class="btn" onclick="seleccionar(null)" aria-label="Cerrar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-x"/></svg></button></h4>
+      <label>Tipo de nota</label>${sel('sentido', c.sentido || 'sigue', [['sigue', 'CONTINÚA EN (la línea sigue en otra)'], ['viene', 'VIENE DE (llega de otra línea)']])}
+      <label>Línea de la obra</label><select data-p="destino"><option value="">— elija —</option>${ops.map(L => `<option value="${L.id}"${L.id === c.destino ? ' selected' : ''}>${esc(L.linea)}</option>`).join('')}</select>
+      ${!ops.length ? '<div style="font-size:11px;color:#f59e0b;margin-top:3px">No hay otras líneas de esta obra en el equipo: guárdelas o tráigalas de la nube.</div>' : ''}
+      <div style="display:grid;grid-template-columns:70px 1fr;gap:6px">
+        <div><label>E / W</label>${sel('ewDir', c.ewDir || 'E', [['E', 'E'], ['W', 'W']])}</div><div><label>Coordenada</label><input data-p="ewVal" maxlength="14" inputmode="decimal" value="${esc(c.ewVal || '')}" placeholder="2764"></div>
+        <div><label>N / S</label>${sel('nsDir', c.nsDir || 'N', [['N', 'N'], ['S', 'S']])}</div><div><label>Coordenada</label><input data-p="nsVal" maxlength="14" inputmode="decimal" value="${esc(c.nsVal || '')}" placeholder="10521"></div></div>
+      <label>Nota (opcional)</label><input data-p="nota" maxlength="40" value="${esc(c.nota || '')}" placeholder="Ej: VER P&ID 1234">
+      <label>Lugar del texto</label>${sel('posNota', c.posNota || 'ab-der', [['ab-der', 'Abajo a la derecha'], ['ab-izq', 'Abajo a la izquierda'], ['ar-der', 'Arriba a la derecha'], ['ar-izq', 'Arriba a la izquierda']])}
+      <div style="font-size:11px;color:var(--s400);margin-top:4px">El nombre se toma de la línea elegida: si la renombran, la nota se actualiza. En esa línea aparece sola la nota de regreso (cuadro CONEXIONES).</div>
+      <div class="acc"><button class="btn peligro" data-acc="borrar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-trash"/></svg>Borrar</button></div>`;
+    p.hidden = false; return;
+  }
   p.innerHTML = `<h4><span>${esc(T.corto)}</span><button class="btn" onclick="seleccionar(null)" aria-label="Cerrar"><svg class="ico" viewBox="0 0 24 24"><use href="#i-x"/></svg></button></h4>
     <label>Diámetro (NPS)</label><select data-p="nps">${opNps(c.nps)}</select>
     ${T.reduce ? `<label>Diámetro menor</label><select data-p="npsRed">${opNps(c.npsRed)}</select>` : ''}
@@ -4061,6 +4133,12 @@ $('panel-sel').addEventListener('change', e => {
     commit(() => { if (e.target.checked) c.pad = true; else delete c.pad; });
   } else if (k === 'sinCota') {
     commit(() => { if (e.target.checked) c.sinCota = true; else delete c.sinCota; });
+  } else if (c.type === 'cont' && k === 'destino') {
+    const L = cacheLineas.find(x => x.id === e.target.value);
+    commit(() => { if (L) { c.destino = L.id; c.destinoTxt = L.linea; } else { delete c.destino; delete c.destinoTxt; } });
+  } else if (c.type === 'cont' && ['ewVal', 'nsVal', 'nota'].includes(k)) {
+    const v = e.target.value.trim().toUpperCase();
+    commit(() => { if (v) c[k] = v; else delete c[k]; });
   } else if (k === 'tag') {
     const v = e.target.value.trim().toUpperCase();
     commit(() => { if (v) c.tag = v; else delete c.tag; });
@@ -4715,6 +4793,7 @@ function sincronizarSelectores() {
   $('version-app').textContent = `DP-F-009 · ⏲ ${APP_VERSION} · ${fechaTxt}`; $('hud-version').textContent = `${APP_VERSION} · ${fechaTxt}`;
   cargarLocal();
   iniciarCuentas();
+  refrescarCacheLineas().then(() => renderLienzo()).catch(() => {});   // nombres de las líneas para las notas de continuación
   if (!estado.cabecera.fecha) estado.cabecera.fecha = hoyISO();
   sincronizarSelectores(); pintarCabecera(); construirCatalogo(); sincronizarTrazo();
   prepararLienzo();
